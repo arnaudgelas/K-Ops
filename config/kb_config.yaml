@@ -1,0 +1,14 @@
+project_name: K-Ops
+raw_dir: data/raw
+registry_path: data/registry.json
+vault_dir: notes
+home_note: notes/Home.md
+todo_note: notes/TODO.md
+concepts_dir: notes/Concepts
+summaries_dir: notes/Sources
+answers_dir: notes/Answers
+attachments_dir: notes/Attachments
+outputs_dir: outputs
+allow_web_fetch_during_qa: false
+file_answer_back_into_vault: true
+use_obsidian_wikilinks: true
