@@ -7,7 +7,7 @@ import hashlib
 import re
 import shutil
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
 import requests
 import trafilatura
@@ -21,6 +21,42 @@ REGISTRY_PATH = CONFIG.registry_path
 RAW_DIR = CONFIG.raw_dir
 
 ARXIV_ARTICLE_RE = re.compile(r"^/(?:abs|html|pdf)/(?P<id>\d{4}\.\d{4,5}(?:v\d+)?)")
+ARTICLE_HOST_HINTS = ("medium.com", "substack.com")
+ARTICLE_BODY_SELECTORS = (
+    "article",
+    "main article",
+    '[data-testid="post-content"]',
+    '[data-testid="article-body"]',
+    "div.post-content",
+    "div.available-content",
+    "div.body",
+    "div.markup",
+    "div.body.markup",
+    "main",
+)
+BOILERPLATE_SELECTORS = (
+    "script",
+    "style",
+    "noscript",
+    "template",
+    "svg",
+    "iframe",
+    "form",
+    "button",
+    "header",
+    "footer",
+    "nav",
+    "aside",
+)
+TRACKING_QUERY_PREFIXES = ("utm_",)
+TRACKING_QUERY_PARAMS = {"fbclid", "gclid", "mc_cid", "mc_eid"}
+BOILERPLATE_LINE_PATTERNS = (
+    re.compile(r"^subscribe$", re.IGNORECASE),
+    re.compile(r"^sign in$", re.IGNORECASE),
+    re.compile(r"^get the app$", re.IGNORECASE),
+    re.compile(r"^share$", re.IGNORECASE),
+    re.compile(r"^read more.*", re.IGNORECASE),
+)
 
 
 def is_url(value: str) -> bool:
@@ -45,20 +81,167 @@ def extract_pdf_text(path: Path) -> str:
     return "\n\n".join(pages).strip()
 
 
-def extract_html_text(raw_html: str, url: str) -> str:
-    extracted = trafilatura.extract(raw_html, url=url, include_comments=False, include_tables=True)
-    if extracted:
-        return extracted.strip()
+def strip_tracking_parameters(url: str) -> str:
+    parsed = urlsplit(url)
+    filtered_query = []
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        if key in TRACKING_QUERY_PARAMS:
+            continue
+        if key.startswith(TRACKING_QUERY_PREFIXES):
+            continue
+        filtered_query.append((key, value))
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(filtered_query), parsed.fragment))
+
+
+def is_article_host(url: str) -> bool:
+    netloc = urlparse(url).netloc.lower()
+    return any(netloc == host or netloc.endswith(f".{host}") for host in ARTICLE_HOST_HINTS)
+
+
+def flatten_jsonld(value: object) -> list[dict]:
+    items: list[dict] = []
+    if isinstance(value, dict):
+        items.append(value)
+        for nested in value.values():
+            items.extend(flatten_jsonld(nested))
+    elif isinstance(value, list):
+        for nested in value:
+            items.extend(flatten_jsonld(nested))
+    return items
+
+
+def extract_jsonld_article_body(raw_html: str) -> str:
     soup = BeautifulSoup(raw_html, "html.parser")
-    return soup.get_text("\n", strip=True)
+    bodies: list[str] = []
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        payload = script.string or script.get_text(strip=True)
+        if not payload:
+            continue
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            continue
+        for item in flatten_jsonld(parsed):
+            article_body = item.get("articleBody")
+            if isinstance(article_body, str):
+                text = article_body.strip()
+                if text:
+                    bodies.append(text)
+    if not bodies:
+        return ""
+    return max(bodies, key=len)
 
 
-def fetch_url(url: str) -> tuple[bytes, str | None, str, str]:
+def clean_article_text(text: str) -> str:
+    lines: list[str] = []
+    previous_blank = False
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            if not previous_blank and lines:
+                lines.append("")
+            previous_blank = True
+            continue
+        if any(pattern.match(line) for pattern in BOILERPLATE_LINE_PATTERNS):
+            continue
+        lines.append(line)
+        previous_blank = False
+    return "\n".join(lines).strip()
+
+
+def extract_selector_text(raw_html: str, selector: str) -> str:
+    soup = BeautifulSoup(raw_html, "html.parser")
+    candidate = soup.select_one(selector)
+    if candidate is None:
+        return ""
+    for tag_name in BOILERPLATE_SELECTORS:
+        for tag in candidate.find_all(tag_name):
+            tag.decompose()
+    text = candidate.get_text("\n", strip=True)
+    return clean_article_text(text)
+
+
+def extract_article_dom_text(raw_html: str) -> str:
+    candidates: list[str] = []
+    for selector in ARTICLE_BODY_SELECTORS:
+        candidate_text = extract_selector_text(raw_html, selector)
+        if candidate_text:
+            candidates.append(candidate_text)
+    if not candidates:
+        return ""
+    return max(candidates, key=len)
+
+
+def discover_candidate_urls(raw_html: str, fallback_url: str) -> list[str]:
+    soup = BeautifulSoup(raw_html, "html.parser")
+    candidates: list[str] = [strip_tracking_parameters(fallback_url)]
+    for selector, attribute in (
+        ("link[rel='canonical']", "href"),
+        ("link[rel='amphtml']", "href"),
+        ("meta[property='og:url']", "content"),
+        ("meta[name='twitter:url']", "content"),
+    ):
+        tag = soup.select_one(selector)
+        if tag is None:
+            continue
+        value = tag.get(attribute)
+        if not value:
+            continue
+        candidates.append(urljoin(fallback_url, value.strip()))
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for candidate in candidates:
+        normalized = strip_tracking_parameters(candidate)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        deduped.append(normalized)
+    return deduped
+
+
+def extract_html_text(raw_html: str, url: str) -> str:
+    candidate_urls = discover_candidate_urls(raw_html, url)
+    extracted_texts: list[str] = []
+    for candidate_url in candidate_urls:
+        extracted = trafilatura.extract(
+            raw_html,
+            url=candidate_url,
+            include_comments=False,
+            include_tables=True,
+        )
+        if extracted:
+            normalized = clean_article_text(extracted.strip())
+            if normalized:
+                extracted_texts.append(normalized)
+
+    if is_article_host(url):
+        jsonld_text = extract_jsonld_article_body(raw_html)
+        if jsonld_text:
+            extracted_texts.append(jsonld_text)
+        dom_text = extract_article_dom_text(raw_html)
+        if dom_text:
+            extracted_texts.append(dom_text)
+
+    if extracted_texts:
+        return max(extracted_texts, key=len).strip()
+
+    soup = BeautifulSoup(raw_html, "html.parser")
+    return clean_article_text(soup.get_text("\n", strip=True))
+
+
+def fetch_url(url: str) -> tuple[bytes, str | None, str, str, str]:
     response = requests.get(url, timeout=30, headers={"User-Agent": "living-kb-cli/0.1"})
     response.raise_for_status()
     content_type = response.headers.get("content-type", "").lower()
     filename = Path(urlparse(url).path).name or "downloaded"
-    return response.content, response.text if "text" in content_type or "html" in content_type else None, content_type, filename
+    return (
+        response.content,
+        response.text if "text" in content_type or "html" in content_type else None,
+        content_type,
+        filename,
+        response.url,
+    )
 
 
 def content_hash(data: bytes) -> str:
@@ -104,8 +287,8 @@ def fetch_arxiv_article(url: str) -> tuple[bytes, str | None, str, str, str]:
     last_error: Exception | None = None
     for candidate in arxiv_candidate_urls(url):
         try:
-            raw_bytes, maybe_text, content_type, filename = fetch_url(candidate)
-            return raw_bytes, maybe_text, content_type, filename, candidate
+            raw_bytes, maybe_text, content_type, filename, resolved_url = fetch_url(candidate)
+            return raw_bytes, maybe_text, content_type, filename, resolved_url
         except RequestException as exc:
             last_error = exc
             continue
@@ -129,8 +312,7 @@ def ingest_one(item: str) -> dict:
         if is_arxiv_url(item):
             raw_bytes, maybe_text, content_type, filename, resolved_url = fetch_arxiv_article(item)
         else:
-            raw_bytes, maybe_text, content_type, filename = fetch_url(item)
-            resolved_url = item
+            raw_bytes, maybe_text, content_type, filename, resolved_url = fetch_url(item)
         original_bytes = raw_bytes
         suffix = Path(filename).suffix or mimetypes.guess_extension(content_type.split(";")[0]) or ".bin"
         original_path = source_dir / f"original{suffix}"
@@ -146,7 +328,7 @@ def ingest_one(item: str) -> dict:
         if "pdf" in content_type or suffix.lower() == ".pdf":
             normalized = extract_pdf_text(original_path)
         elif maybe_text is not None:
-            normalized = extract_html_text(maybe_text, item)
+            normalized = extract_html_text(maybe_text, resolved_url)
         else:
             normalized = ""
     else:
