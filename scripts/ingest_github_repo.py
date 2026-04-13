@@ -25,7 +25,67 @@ ROOT_DOC_NAMES = [
     "CHANGELOG.md",
     "docs/README.md",
 ]
-DOC_SUFFIXES = {".md", ".rst", ".txt"}
+ARCHITECTURE_HINTS = (
+    "adr",
+    "decision",
+    "architecture",
+    "architectural",
+    "design",
+    "rfc",
+    "record",
+)
+CONCEPT_HINTS = (
+    "guide",
+    "playbook",
+    "workflow",
+    "pattern",
+    "protocol",
+    "spec",
+    "policy",
+    "concept",
+)
+TEXT_SUFFIXES = {
+    ".md",
+    ".rst",
+    ".txt",
+    ".py",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".rs",
+    ".go",
+    ".java",
+    ".kt",
+    ".cs",
+    ".rb",
+    ".php",
+    ".cpp",
+    ".c",
+    ".swift",
+    ".sh",
+    ".yaml",
+    ".yml",
+    ".toml",
+    ".json",
+    ".xml",
+    ".html",
+    ".htm",
+    ".ini",
+    ".cfg",
+    ".sql",
+}
+SPECIAL_TEXT_NAMES = {
+    "LICENSE",
+    "LICENSE.md",
+    "LICENSE.txt",
+    "Makefile",
+    "Dockerfile",
+    "Procfile",
+    "CMakeLists.txt",
+    "compose.yml",
+    "compose.yaml",
+}
 MANIFEST_NAMES = {
     "pyproject.toml": "Python",
     "requirements.txt": "Python",
@@ -57,7 +117,9 @@ EXTENSION_LABELS = {
     ".c": "C",
     ".swift": "Swift",
 }
-MAX_DOCS = 10
+MAX_EVIDENCE_FILES = 20
+MAX_ARCHITECTURE_FILES = 8
+MAX_CONCEPT_FILES = 8
 MAX_HEADINGS = 5
 MAX_PARAGRAPH_CHARS = 400
 MAX_RELEVANT_DIRS = 8
@@ -194,46 +256,63 @@ def read_text_file(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
-def collect_candidate_docs(repo_dir: Path, tracked_files: list[Path]) -> list[Path]:
-    repo_relative = [path.relative_to(repo_dir) for path in tracked_files]
+def is_text_candidate(path: Path) -> bool:
+    return path.name in SPECIAL_TEXT_NAMES or path.suffix.lower() in TEXT_SUFFIXES
+
+
+def file_priority(path: Path, repo_dir: Path) -> tuple[int, int, str]:
+    rel = path.relative_to(repo_dir)
+    if rel.as_posix() in ROOT_DOC_NAMES:
+        return (0, len(rel.parts), rel.as_posix())
+    rel_lower = rel.as_posix().lower()
+    if any(hint in rel_lower for hint in ARCHITECTURE_HINTS):
+        return (1, len(rel.parts), rel.as_posix())
+    if any(hint in rel_lower for hint in CONCEPT_HINTS):
+        return (2, len(rel.parts), rel.as_posix())
+    if len(rel.parts) >= 2 and rel.parts[0] == "docs":
+        return (3, len(rel.parts), rel.as_posix())
+    if len(rel.parts) == 1:
+        return (4, len(rel.parts), rel.as_posix())
+    if rel.parts[0] in {".github", "src", "lib", "app", "tests"}:
+        return (5, len(rel.parts), rel.as_posix())
+    return (6, len(rel.parts), rel.as_posix())
+
+
+def file_category(path: Path, repo_dir: Path) -> str:
+    rel_lower = path.relative_to(repo_dir).as_posix().lower()
+    if any(hint in rel_lower for hint in ARCHITECTURE_HINTS):
+        return "architecture"
+    if any(hint in rel_lower for hint in CONCEPT_HINTS):
+        return "concept"
+    return "other"
+
+
+def collect_candidate_files(repo_dir: Path, tracked_files: list[Path]) -> list[Path]:
+    candidates = [path for path in tracked_files if is_text_candidate(path)]
+    candidates.sort(key=lambda path: file_priority(path, repo_dir))
+
     chosen: list[Path] = []
     seen: set[Path] = set()
 
-    for doc_name in ROOT_DOC_NAMES:
-        rel = Path(doc_name)
-        candidate = repo_dir / rel
-        if candidate in tracked_files and candidate not in seen:
+    def take(paths: list[Path], limit: int) -> None:
+        added = 0
+        for candidate in paths:
+            if candidate in seen:
+                continue
             chosen.append(candidate)
             seen.add(candidate)
-
-    docs_dir_files = [
-        repo_dir / rel
-        for rel in repo_relative
-        if len(rel.parts) >= 2 and rel.parts[0] == "docs" and rel.suffix.lower() in DOC_SUFFIXES
-    ]
-    docs_dir_files.sort(key=lambda path: (len(path.relative_to(repo_dir).parts), str(path.relative_to(repo_dir))))
-    for candidate in docs_dir_files:
-        if candidate not in seen:
-            chosen.append(candidate)
-            seen.add(candidate)
-        if len(chosen) >= MAX_DOCS:
-            break
-
-    if len(chosen) < MAX_DOCS:
-        root_doc_files = [
-            repo_dir / rel
-            for rel in repo_relative
-            if len(rel.parts) == 1 and rel.suffix.lower() in DOC_SUFFIXES and rel.name not in ROOT_DOC_NAMES
-        ]
-        root_doc_files.sort(key=lambda path: str(path.relative_to(repo_dir)))
-        for candidate in root_doc_files:
-            if candidate not in seen:
-                chosen.append(candidate)
-                seen.add(candidate)
-            if len(chosen) >= MAX_DOCS:
+            added += 1
+            if len(chosen) >= MAX_EVIDENCE_FILES or added >= limit:
                 break
 
-    return chosen[:MAX_DOCS]
+    architecture_candidates = [path for path in candidates if file_category(path, repo_dir) == "architecture"]
+    concept_candidates = [path for path in candidates if file_category(path, repo_dir) == "concept"]
+    other_candidates = [path for path in candidates if file_category(path, repo_dir) == "other"]
+
+    take(architecture_candidates, MAX_ARCHITECTURE_FILES)
+    take(concept_candidates, MAX_CONCEPT_FILES)
+    take(other_candidates, MAX_EVIDENCE_FILES)
+    return chosen
 
 
 def detect_project_signals(tracked_files: list[Path], repo_dir: Path) -> dict[str, list[str] | int]:
@@ -266,9 +345,9 @@ def detect_project_signals(tracked_files: list[Path], repo_dir: Path) -> dict[st
     }
 
 
-def summarize_docs(owner: str, repo_name: str, branch: str, repo_dir: Path, docs: list[Path]) -> list[dict[str, str | list[str]]]:
+def summarize_files(owner: str, repo_name: str, branch: str, repo_dir: Path, files: list[Path]) -> list[dict[str, str | list[str]]]:
     summaries: list[dict[str, str | list[str]]] = []
-    for path in docs:
+    for path in files:
         rel = path.relative_to(repo_dir)
         text = read_text_file(path)
         title = first_heading(text) or rel.name
@@ -286,12 +365,69 @@ def summarize_docs(owner: str, repo_name: str, branch: str, repo_dir: Path, docs
     return summaries
 
 
-def build_overview(owner: str, repo_name: str, signals: dict[str, list[str] | int], doc_summaries: list[dict[str, str | list[str]]]) -> str:
+def is_architecture_evidence(path: str) -> bool:
+    lower = path.lower()
+    return any(hint in lower for hint in ARCHITECTURE_HINTS)
+
+
+def is_concept_evidence(path: str) -> bool:
+    lower = path.lower()
+    return any(hint in lower for hint in CONCEPT_HINTS)
+
+
+def build_key_concepts(signals: dict[str, list[str] | int], file_summaries: list[dict[str, str | list[str]]]) -> list[str]:
+    concepts: list[str] = []
+
+    languages = signals["languages"]
+    if languages:
+        concepts.append(f"Primary implementation stack: {', '.join(languages[:3])}.")
+
+    manifests = signals["manifests"]
+    if manifests:
+        manifest_names = ", ".join(item.split(" ", 1)[0] for item in manifests[:4])
+        concepts.append(f"Build and packaging surface: {manifest_names}.")
+
+    top_dirs = signals["top_dirs"]
+    if top_dirs:
+        concepts.append(f"Top-level working areas: {', '.join(top_dirs[:5])}.")
+
+    seen_titles: set[str] = set()
+    for summary in file_summaries:
+        if is_architecture_evidence(summary["path"]):
+            continue
+        title = str(summary["title"])
+        if title in seen_titles:
+            continue
+        if not is_concept_evidence(summary["path"]) and title.upper() != "README":
+            continue
+        seen_titles.add(title)
+        paragraph = str(summary["paragraph"])
+        concepts.append(f"{title}: {paragraph}")
+        if len(concepts) >= 5:
+            break
+
+    return concepts[:5]
+
+
+def build_architectural_decisions(file_summaries: list[dict[str, str | list[str]]]) -> list[str]:
+    decisions: list[str] = []
+    for summary in file_summaries:
+        if not is_architecture_evidence(summary["path"]):
+            continue
+        paragraph = str(summary["paragraph"])
+        decisions.append(f"{summary['path']}: {paragraph}")
+        if len(decisions) >= 5:
+            break
+
+    return decisions
+
+
+def build_overview(owner: str, repo_name: str, signals: dict[str, list[str] | int], file_summaries: list[dict[str, str | list[str]]]) -> str:
     file_count = signals["file_count"]
     manifests = signals["manifests"]
     languages = signals["languages"]
     top_dirs = signals["top_dirs"]
-    readme_summary = doc_summaries[0]["paragraph"] if doc_summaries else None
+    lead_summary = file_summaries[0]["paragraph"] if file_summaries else None
 
     parts = [f"`{owner}/{repo_name}` is a GitHub repository snapshot with about `{file_count}` tracked files"]
     if languages:
@@ -302,16 +438,16 @@ def build_overview(owner: str, repo_name: str, signals: dict[str, list[str] | in
     if top_dirs:
         parts.append(f"High-signal top-level areas include {', '.join(f'`{name}`' for name in top_dirs[:5])}")
     overview = ". ".join(parts) + "."
-    if readme_summary:
-        overview += f" The leading project description says: {readme_summary}"
+    if lead_summary:
+        overview += f" The leading evidence file says: {lead_summary}"
     return overview
 
 
-def build_claims(signals: dict[str, list[str] | int], doc_summaries: list[dict[str, str | list[str]]]) -> list[str]:
+def build_claims(signals: dict[str, list[str] | int], file_summaries: list[dict[str, str | list[str]]]) -> list[str]:
     claims: list[str] = []
-    if doc_summaries:
+    if file_summaries:
         claims.append(
-            "The repository exposes enough local documentation to ground a repo-level summary directly from checked-in files rather than relying only on the landing page."
+            "The repository exposes enough checked-in evidence to ground concept and architecture summaries directly from the repository tree rather than relying only on the landing page."
         )
     if signals["manifests"]:
         claims.append(
@@ -321,9 +457,9 @@ def build_claims(signals: dict[str, list[str] | int], doc_summaries: list[dict[s
         claims.append(
             "The top-level tree suggests distinct functional areas that can be used as navigation anchors during later vault compilation."
         )
-    if any(summary["path"] != "README.md" for summary in doc_summaries):
+    if any(summary["path"] != "README.md" for summary in file_summaries):
         claims.append(
-            "There are non-README documents worth linking directly from the vault so later agents can jump to architecture, setup, or contribution material without re-discovering paths."
+            "There are non-README files worth linking directly from the vault so later agents can jump to architecture, setup, tests, or implementation material without re-discovering paths."
         )
     claims.append(
         "This snapshot is derived from a shallow clone and document heuristics, so it is strongest as navigational and workflow evidence rather than as a full implementation audit."
@@ -339,7 +475,7 @@ def render_snapshot_markdown(
     commit: str,
     source_id: str,
     signals: dict[str, list[str] | int],
-    doc_summaries: list[dict[str, str | list[str]]],
+    file_summaries: list[dict[str, str | list[str]]],
 ) -> str:
     repo_home = f"https://github.com/{owner}/{repo_name}"
     lines = [
@@ -354,12 +490,42 @@ def render_snapshot_markdown(
         "",
         "## Summary",
         "",
-        build_overview(owner, repo_name, signals, doc_summaries),
+        build_overview(owner, repo_name, signals, file_summaries),
         "",
-        "## Repository Signals",
+        "## Key Concepts",
         "",
-        f"- Tracked file count: `{signals['file_count']}`",
     ]
+
+    concepts = build_key_concepts(signals, file_summaries)
+    if concepts:
+        for concept in concepts:
+            lines.append(f"- {concept}")
+    else:
+        lines.append("- No key concepts could be extracted from the tracked evidence.")
+
+    lines.extend(
+        [
+            "",
+            "## Architectural Decisions",
+            "",
+        ]
+    )
+
+    decisions = build_architectural_decisions(file_summaries)
+    if decisions:
+        for decision in decisions:
+            lines.append(f"- {decision}")
+    else:
+        lines.append("- No explicit architectural decision files were detected from the tracked evidence.")
+
+    lines.extend(
+        [
+            "",
+            "## Repository Signals",
+            "",
+            f"- Tracked file count: `{signals['file_count']}`",
+        ]
+    )
 
     manifests = signals["manifests"]
     languages = signals["languages"]
@@ -371,11 +537,11 @@ def render_snapshot_markdown(
     if top_dirs:
         lines.append(f"- Top-level directories: {', '.join(f'`{item}`' for item in top_dirs)}")
 
-    lines.extend(["", "## Key Documents", ""])
-    if not doc_summaries:
-        lines.append("- No high-signal README or docs files were detected from the shallow clone.")
+    lines.extend(["", "## Key Files", ""])
+    if not file_summaries:
+        lines.append("- No high-signal text files were detected from the repository tree.")
     else:
-        for summary in doc_summaries:
+        for summary in file_summaries:
             lines.append(f"### {summary['title']}")
             lines.append("")
             lines.append(f"- Path: `{summary['path']}`")
@@ -387,7 +553,7 @@ def render_snapshot_markdown(
             lines.append("")
 
     lines.extend(["## Candidate Claims", ""])
-    for claim in build_claims(signals, doc_summaries):
+    for claim in build_claims(signals, file_summaries):
         lines.append(f"- {claim}")
 
     lines.extend(
@@ -396,8 +562,8 @@ def render_snapshot_markdown(
             "## Evidence Notes",
             "",
             "- This snapshot was generated from a shallow clone in `/tmp`, not from a full repository history or issue tracker crawl.",
-            "- GitHub links are included so later vault compilation can preserve provenance back to README and other high-signal docs.",
-            "- Generated summaries are heuristic and document-led; they should be treated as a starting point for vault updates, not as a substitute for reading implementation-critical files.",
+            "- GitHub links are included so later vault compilation can preserve provenance back to README and other high-signal files.",
+            "- Generated summaries are heuristic and concept-led; they should be treated as a starting point for vault updates, not as a substitute for reading implementation-critical files.",
             "",
         ]
     )
@@ -453,10 +619,10 @@ def ingest_repo(repo_url: str, branch: str | None = None) -> dict:
         detected_branch = detect_branch(clone_dir)
         commit = detect_commit(clone_dir)
         tracked_files = list_tracked_files(clone_dir)
-        doc_paths = collect_candidate_docs(clone_dir, tracked_files)
+        file_paths = collect_candidate_files(clone_dir, tracked_files)
         signals = detect_project_signals(tracked_files, clone_dir)
         source_id = f"src-{short_hash(github_home_url(repo_url))}"
-        doc_summaries = summarize_docs(owner, repo_name, detected_branch, clone_dir, doc_paths)
+        file_summaries = summarize_files(owner, repo_name, detected_branch, clone_dir, file_paths)
         note_text = render_snapshot_markdown(
             repo_url=repo_url,
             owner=owner,
@@ -465,7 +631,7 @@ def ingest_repo(repo_url: str, branch: str | None = None) -> dict:
             commit=commit,
             source_id=source_id,
             signals=signals,
-            doc_summaries=doc_summaries,
+            file_summaries=file_summaries,
         )
         metadata = ingest_repo_snapshot(repo_url, note_text, owner, repo_name)
     finally:
@@ -489,10 +655,10 @@ def main() -> None:
             branch = detect_branch(clone_dir)
             commit = detect_commit(clone_dir)
             tracked_files = list_tracked_files(clone_dir)
-            doc_paths = collect_candidate_docs(clone_dir, tracked_files)
+            file_paths = collect_candidate_files(clone_dir, tracked_files)
             signals = detect_project_signals(tracked_files, clone_dir)
             source_id = f"src-{short_hash(github_home_url(args.repo))}"
-            doc_summaries = summarize_docs(owner, repo_name, branch, clone_dir, doc_paths)
+            file_summaries = summarize_files(owner, repo_name, branch, clone_dir, file_paths)
             note_text = render_snapshot_markdown(
                 repo_url=args.repo,
                 owner=owner,
@@ -501,7 +667,7 @@ def main() -> None:
                 commit=commit,
                 source_id=source_id,
                 signals=signals,
-                doc_summaries=doc_summaries,
+                file_summaries=file_summaries,
             )
             metadata = ingest_repo_snapshot(args.repo, note_text, owner, repo_name)
         finally:
