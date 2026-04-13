@@ -16,6 +16,13 @@ SOURCES_DIR = CONFIG.summaries_dir
 ANSWERS_DIR = CONFIG.answers_dir
 CONCEPTS_DIR = CONFIG.concepts_dir
 HOME_PATH = CONFIG.home_note
+RESEARCH_DIR = CONFIG.research_dir
+RESEARCH_NOTES_DIR = RESEARCH_DIR / "notes"
+RESEARCH_BRIEFS_DIR = RESEARCH_DIR / "briefs"
+RESEARCH_FINDINGS_DIR = RESEARCH_DIR / "findings"
+RESEARCH_REPORTS_DIR = RESEARCH_DIR / "reports"
+RESEARCH_IMPORTS_DIR = RESEARCH_DIR / "imports"
+RESEARCH_ARCHIVE_DIR = RESEARCH_DIR / "archive"
 
 SOURCE_REF_RE = re.compile(r"\[\[Sources/(src-[0-9a-f]{10})\|")
 RELATED_CONCEPT_RE = re.compile(r"\[\[(Concepts/[^|\]]+)")
@@ -35,6 +42,9 @@ VALID_EVIDENCE_STRENGTHS = {"primary-doc", "secondary", "stub", "image-only", "s
 VALID_CLAIM_QUALITIES = {"supported", "provisional", "weak", "conflicting", "stale"}
 VALID_ANSWER_QUALITIES = {"memo-only", "durable"}
 VALID_ANSWER_SCOPES = {"private", "shared"}
+VALID_RESEARCH_TIERS = {"fast", "standard", "deep"}
+VALID_RESEARCH_PHASES = {"briefing", "source-collection", "findings", "contrarian-review", "report-drafting", "done", "blocked"}
+VALID_RESEARCH_KINDS = {"research-status", "research-progress", "research-findings", "research-review", "research-report", "research-archive-manifest"}
 
 
 @dataclass
@@ -119,12 +129,35 @@ def source_note_ids() -> set[str]:
     return {path.stem for path in SOURCES_DIR.glob("src-*.md")}
 
 
+def source_note_frontmatters() -> dict[str, dict]:
+    metadata: dict[str, dict] = {}
+    for path in sorted(SOURCES_DIR.glob("src-*.md")):
+        frontmatter, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+        metadata[path.stem] = frontmatter
+    return metadata
+
+
 def raw_dir_ids() -> set[str]:
     return {path.name for path in RAW_DIR.iterdir() if path.is_dir()}
 
 
 def concept_paths() -> list[Path]:
     return sorted(CONCEPTS_DIR.glob("*.md")) + [HOME_PATH]
+
+
+def research_paths(pattern: str) -> list[Path]:
+    if not RESEARCH_DIR.exists():
+        return []
+    return sorted(RESEARCH_DIR.rglob(pattern))
+
+
+def research_source_kind(source_id: str) -> str | None:
+    note_path = SOURCES_DIR / f"{source_id}.md"
+    if not note_path.exists():
+        return None
+    frontmatter, _ = parse_frontmatter(note_path.read_text(encoding="utf-8"))
+    kind = frontmatter.get("source_kind")
+    return str(kind) if kind else None
 
 
 def extract_related_concept_names(text: str) -> set[str]:
@@ -264,6 +297,7 @@ def collect_findings(strict: bool = False) -> list[Finding]:
     registry_id_set = set(registry_ids)
     raw_ids = raw_dir_ids()
     note_ids = source_note_ids()
+    source_note_meta = source_note_frontmatters()
 
     seen: set[str] = set()
     for source_id in registry_ids:
@@ -281,6 +315,8 @@ def collect_findings(strict: bool = False) -> list[Finding]:
         findings.append(Finding("warning", "orphan-raw-dir", f"Raw directory `{source_id}` is not present in the registry"))
 
     for source_id in sorted(note_ids - registry_id_set):
+        if source_note_meta.get(source_id, {}).get("source_kind") in {"imported_model_report", "imported_model_report_citation"}:
+            continue
         findings.append(Finding("warning", "orphan-source-note", f"Source note `{source_id}` is not present in the registry"))
 
     for item in registry:
@@ -311,6 +347,7 @@ def collect_findings(strict: bool = False) -> list[Finding]:
 
     for note_path in sorted(SOURCES_DIR.glob("src-*.md")):
         text = note_path.read_text(encoding="utf-8")
+        frontmatter, _ = parse_frontmatter(text)
         match = SOURCE_ID_RE.search(text)
         if not match:
             findings.append(Finding("error", "missing-source-id-frontmatter", f"{note_path.relative_to(ROOT)} has no `source_id` frontmatter"))
@@ -334,6 +371,126 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                     f"{note_path.relative_to(ROOT)} declares unsupported evidence strength `{evidence_match.group(1)}`",
                 )
             )
+        source_kind = frontmatter.get("source_kind")
+        if source_kind == "imported_model_report":
+            if frontmatter.get("authority") != "lead_only":
+                findings.append(
+                    Finding(
+                        "error",
+                        "imported-report-authority",
+                        f"{note_path.relative_to(ROOT)} must declare `authority: lead_only`",
+                    )
+                )
+            if frontmatter.get("verification_state") != "needs_primary_sources":
+                findings.append(
+                    Finding(
+                        "error",
+                        "imported-report-verification",
+                        f"{note_path.relative_to(ROOT)} must declare `verification_state: needs_primary_sources`",
+                    )
+                )
+            if frontmatter.get("evidence_strength") != "secondary":
+                findings.append(
+                    Finding(
+                        "warning",
+                        "imported-report-strength",
+                        f"{note_path.relative_to(ROOT)} should usually use `evidence_strength: secondary`",
+                    )
+                )
+        elif source_kind == "imported_model_report_citation":
+            if not frontmatter.get("canonical_url"):
+                findings.append(
+                    Finding(
+                        "error",
+                        "imported-citation-url",
+                        f"{note_path.relative_to(ROOT)} must declare `canonical_url`",
+                    )
+                )
+            if frontmatter.get("authority") != "lead_only":
+                findings.append(
+                    Finding(
+                        "error",
+                        "imported-citation-authority",
+                        f"{note_path.relative_to(ROOT)} must declare `authority: lead_only`",
+                    )
+                )
+            if frontmatter.get("verification_state") != "needs_fetch":
+                findings.append(
+                    Finding(
+                        "error",
+                        "imported-citation-verification",
+                        f"{note_path.relative_to(ROOT)} must declare `verification_state: needs_fetch`",
+                    )
+                )
+            if frontmatter.get("evidence_strength") != "stub":
+                findings.append(
+                    Finding(
+                        "warning",
+                        "imported-citation-strength",
+                        f"{note_path.relative_to(ROOT)} should usually use `evidence_strength: stub`",
+                    )
+                )
+
+    for status_path in sorted(RESEARCH_NOTES_DIR.glob("*-status.md")):
+        frontmatter, _ = parse_frontmatter(status_path.read_text(encoding="utf-8"))
+        if frontmatter.get("type") != "research-status":
+            findings.append(Finding("error", "invalid-research-status-type", f"{status_path.relative_to(ROOT)} must declare `type: research-status`"))
+        if not frontmatter.get("title"):
+            findings.append(Finding("error", "missing-research-status-title", f"{status_path.relative_to(ROOT)} is missing `title`"))
+        if not frontmatter.get("topic_slug"):
+            findings.append(Finding("error", "missing-research-status-topic-slug", f"{status_path.relative_to(ROOT)} is missing `topic_slug`"))
+        tier = frontmatter.get("quality_tier")
+        if tier not in VALID_RESEARCH_TIERS:
+            findings.append(Finding("error", "invalid-research-tier", f"{status_path.relative_to(ROOT)} declares unsupported `quality_tier` `{tier}`"))
+        phase = frontmatter.get("phase")
+        if phase not in VALID_RESEARCH_PHASES:
+            findings.append(Finding("error", "invalid-research-phase", f"{status_path.relative_to(ROOT)} declares unsupported `phase` `{phase}`"))
+        for field in ("brief_path", "progress_path", "imports_path"):
+            if not frontmatter.get(field):
+                findings.append(Finding("error", f"missing-research-status-{field}", f"{status_path.relative_to(ROOT)} is missing `{field}`"))
+        if phase in {"findings", "contrarian-review", "report-drafting", "done"} and not frontmatter.get("findings_path"):
+            findings.append(Finding("error", "missing-research-findings-path", f"{status_path.relative_to(ROOT)} is missing `findings_path` for phase `{phase}`"))
+        if phase in {"contrarian-review", "report-drafting", "done"} and not frontmatter.get("review_path"):
+            findings.append(Finding("error", "missing-research-review-path", f"{status_path.relative_to(ROOT)} is missing `review_path` for phase `{phase}`"))
+        if phase == "done" and not frontmatter.get("report_path"):
+            findings.append(Finding("error", "missing-research-report-path", f"{status_path.relative_to(ROOT)} is missing `report_path` for phase `done`"))
+
+    for progress_path in sorted(RESEARCH_NOTES_DIR.glob("*-progress.md")):
+        frontmatter, _ = parse_frontmatter(progress_path.read_text(encoding="utf-8"))
+        if frontmatter.get("type") != "research-progress":
+            findings.append(Finding("error", "invalid-research-progress-type", f"{progress_path.relative_to(ROOT)} must declare `type: research-progress`"))
+        if not frontmatter.get("title") or not frontmatter.get("topic_slug"):
+            findings.append(Finding("error", "missing-research-progress-frontmatter", f"{progress_path.relative_to(ROOT)} is missing title or topic_slug"))
+        if frontmatter.get("quality_tier") not in VALID_RESEARCH_TIERS:
+            findings.append(Finding("error", "invalid-research-progress-tier", f"{progress_path.relative_to(ROOT)} declares unsupported `quality_tier` `{frontmatter.get('quality_tier')}`"))
+
+    for findings_path in sorted(RESEARCH_FINDINGS_DIR.glob("*.md")):
+        frontmatter, _ = parse_frontmatter(findings_path.read_text(encoding="utf-8"))
+        if frontmatter.get("type") != "research-findings":
+            findings.append(Finding("error", "invalid-research-findings-type", f"{findings_path.relative_to(ROOT)} must declare `type: research-findings`"))
+        if not frontmatter.get("topic_slug"):
+            findings.append(Finding("error", "missing-research-findings-topic-slug", f"{findings_path.relative_to(ROOT)} is missing `topic_slug`"))
+
+    for review_path in sorted(RESEARCH_NOTES_DIR.glob("*-contrarian-review.md")):
+        frontmatter, _ = parse_frontmatter(review_path.read_text(encoding="utf-8"))
+        if frontmatter.get("type") != "research-review":
+            findings.append(Finding("error", "invalid-research-review-type", f"{review_path.relative_to(ROOT)} must declare `type: research-review`"))
+        if not frontmatter.get("topic_slug"):
+            findings.append(Finding("error", "missing-research-review-topic-slug", f"{review_path.relative_to(ROOT)} is missing `topic_slug`"))
+
+    for report_path in sorted(RESEARCH_REPORTS_DIR.glob("*.md")):
+        frontmatter, _ = parse_frontmatter(report_path.read_text(encoding="utf-8"))
+        if frontmatter.get("type") != "research-report":
+            findings.append(Finding("error", "invalid-research-report-type", f"{report_path.relative_to(ROOT)} must declare `type: research-report`"))
+        if not frontmatter.get("topic_slug"):
+            findings.append(Finding("error", "missing-research-report-topic-slug", f"{report_path.relative_to(ROOT)} is missing `topic_slug`"))
+
+    for manifest_path in sorted(RESEARCH_ARCHIVE_DIR.rglob("MANIFEST.md")):
+        frontmatter, _ = parse_frontmatter(manifest_path.read_text(encoding="utf-8"))
+        if frontmatter.get("type") != "research-archive-manifest":
+            findings.append(Finding("error", "invalid-archive-manifest-type", f"{manifest_path.relative_to(ROOT)} must declare `type: research-archive-manifest`"))
+        if not frontmatter.get("topic_slug") or not frontmatter.get("archive_date") or not frontmatter.get("final_phase"):
+            findings.append(Finding("error", "missing-archive-manifest-fields", f"{manifest_path.relative_to(ROOT)} is missing required archive manifest frontmatter"))
 
     for page_path in concept_paths():
         text = page_path.read_text(encoding="utf-8")
@@ -367,11 +524,14 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                 )
             else:
                 observed_strengths: list[str | None] = []
+                observed_kinds: list[str | None] = []
                 for source_id in evidence_source_ids:
                     source_path = SOURCES_DIR / f"{source_id}.md"
                     if not source_path.exists():
                         continue
                     source_text = source_path.read_text(encoding="utf-8")
+                    source_meta = source_note_meta.get(source_id, {})
+                    observed_kinds.append(source_meta.get("source_kind"))
                     m = EVIDENCE_STRENGTH_RE.search(source_text)
                     if m:
                         observed_strengths.append(m.group(1))
@@ -381,6 +541,15 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                             "warning",
                             "unsupported-claim-risk",
                             f"{page_path.relative_to(ROOT)} relies only on stub/image-only evidence in its Evidence section",
+                        )
+                    )
+                imported_kinds = [kind for kind in observed_kinds if kind == "imported_model_report"]
+                if imported_kinds and len(imported_kinds) == len([kind for kind in observed_kinds if kind is not None]):
+                    findings.append(
+                        Finding(
+                            "warning",
+                            "imported-report-only-evidence",
+                            f"{page_path.relative_to(ROOT)} relies only on imported model-generated reports in its Evidence section",
                         )
                     )
         for match in SOURCE_REF_RE.finditer(text):

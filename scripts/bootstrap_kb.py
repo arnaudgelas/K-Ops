@@ -492,8 +492,8 @@ def create_examples(target_root: Path) -> None:
     )
 
 
-def bootstrap(target: Path, project_name: str | None = None, with_examples: bool = False) -> None:
-    if target.exists() and any(target.iterdir()):
+def bootstrap(target: Path, project_name: str | None = None, with_examples: bool = False, force: bool = False) -> None:
+    if target.exists() and any(target.iterdir()) and not force:
         raise SystemExit(f"Target directory already exists and is not empty: {target}")
     ensure_dir(target)
 
@@ -521,10 +521,11 @@ def main() -> None:
     parser.add_argument("--target", required=True, help="Directory to create for the new starter vault.")
     parser.add_argument("--project-name", help="Optional project name to write into config and metadata.")
     parser.add_argument("--with-examples", action="store_true", help="Add a small examples/ folder with starter input files.")
+    parser.add_argument("--force", "--froce", action="store_true", help="Overwrite the starter scaffold even if the target directory already exists.")
     args = parser.parse_args()
 
     target = Path(args.target).expanduser().resolve()
-    bootstrap(target, project_name=args.project_name, with_examples=args.with_examples)
+    bootstrap(target, project_name=args.project_name, with_examples=args.with_examples, force=args.force)
     print(f"Created starter knowledge base at {target}")
 
 

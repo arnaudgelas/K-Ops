@@ -23,6 +23,7 @@ class KBPaths:
     raw_dir: Path
     registry_path: Path
     vault_dir: Path
+    research_dir: Path
     home_note: Path
     todo_note: Path
     concepts_dir: Path
@@ -39,6 +40,7 @@ def load_config() -> KBPaths:
         raw_dir=ROOT / data["raw_dir"],
         registry_path=ROOT / data["registry_path"],
         vault_dir=ROOT / data["vault_dir"],
+        research_dir=ROOT / data["research_dir"],
         home_note=ROOT / data["home_note"],
         todo_note=ROOT / data["todo_note"],
         concepts_dir=ROOT / data["concepts_dir"],
