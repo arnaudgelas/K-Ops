@@ -21,6 +21,7 @@ Compact command map for the starter vault.
 | `lint` | You want consistency checks | Verifies registry, backlinks, and note structure |
 | `refresh` | You want to re-check known sources | Re-fetches registered sources before compiling |
 | `backfill-source-notes` | You need missing source summaries created | Uses registry and raw artifacts |
+| `install-agent-assets` | You want to sync skills, prompts, and context files into the agent runtime locations | Installs project or user copies for Claude, Codex, and Gemini |
 | `bootstrap` | You want a fresh blank starter vault | Creates another copy of this file structure |
 
 ## Safe Order

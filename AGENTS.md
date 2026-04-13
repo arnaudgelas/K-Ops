@@ -27,6 +27,7 @@ Goal: convert the current vault into memos, briefings, slide outlines, diagrams,
 - `notes/Home.md` is the Obsidian entry point
 - `notes/TODO.md` tracks gaps and healing tasks
 - `notes/Runbooks/Agent_Workflow_Quick_Reference.md` is the compact operator map for cross-CLI workflows
+- `scripts/kb.py bootstrap --target <dir>` creates a new blank starter vault with the same file structure and tooling
 
 ## Behavioral Guardrails
 - Prefer modifying a small number of files with high signal.

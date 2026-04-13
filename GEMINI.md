@@ -1,13 +1,13 @@
-# CLAUDE.md
+# GEMINI.md
 
-This repository is a starter Obsidian-aligned living research vault. The same operating contract should work whether the active CLI is Claude Code, Codex CLI, or Gemini CLI.
+This repository is an Obsidian-aligned living research vault. The same operating contract should work whether the active CLI is Gemini CLI, Claude Code, or Codex CLI.
 
 ## Mission
 Turn raw sources into a durable Markdown knowledge base. Every answer should either:
 1. reference existing vault notes, or
 2. improve the vault if durable new knowledge was produced.
 
-## Operating Rules
+## Operating rules
 - Treat `data/raw/` as immutable source evidence.
 - Treat `notes/` as the curated Obsidian vault.
 - Prefer updating existing concept pages instead of creating duplicates.
@@ -17,7 +17,7 @@ Turn raw sources into a durable Markdown knowledge base. Every answer should eit
 - Do not silently invent citations.
 - If a question cannot be answered from the vault, say so and propose the minimum fetch needed.
 
-## Default Workflow
+## Default workflow
 1. Read relevant source summaries in `notes/Sources/`.
 2. Read the linked concept pages in `notes/Concepts/`.
 3. Use `notes/Runbooks/Agent_Workflow_Quick_Reference.md` when you need command syntax or command order.
@@ -26,7 +26,7 @@ Turn raw sources into a durable Markdown knowledge base. Every answer should eit
 6. Run `lint` after structural edits.
 7. Update `notes/Home.md` and `notes/TODO.md` when the vault's structure or gaps change.
 
-## Page Conventions
+## Page conventions
 Each concept page should usually contain:
 - What it is
 - Why it matters
@@ -49,7 +49,7 @@ Use the skills in `skills/` when relevant:
 - `notes/Concepts/Workflow_Pattern_Inventory.md`
 - `scripts/kb.py bootstrap --target <dir>`
 
-## Obsidian Conventions
+## Obsidian conventions
 - Use Obsidian-style wikilinks for internal note links when editing curated notes.
 - Keep note filenames stable and human-readable.
 - Prefer frontmatter on durable notes so properties remain queryable in Obsidian.

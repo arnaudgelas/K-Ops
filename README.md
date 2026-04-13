@@ -22,6 +22,12 @@ The repo is built to work with these command-line agents:
 
 The vault structure stays the same regardless of which agent you use. The only thing that changes is the `--agent` value passed to `scripts/kb.py`.
 
+To sync the repo skills and workflow prompts into the agent runtime locations, run:
+
+```bash
+uv run python scripts/kb.py install-agent-assets --agent all --scope project
+```
+
 ### Agent Selection
 
 Use the agent that matches the work you want to do:
