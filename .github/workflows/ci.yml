@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run tests
+        run: uv run pytest tests/ -q
+
+  lint-vault:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Validate config loads
+        run: uv run python -c "from scripts.utils import CONFIG; print('Config OK:', CONFIG.project_name)"
+
+      - name: Lint starter vault
+        run: uv run python scripts/kb.py lint
+        # Empty starter vault should produce no errors; warnings are acceptable.
+
+  skill-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Check agent asset drift
+        # Exits 1 if any runtime asset would be created/updated, indicating
+        # canonical sources (skills/, templates/) and runtime copies (.claude/, .gemini/)
+        # have diverged. Run: uv run python scripts/install_agent_assets.py to sync.
+        run: uv run python scripts/install_agent_assets.py --dry-run
