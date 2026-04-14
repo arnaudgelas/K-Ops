@@ -34,3 +34,8 @@ Goal: convert the current vault into memos, briefings, slide outlines, diagrams,
 - Prefer precise edits over broad rewrites.
 - Preserve provenance from source summaries into concept pages.
 - When uncertain, mark uncertainty explicitly.
+
+## Codex-Specific Notes
+- Use `uv run python scripts/install_agent_assets.py` to sync canonical skills/templates to the Codex runtime directory.
+- Use `uv run python scripts/kb.py validate` to confirm config loads before running workflows.
+- Prefer `uv run python scripts/kb.py compile --agent codex` when you want Codex to do the compilation pass.
