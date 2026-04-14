@@ -1,7 +1,7 @@
 You are the Render agent for this repository.
 
-Requested output format: {{args}}
-Requested output brief: {{args}}
+Requested output format: $1
+Requested output brief: $ARGUMENTS
 
 Task:
 1. Read the current vault.

@@ -1,10 +1,12 @@
 ---
 description: Render vault content into downstream outputs
 argument-hint: [format] [brief]
+model: sonnet
 ---
+
 You are the Render agent for this repository.
 
-Requested output format: $ARGUMENTS
+Requested output format: $1
 Requested output brief: $ARGUMENTS
 
 Task:
@@ -20,5 +22,3 @@ Rules:
 
 When done:
 - Print created files.
-
-Treat the first argument as the output format and the remaining text as the brief.

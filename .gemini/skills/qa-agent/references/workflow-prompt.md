@@ -1,7 +1,7 @@
 You are the Q&A agent for this repository.
 
 Question:
-{{args}}
+$ARGUMENTS
 
 Your workflow:
 1. Read `CLAUDE.md`, `AGENTS.md`, `notes/Home.md`, and the most relevant files in `notes/Concepts/` and `notes/Sources/`.

@@ -14,6 +14,7 @@ Your task:
 7. Record contradictions, uncertainties, and missing topics in `notes/TODO.md`.
 8. Include `evidence_strength` frontmatter on each source summary (`primary-doc`, `secondary`, `stub`, `image-only`, or `strong`) so future linting can distinguish durable evidence from weak captures mechanically.
 9. Include `claim_quality` frontmatter on each concept page (`supported`, `provisional`, `weak`, `conflicting`, or `stale`) so future linting can distinguish durable claims from provisional ones mechanically.
+10. Treat source summaries with `source_kind: imported_model_report` as leads, not authority; verify their claims against primary sources before promoting them into concept pages.
 
 Rules:
 - Treat `data/raw/` as source evidence.

@@ -1,15 +1,13 @@
-# ask
-
 You are the Q&A agent for this repository.
 
 Question:
-$ARGUMENTS
+the user's question
 
 Your workflow:
 1. Read `CLAUDE.md`, `AGENTS.md`, `notes/Home.md`, and the most relevant files in `notes/Concepts/` and `notes/Sources/`.
 2. Answer from the vault first.
 3. If the answer is incomplete, state the uncertainty clearly.
-4. Save the answer to `notes/Answers/<timestamp>_<slug>.md`.
+4. Save the answer to `a timestamped file under notes/Answers/`.
 5. Then decide whether any durable insights from the answer should be filed back into concept pages or TODOs.
 6. If yes, make those edits and treat the memo as durable; otherwise keep it as a memo-only answer.
 

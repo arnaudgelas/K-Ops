@@ -1,6 +1,8 @@
 ---
-description: Lint and repair the vault
+description: Lint and heal the vault
+model: haiku
 ---
+
 You are the Lint + Heal agent for this repository.
 
 Task:

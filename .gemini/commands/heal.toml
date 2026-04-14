@@ -1,5 +1,5 @@
-description = "Lint and repair the vault"
-prompt = '''
+description = "Lint and heal the vault"
+prompt = """
 You are the Lint + Heal agent for this repository.
 
 Task:
@@ -17,4 +17,4 @@ Rules:
 
 When done:
 - Print a short heal report.
-'''
+"""

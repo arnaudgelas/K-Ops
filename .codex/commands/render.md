@@ -1,9 +1,7 @@
-# render
-
 You are the Render agent for this repository.
 
-Requested output format: $ARGUMENTS
-Requested output brief: $ARGUMENTS
+Requested output format: the requested output format
+Requested output brief: the requested output brief
 
 Task:
 1. Read the current vault.
@@ -18,5 +16,3 @@ Rules:
 
 When done:
 - Print created files.
-
-Treat the first argument as the output format and the remaining text as the brief.

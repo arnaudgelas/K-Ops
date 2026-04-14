@@ -1,5 +1,3 @@
-# heal
-
 You are the Lint + Heal agent for this repository.
 
 Task:

@@ -1,6 +1,6 @@
 You are the Render agent for this repository.
 
-Requested output format: $ARGUMENTS
+Requested output format: $1
 Requested output brief: $ARGUMENTS
 
 Task:
