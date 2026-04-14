@@ -11,6 +11,7 @@ from utils import ensure_dir, slugify
 
 ROOT = Path(__file__).resolve().parent.parent
 MACHINERY_DIRS = ("scripts", "templates", "skills")
+AGENT_RUNTIME_DIRS = (".claude", ".gemini", ".codex")
 GITIGNORE_SOURCE = ROOT / ".gitignore"
 
 
@@ -94,6 +95,11 @@ def render_agents() -> str:
         - Prefer precise edits over broad rewrites.
         - Preserve provenance from source summaries into concept pages.
         - When uncertain, mark uncertainty explicitly.
+
+        ## Codex-Specific Notes
+        - Use `uv run python scripts/install_agent_assets.py` to sync canonical skills/templates to the Codex runtime directory.
+        - Use `uv run python scripts/kb.py validate` to confirm config loads before running workflows.
+        - Prefer `uv run python scripts/kb.py compile --agent codex` when you want Codex to do the compilation pass.
         """
     ).strip() + "\n"
 
@@ -502,6 +508,13 @@ def bootstrap(target: Path, project_name: str | None = None, with_examples: bool
     for directory in MACHINERY_DIRS:
         copy_dir(ROOT / directory, target / directory)
 
+    # Copy agent runtime configs so the bootstrapped vault is immediately usable
+    # with Claude Code, Gemini CLI, and Codex CLI without running install-agent-assets.
+    for directory in AGENT_RUNTIME_DIRS:
+        src = ROOT / directory
+        if src.exists():
+            copy_dir(src, target / directory)
+
     create_gitignore(target)
     create_pyproject(target, project)
     create_config(target, project)
@@ -521,7 +534,7 @@ def main() -> None:
     parser.add_argument("--target", required=True, help="Directory to create for the new starter vault.")
     parser.add_argument("--project-name", help="Optional project name to write into config and metadata.")
     parser.add_argument("--with-examples", action="store_true", help="Add a small examples/ folder with starter input files.")
-    parser.add_argument("--force", "--froce", action="store_true", help="Overwrite the starter scaffold even if the target directory already exists.")
+    parser.add_argument("--force", action="store_true", help="Overwrite the starter scaffold even if the target directory already exists.")
     args = parser.parse_args()
 
     target = Path(args.target).expanduser().resolve()

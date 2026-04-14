@@ -7,19 +7,8 @@ from pathlib import Path
 
 import yaml
 
-from utils import CONFIG, ROOT, ensure_dir, now_stamp
+from utils import CONFIG, ROOT, ensure_dir, now_stamp, parse_frontmatter
 
-
-def parse_frontmatter(text: str) -> tuple[dict, str]:
-    if not text.startswith("---\n"):
-        return {}, text
-    parts = text.split("\n---\n", 1)
-    if len(parts) != 2:
-        return {}, text
-    data = yaml.safe_load(parts[0][4:]) or {}
-    if not isinstance(data, dict):
-        data = {}
-    return data, parts[1]
 
 
 def collect_notes() -> dict[str, list[dict]]:

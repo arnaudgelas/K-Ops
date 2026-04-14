@@ -79,6 +79,39 @@ def backfill_item(item: dict, dry_run: bool = False) -> bool:
     return changed
 
 
+def run(all: bool = True, ids: list[str] | None = None, dry_run: bool = False) -> list[str]:
+    """Backfill content hashes and timestamps.
+
+    Returns the list of source IDs whose content hash changed (or was set for
+    the first time).  Callers can use this to decide whether downstream steps
+    (e.g. compile) are worth running.
+    """
+    registry = load_registry()
+    wanted = set(ids or [])
+    selected = [item for item in registry if all or item["id"] in wanted]
+
+    touched: list[str] = []
+    registry_changed = False
+    for item in selected:
+        changed = backfill_item(item, dry_run=dry_run)
+        if changed:
+            touched.append(item["id"])
+            registry_changed = True
+
+    if registry_changed and not dry_run:
+        save_json(REGISTRY_PATH, registry)
+
+    if touched:
+        mode = "Would backfill" if dry_run else "Backfilled"
+        print(f"{mode} {len(touched)} source(s):")
+        for source_id in touched:
+            print(f"- {source_id}")
+    else:
+        print("No source metadata needed backfilling")
+
+    return touched
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Backfill content hashes and source check timestamps into registry and raw metadata.")
     parser.add_argument("--all", action="store_true", help="Backfill every registry entry.")

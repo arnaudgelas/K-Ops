@@ -6,24 +6,12 @@ from pathlib import Path
 
 import yaml
 
+from utils import CONFIG, ROOT, parse_frontmatter
 
-ROOT = Path(__file__).resolve().parent.parent
-ANSWERS_DIR = ROOT / "notes" / "Answers"
+ANSWERS_DIR = CONFIG.answers_dir
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
 VAULT_UPDATES_RE = re.compile(r"## Vault Updates\s+(.*?)(?:\n## |\Z)", re.DOTALL)
-
-
-def parse_frontmatter(text: str) -> tuple[dict, str]:
-    if not text.startswith("---\n"):
-        return {}, text
-    match = FRONTMATTER_RE.match(text)
-    if not match:
-        return {}, text
-    data = yaml.safe_load(match.group(1)) or {}
-    if not isinstance(data, dict):
-        data = {}
-    return data, match.group(2)
 
 
 def set_frontmatter_field(text: str, field: str, value: str) -> tuple[str, bool]:
@@ -61,6 +49,30 @@ def infer_answer_quality(body: str) -> str:
 
 def infer_answer_scope(answer_quality: str) -> str:
     return "shared" if answer_quality == "durable" else "private"
+
+
+def run(all: bool = True, dry_run: bool = False) -> None:
+    changed = 0
+    for path in sorted(ANSWERS_DIR.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        frontmatter, body = parse_frontmatter(text)
+        if frontmatter.get("type") != "answer":
+            continue
+        desired = infer_answer_quality(body)
+        updated_text, did_change = set_frontmatter_field(text, "answer_quality", desired)
+        scope = infer_answer_scope(desired)
+        updated_text, scope_changed = set_frontmatter_field(updated_text, "scope", scope)
+        did_change = did_change or scope_changed
+        if did_change:
+            changed += 1
+            if not dry_run:
+                path.write_text(updated_text, encoding="utf-8")
+            print(
+                f"{'Would update' if dry_run else 'Updated'} {path.relative_to(ROOT)} -> "
+                f"answer_quality: {desired}, scope: {scope}"
+            )
+    if changed == 0:
+        print("No answer quality metadata needed backfilling")
 
 
 def main() -> None:

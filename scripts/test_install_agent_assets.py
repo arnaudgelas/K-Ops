@@ -36,30 +36,37 @@ def main() -> None:
             project_root / ".claude" / "skills" / "compile-wiki" / "SKILL.md",
             project_root / ".claude" / "commands" / "ask.md",
             project_root / ".gemini" / "commands" / "render.toml",
-            project_root / ".codex" / "prompts" / "heal.md",
-            project_root / "GEMINI.md",
+            project_root / ".codex" / "commands" / "heal.md",
+            home_root / ".claude" / "CLAUDE.md",
+            home_root / ".codex" / "AGENTS.md",
+            home_root / ".gemini" / "GEMINI.md",
             home_root / ".claude" / "skills" / "qa-agent" / "references" / "workflow-prompt.md",
             home_root / ".gemini" / "commands" / "compile.toml",
             home_root / ".codex" / "skills" / "render-output" / "SKILL.md",
+            home_root / ".codex" / "commands" / "ask.md",
         ]
 
         for path in expected_files:
             if not path.exists():
                 raise AssertionError(f"Expected runtime asset to exist: {path}")
 
-        gemini_text = (project_root / "GEMINI.md").read_text(encoding="utf-8")
-        if "@./AGENTS.md" not in gemini_text or "@./CLAUDE.md" not in gemini_text:
-            raise AssertionError(f"GEMINI.md did not import the repo contract:\n{gemini_text}")
+        gemini_text = (home_root / ".gemini" / "GEMINI.md").read_text(encoding="utf-8")
+        if "OPERATING_RULES.md" not in gemini_text:
+            raise AssertionError(f"GEMINI.md did not preserve the shared operating contract:\n{gemini_text}")
+
+        codex_text = (home_root / ".codex" / "AGENTS.md").read_text(encoding="utf-8")
+        if "Codex-Specific Notes" not in codex_text:
+            raise AssertionError(f"AGENTS.md did not preserve the Codex startup contract:\n{codex_text}")
 
         ask_command = (project_root / ".claude" / "commands" / "ask.md").read_text(encoding="utf-8")
         if "$ARGUMENTS" not in ask_command:
             raise AssertionError(f"Claude ask command did not include argument substitution:\n{ask_command}")
 
         render_command = (project_root / ".gemini" / "commands" / "render.toml").read_text(encoding="utf-8")
-        if "Treat the first argument as the output format" not in render_command:
+        if "the requested output format" not in render_command:
             raise AssertionError(f"Gemini render command did not adapt the render prompt:\n{render_command}")
 
-        codex_prompt = (project_root / ".codex" / "prompts" / "ask.md").read_text(encoding="utf-8")
+        codex_prompt = (project_root / ".codex" / "commands" / "ask.md").read_text(encoding="utf-8")
         if "notes/Answers/" not in codex_prompt:
             raise AssertionError(f"Codex prompt did not preserve the answer memo workflow:\n{codex_prompt}")
 

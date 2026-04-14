@@ -4,6 +4,7 @@ import argparse
 import json
 import mimetypes
 import hashlib
+import os
 import re
 import shutil
 from pathlib import Path
@@ -14,6 +15,8 @@ import trafilatura
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 from requests import RequestException
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from utils import CONFIG, ROOT, ensure_dir, load_json, now_stamp, save_json, short_hash, slugify
 
@@ -230,8 +233,35 @@ def extract_html_text(raw_html: str, url: str) -> str:
     return clean_article_text(soup.get_text("\n", strip=True))
 
 
+def _make_session() -> requests.Session:
+    """Create a requests Session with automatic retry on transient errors."""
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1.0,
+        status_forcelist={429, 500, 502, 503, 504},
+        allowed_methods={"GET", "HEAD"},
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    _extra_headers_raw = os.environ.get("KB_HTTP_HEADERS", "")
+    if _extra_headers_raw:
+        import json as _json
+        try:
+            session.headers.update(_json.loads(_extra_headers_raw))
+        except Exception:
+            pass
+    bearer = os.environ.get("KB_HTTP_BEARER_TOKEN", "")
+    if bearer:
+        session.headers["Authorization"] = f"Bearer {bearer}"
+    return session
+
+
 def fetch_url(url: str) -> tuple[bytes, str | None, str, str, str]:
-    response = requests.get(url, timeout=30, headers={"User-Agent": "living-kb-cli/0.1"})
+    session = _make_session()
+    response = session.get(url, timeout=30, headers={"User-Agent": "living-kb-cli/0.1"})
     response.raise_for_status()
     content_type = response.headers.get("content-type", "").lower()
     filename = Path(urlparse(url).path).name or "downloaded"

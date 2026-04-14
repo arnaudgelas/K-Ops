@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from utils import CONFIG, ROOT
+from utils import CONFIG, ROOT, parse_frontmatter
 
 REGISTRY_PATH = CONFIG.registry_path
 RAW_DIR = CONFIG.raw_dir
@@ -112,17 +112,6 @@ class BacklinkFix:
 def load_registry() -> list[dict]:
     return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
 
-
-def parse_frontmatter(text: str) -> tuple[dict, str]:
-    if not text.startswith("---\n"):
-        return {}, text
-    match = ANSWER_FRONTMATTER_RE.match(text)
-    if not match:
-        return {}, text
-    data = yaml.safe_load(match.group(1)) or {}
-    if not isinstance(data, dict):
-        data = {}
-    return data, match.group(2)
 
 
 def source_note_ids() -> set[str]:
@@ -685,18 +674,14 @@ def collect_findings(strict: bool = False) -> list[Finding]:
     return findings
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Lint the vault for structural consistency.")
-    parser.add_argument("--strict", action="store_true", help="Treat backlink drift warnings as errors.")
-    parser.add_argument("--fix-backlinks", action="store_true", help="Append missing source backlinks into concept Evidence sections before linting.")
-    args = parser.parse_args()
-
-    if args.fix_backlinks:
-        fixes = collect_backlink_fixes(strict=args.strict)
+def run(strict: bool = False, fix_backlinks: bool = False) -> int:
+    """Run the full lint pass.  Returns 0 if clean, 1 if errors were found."""
+    if fix_backlinks:
+        fixes = collect_backlink_fixes(strict=strict)
         applied = apply_backlink_fixes(fixes)
         print(f"Applied {applied} backlink fix(es)")
 
-    findings = collect_findings(strict=args.strict)
+    findings = collect_findings(strict=strict)
     errors = [finding for finding in findings if finding.severity == "error"]
     warnings = [finding for finding in findings if finding.severity == "warning"]
 
@@ -709,7 +694,15 @@ def main() -> None:
         for finding in group:
             print(f"- [{finding.code}] {finding.message}")
 
-    raise SystemExit(1 if errors else 0)
+    return 1 if errors else 0
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Lint the vault for structural consistency.")
+    parser.add_argument("--strict", action="store_true", help="Treat backlink drift warnings as errors.")
+    parser.add_argument("--fix-backlinks", action="store_true", help="Append missing source backlinks into concept Evidence sections before linting.")
+    args = parser.parse_args()
+    raise SystemExit(run(strict=args.strict, fix_backlinks=args.fix_backlinks))
 
 
 if __name__ == "__main__":

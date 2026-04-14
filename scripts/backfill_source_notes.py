@@ -150,6 +150,26 @@ def build_note(item: dict) -> str:
     return "\n".join(lines)
 
 
+def run(all_missing: bool = True, ids: list[str] | None = None, dry_run: bool = False) -> None:
+    registry = load_registry()
+    existing = {path.stem for path in SOURCES_DIR.glob("src-*.md")}
+
+    selected: list[dict] = []
+    if all_missing:
+        selected = [item for item in registry if item["id"] not in existing]
+    elif ids:
+        wanted = set(ids)
+        selected = [item for item in registry if item["id"] in wanted]
+
+    for item in selected:
+        note_path = SOURCES_DIR / f'{item["id"]}.md'
+        if dry_run:
+            print(f"Would write {note_path.relative_to(ROOT)}")
+        else:
+            note_path.write_text(build_note(item), encoding="utf-8")
+            print(f"Wrote {note_path.relative_to(ROOT)}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Backfill missing source-summary notes from registry artifacts.")
     parser.add_argument("--all-missing", action="store_true")

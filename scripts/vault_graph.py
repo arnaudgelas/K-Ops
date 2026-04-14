@@ -11,7 +11,7 @@ from typing import Iterable
 
 import yaml
 
-from utils import CONFIG, ROOT, ensure_dir
+from utils import CONFIG, ROOT, ensure_dir, parse_frontmatter
 
 
 GRAPH_DIR = ROOT / "data" / "graph"
@@ -29,17 +29,6 @@ GENERIC_LINK_RE = re.compile(r"\[\[((?:Concepts|Sources)/[^|\]]+)")
 ANSWER_LINK_RE = re.compile(r"\[\[(Answers/[^|\]]+)")
 BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S.*?)\s*$")
 
-
-def parse_frontmatter(text: str) -> tuple[dict, str]:
-    if not text.startswith("---\n"):
-        return {}, text
-    match = FRONTMATTER_RE.match(text)
-    if not match:
-        return {}, text
-    data = yaml.safe_load(match.group(1)) or {}
-    if not isinstance(data, dict):
-        data = {}
-    return data, match.group(2)
 
 
 def read_note(path: Path) -> tuple[dict, str]:

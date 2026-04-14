@@ -6,10 +6,10 @@ from pathlib import Path
 
 import yaml
 
+from utils import CONFIG, ROOT, parse_frontmatter
 
-ROOT = Path(__file__).resolve().parent.parent
-CONCEPTS_DIR = ROOT / "notes" / "Concepts"
-SOURCES_DIR = ROOT / "notes" / "Sources"
+CONCEPTS_DIR = CONFIG.concepts_dir
+SOURCES_DIR = CONFIG.summaries_dir
 
 FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
 EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
@@ -17,18 +17,6 @@ SOURCE_LINK_RE = re.compile(r"\[\[Sources/(src-[0-9a-f]{10})\|")
 CONTRADICTION_RE = re.compile(r"\bcontradiction\b|\bconflict(?:ing)?\b", re.IGNORECASE)
 
 VALID_QUALITIES = {"supported", "provisional", "weak", "conflicting", "stale"}
-
-
-def parse_frontmatter(text: str) -> tuple[dict, str]:
-    if not text.startswith("---\n"):
-        return {}, text
-    match = FRONTMATTER_RE.match(text)
-    if not match:
-        return {}, text
-    data = yaml.safe_load(match.group(1)) or {}
-    if not isinstance(data, dict):
-        data = {}
-    return data, match.group(2)
 
 
 def load_source_strengths() -> dict[str, str]:
@@ -103,6 +91,24 @@ def update_frontmatter(text: str, claim_quality: str) -> tuple[str, bool]:
 
     lines.insert(insert_at, new_line)
     return "---\n" + "\n".join(lines) + "\n---\n" + body, True
+
+
+def run(all: bool = True, dry_run: bool = False) -> None:
+    strengths = load_source_strengths()
+    changed = 0
+    for path in sorted(CONCEPTS_DIR.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        quality = classify_claim_quality(text, strengths)
+        if quality not in VALID_QUALITIES:
+            raise RuntimeError(f"Invalid claim quality inferred for {path}: {quality}")
+        updated_text, did_change = update_frontmatter(text, quality)
+        if did_change:
+            changed += 1
+            if not dry_run:
+                path.write_text(updated_text, encoding="utf-8")
+            print(f"{'Would update' if dry_run else 'Updated'} {path.relative_to(ROOT)} -> claim_quality: {quality}")
+    if changed == 0:
+        print("No concept claim-quality metadata needed backfilling")
 
 
 def main() -> None:

@@ -11,7 +11,10 @@ ENV/
 .vscode/
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
-outputs/*.zip
+research/*
+!research/.gitkeep
+outputs/*
+!outputs/.gitkeep
 node_modules/
 dist/
 build/

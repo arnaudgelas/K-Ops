@@ -2,6 +2,7 @@ project_name: K-Ops
 raw_dir: data/raw
 registry_path: data/registry.json
 vault_dir: notes
+research_dir: research
 home_note: notes/Home.md
 todo_note: notes/TODO.md
 concepts_dir: notes/Concepts
