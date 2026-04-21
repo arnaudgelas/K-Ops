@@ -880,7 +880,7 @@ def cmd_research_collect(agent: str, topic: str, tier: str = "standard") -> None
         progress_path=str(progress_path.relative_to(ROOT)),
         findings_path=str(findings_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt)
+    agent_run(agent, prompt, command="research-collect")
     if not findings_path.exists():
         raise FileNotFoundError(f"Expected findings file was not written: {findings_path}")
     append_research_progress(slug, "Completed source collection and initial findings distillation.")
@@ -924,7 +924,7 @@ def cmd_research_review(agent: str, topic: str, tier: str = "standard") -> None:
         findings_path=str(findings_path.relative_to(ROOT)),
         review_path=str(review_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt)
+    agent_run(agent, prompt, command="research-review")
     if not review_path.exists():
         raise FileNotFoundError(f"Expected contrarian review was not written: {review_path}")
     append_research_progress(slug, "Completed contrarian review.")
@@ -966,7 +966,7 @@ def cmd_research_report(
         review_path=str(review_path.relative_to(ROOT)),
         report_path=str(report_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt)
+    agent_run(agent, prompt, command="research-report")
     if not report_path.exists():
         raise FileNotFoundError(f"Expected report was not written: {report_path}")
     append_research_progress(slug, "Completed final report drafting.")

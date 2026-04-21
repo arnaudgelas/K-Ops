@@ -1,0 +1,14 @@
+version: '1.0'
+description: Golden Q&A evaluation set for K-Ops vault quality assurance. Add questions
+  whose answers should be consistently derivable from the vault.
+questions:
+- id: q001
+  question: What is the core purpose of K-Ops?
+  expected_themes:
+  - knowledge base
+  - agent
+  - Obsidian
+  - ingest
+  expected_sources: []
+  expected_concepts: []
+  notes: Should be answerable from OPERATING_RULES.md or notes/Home.md

@@ -1,0 +1,50 @@
+{
+  "generated_at": "2026-04-21T07:30:38",
+  "project": "K-Ops",
+  "concepts": {
+    "total": 1,
+    "by_claim_quality": {
+      "supported": 1
+    },
+    "unsupported": 1,
+    "revalidation_required": 0,
+    "conflicting_without_open_questions": 0,
+    "claim_bullets_total": 0,
+    "claim_bullets_with_inline_citation": 0,
+    "inline_citation_rate": null
+  },
+  "sources": {
+    "total": 0,
+    "by_evidence_strength": {},
+    "by_source_kind": {},
+    "stub_count": 0,
+    "primary_count": 0,
+    "model_generated_count": 0,
+    "stub_fraction": null,
+    "primary_fraction": null
+  },
+  "claims": {
+    "total": 0,
+    "by_quality": {},
+    "with_sources": 0,
+    "without_sources": 0
+  },
+  "answers": {
+    "total": 0,
+    "by_quality": {},
+    "with_provenance": 0,
+    "revalidation_required": 0
+  },
+  "research": {
+    "active": 0,
+    "by_phase": {},
+    "archived": 0
+  },
+  "health_signals": [
+    {
+      "code": "unsupported-concepts",
+      "severity": "info",
+      "message": "1/1 concept(s) have no cited sources in their Evidence section"
+    }
+  ]
+}
