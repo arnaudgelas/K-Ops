@@ -54,6 +54,6 @@ jobs:
 
       - name: Check agent asset drift
         # Exits 1 if any runtime asset would be created/updated, indicating
-        # canonical sources (skills/, templates/) and runtime copies (.claude/, .gemini/)
+        # canonical sources (skills/, templates/) and runtime copies (.claude/, .gemini/, .codex/)
         # have diverged. Run: uv run python scripts/install_agent_assets.py to sync.
-        run: uv run python scripts/install_agent_assets.py --dry-run
+        run: uv run python scripts/install_agent_assets.py --dry-run --scope project
