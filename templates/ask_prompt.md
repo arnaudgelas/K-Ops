@@ -10,12 +10,14 @@ Your workflow:
 4. Save the answer to `{answer_path}`.
 5. Then decide whether any durable insights from the answer should be filed back into concept pages or TODOs.
 6. If yes, make those edits and treat the memo as durable; otherwise keep it as a memo-only answer.
+7. In the answer frontmatter, populate `sources_consulted` with the list of source IDs (e.g. `src-abc123def0`) and concept filenames you read to answer this question. This enables downstream provenance tracking.
 
 Answer requirements:
 - cite the relevant vault notes with Obsidian wikilinks where appropriate
 - distinguish established knowledge vs open questions
 - if the answer stays memo-only, make the Vault Updates section say `None.`
 - be useful to a human reader
+- do not invent citations or claims not grounded in the vault
 
 When done:
 - Print the answer file path and a summary of any vault updates.

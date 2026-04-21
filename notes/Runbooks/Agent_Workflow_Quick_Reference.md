@@ -35,6 +35,23 @@ Compact command map for the K-Ops vault.
 | `research-import` | Importing an external AI-generated report | Creates lead-only source stubs |
 | `research-archive` | Archiving a completed run | Only works when phase is `done` |
 
+## Claim & Freshness Commands
+
+| Command | Use When | Notes |
+|---|---|---|
+| `extract-claims` | After compile — rebuild `data/claims.json` | Extracts Key Claims bullets with stable IDs |
+| `claim-search` | Looking for atomic claims by keyword | Accepts `--query`, `--limit`, `--format` |
+| `stale-impact` | After refresh — seeing what changed | Lists concepts + answers with `revalidation_required: true` |
+| `clear-stale-flags` | After reviewing stale concepts/answers | Removes `revalidation_required` flags; use `--dry-run` first |
+
+## Quality & Evaluation Commands
+
+| Command | Use When | Notes |
+|---|---|---|
+| `scorecard` | Checking overall vault health | Writes `data/scorecard.json`; prints human-readable summary |
+| `eval-setup` | Setting up the golden Q&A harness (once) | Creates `tests/qa_golden.yaml` if absent |
+| `eval-check` | Validating the golden Q&A file structure | Parses and checks required fields |
+
 ## Analysis and Export Commands
 
 | Command | Use When | Notes |
@@ -66,11 +83,13 @@ Compact command map for the K-Ops vault.
 
 ## Safe Execution Order
 
-1. `ingest` or `refresh`
+1. `ingest` or `refresh` (refresh auto-flags stale concepts/answers)
 2. `compile`
-3. `ask` (optional)
-4. `heal`
-5. `lint`
+3. `extract-claims`
+4. `ask` (optional)
+5. `heal`
+6. `lint`
+7. `scorecard` (optional — review health signals)
 
 For deep research: see [[Research_Workflow|Research Workflow Runbook]].
 

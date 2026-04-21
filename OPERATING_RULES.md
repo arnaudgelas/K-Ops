@@ -50,6 +50,32 @@ Use the skills in `skills/` when relevant:
 - `qa-agent`
 - `render-output`
 
+## Claim & Freshness Rules
+
+- Run `extract-claims` after any compile pass to keep `data/claims.json` current.
+- `refresh` automatically sets `revalidation_required: true` on concept pages that cite changed sources. Run `stale-impact` to review the impact list, update the affected pages, then run `clear-stale-flags` to dismiss.
+- Concept pages with `claim_quality: conflicting` **must** have an `## Open Questions` section that names the conflicting sources and why they disagree. Lint warns if the section is absent.
+- Answer memos include a `sources_consulted` frontmatter list. Populate it with the source IDs and concept filenames read during the Q&A session.
+
+## Evidence Strength Taxonomy
+
+Use the most precise value for `evidence_strength` on source notes:
+
+| Value | Meaning |
+|---|---|
+| `primary-doc` | Canonical primary source documentation |
+| `official-spec` | Official specification or standard |
+| `strong` | High-confidence non-primary evidence |
+| `code` | Source code or implementation artifact |
+| `maintainer-commentary` | From the repo maintainer or original author |
+| `changelog` | Release notes or changelog |
+| `pr-issue` | Pull request or issue thread |
+| `secondary` | Secondary analysis, commentary, or survey |
+| `model-generated` | AI/model-generated content (treat as secondary) |
+| `stub` | Minimal or placeholder capture |
+| `citation-only` | Citation stub not yet fetched |
+| `image-only` | Screenshot or image with no extractable text |
+
 ## Reference Notes
 
 - `notes/Runbooks/Agent_Workflow_Quick_Reference.md`
