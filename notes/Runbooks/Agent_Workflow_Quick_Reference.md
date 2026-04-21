@@ -44,6 +44,13 @@ Compact command map for the K-Ops vault.
 | `stale-impact` | After refresh — seeing what changed | Lists concepts + answers with `revalidation_required: true` |
 | `clear-stale-flags` | After reviewing stale concepts/answers | Removes `revalidation_required` flags; use `--dry-run` first |
 
+## Contradiction Commands
+
+| Command | Use When | Notes |
+|---|---|---|
+| `extract-contradictions` | After compile — rebuild `data/contradictions.json` | One record per Open Questions bullet; undocumented if section missing |
+| `contradiction-search` | Looking for conflict records by keyword | Accepts `--query`, `--limit`, `--format` |
+
 ## Quality & Evaluation Commands
 
 | Command | Use When | Notes |
@@ -86,10 +93,11 @@ Compact command map for the K-Ops vault.
 1. `ingest` or `refresh` (refresh auto-flags stale concepts/answers)
 2. `compile`
 3. `extract-claims`
-4. `ask` (optional)
-5. `heal`
-6. `lint`
-7. `scorecard` (optional — review health signals)
+4. `extract-contradictions`
+5. `ask` (optional)
+6. `heal`
+7. `lint`
+8. `scorecard` (optional — review health signals)
 
 For deep research: see [[Research_Workflow|Research Workflow Runbook]].
 

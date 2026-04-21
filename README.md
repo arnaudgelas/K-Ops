@@ -1,109 +1,142 @@
 # K-Ops
 
-`K-Ops` is an agent-first Markdown knowledge base starter for turning raw
-evidence into durable, reusable knowledge.
+**Stop collecting. Start knowing.**
 
-It gives you the workflow scaffold for ingesting sources, compiling notes,
-answering questions, and rendering outputs. The vault starts intentionally
-empty so you can shape it around your own research, operations, or
-documentation practice.
+Most research ends up as a graveyard of browser tabs, half-read PDFs, and notes you'll never find again. K-Ops is the antidote: an agent-first knowledge base that turns raw evidence into durable, compounding knowledge — automatically.
 
-## What This Gives You
+Drop in a URL or a file. Walk away with a structured, interlinked vault you can query, heal, and render into real outputs. No friction. No lost context.
 
-- A clean `notes/` vault structure for Obsidian
-- A source layer in `data/raw/` for imported evidence
-- Normalized summaries in `notes/Sources/`
-- Durable concept pages in `notes/Concepts/`
-- Answer memos in `notes/Answers/`
-- Shared templates and workflow scripts for repeatable agent runs
+---
 
-## Why It Exists
+## What Makes K-Ops Different
 
-This repo is built for a simple loop:
+Traditional note-taking tools make *you* do the work. K-Ops delegates it.
 
-1. Capture evidence without overthinking the format.
-2. Compile that evidence into notes you can trust and reuse.
-3. Heal structure and backlinks so the vault stays navigable.
-4. Ask questions against the vault and promote useful answers back into durable
-   notes.
-5. Render the current knowledge into briefs, outlines, slide specs, or reports.
+- **Agents do the heavy lifting.** Ingestion, summarization, link repair, Q&A — all driven by `claude-code`, `codex-cli`, or `gemini-cli`. You pick the model; the workflow stays the same.
+- **The vault compounds over time.** Every source summary feeds concept pages. Every answer memo becomes reusable knowledge. Nothing is siloed.
+- **Obsidian-native.** The `notes/` directory is a first-class Obsidian vault — backlinks, templates, and navigation work out of the box.
+- **One script to rule them all.** `scripts/kb.py` is your single interface for every operation: ingest, compile, heal, ask, render.
 
-That is the core promise: less scattered information, more compounding knowledge.
+---
 
-## Agent Support
+## The Loop That Changes How You Research
 
-The workflow is designed to work with these CLI agents:
+```
+Capture → Compile → Heal → Ask → Render
+```
 
-- `claude-code`
-- `codex-cli`
-- `gemini-cli`
+1. **Capture** raw evidence without overthinking the format — URLs, files, repos.
+2. **Compile** that evidence into normalized summaries and durable concept pages.
+3. **Heal** structure and backlinks so the vault stays navigable as it grows.
+4. **Ask** questions against the vault; get answers grounded in your own sources.
+5. **Render** the current knowledge into briefs, reports, slide outlines, or memos.
 
-The vault contract stays the same across agents. Only the `--agent` value
-changes when you run `scripts/kb.py`.
+Each pass makes the vault smarter. That is the promise: less scattered information, more knowledge that earns its place.
 
-To sync repo skills and workflow prompts into the agent runtime locations, run:
+---
+
+## Five Minutes to Your First Insight
 
 ```bash
+# 1. Install uv if you haven't
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 2. Set up the project
+uv sync
+
+# 3. Ingest your first sources
+uv run python scripts/kb.py ingest --input path/to/urls.txt
+
+# 4. Compile summaries and concept pages
+uv run python scripts/kb.py compile --agent claude
+
+# 5. Ask a question
+uv run python scripts/kb.py ask --agent claude --question "What are the key themes across my sources?"
+
+# 6. Render a memo
+uv run python scripts/kb.py render --agent claude --format memo --prompt "Summarize findings for a stakeholder briefing"
+```
+
+---
+
+## Full Command Reference
+
+```bash
+# Ingest a GitHub repository and compile it immediately
+uv run python scripts/kb.py ingest-github --repo owner/repo --compile-agent claude
+
+# Heal structure after edits (fix backlinks, metadata, orphaned pages)
+uv run python scripts/kb.py heal --agent claude
+
+# Dry-run to preview what compile or heal would do
+uv run python scripts/kb.py compile --dry-run
+uv run python scripts/kb.py heal --dry-run
+
+# Extract atomic claims from every concept page
+uv run python scripts/kb.py extract-claims
+
+# Extract structured contradiction records from conflicting concepts
+uv run python scripts/kb.py extract-contradictions
+
+# Check vault health — quality metrics, stale backlog, coverage signals
+uv run python scripts/kb.py scorecard
+
+# Search claims or contradictions by keyword
+uv run python scripts/kb.py claim-search --query "your topic"
+uv run python scripts/kb.py contradiction-search --query "disputed point"
+
+# Validate your config before running any workflow
+uv run python scripts/kb.py validate
+
+# Sync skills and prompt templates into agent runtime locations
 uv run python scripts/kb.py install-agent-assets --agent all --scope project
 ```
 
-## Recommended Flow
+---
 
-1. Install `uv`.
-2. Run `uv sync`.
-3. Add your first URLs or files to an input list.
-4. Ingest the raw sources.
-5. Compile summaries and concept pages.
-6. Run lint or heal after structural edits.
-7. Ask questions and file durable answers back into the vault.
-8. Render outputs when you need a memo, outline, slide deck, or briefing.
+## What You Get
 
-Example commands:
+| Layer | Location | Purpose |
+|---|---|---|
+| Raw evidence | `data/raw/` | Immutable source files |
+| Source summaries | `notes/Sources/` | Normalized per-source digests |
+| Concept pages | `notes/Concepts/` | Durable, interlinked knowledge |
+| Answer memos | `notes/Answers/` | Grounded Q&A, filed back into the vault |
+| Claim registry | `data/claims.json` | Atomic claims extracted from concept pages, searchable by keyword |
+| Contradiction registry | `data/contradictions.json` | Structured conflict records — one entry per Open Questions bullet |
+| Vault scorecard | `data/scorecard.json` | Quality metrics across all domains; health signals for early warnings |
+| Templates | `notes/_Templates/` | Consistent note structure |
+| Runbooks | `notes/Runbooks/` | Step-by-step workflow guides |
 
-```bash
-# Ingest raw URLs or file paths
-uv run python scripts/kb.py ingest --input path/to/input.txt
+---
 
-# Ingest a GitHub repository and compile it immediately
-uv run python scripts/kb.py ingest-github --repo owner/repo --compile-agent codex
+## Multi-Agent by Design
 
-# Compile with a chosen agent
-uv run python scripts/kb.py compile --agent codex
+K-Ops is not locked to a single AI provider. Swap agents mid-workflow without changing your vault structure:
 
-# Heal structure after edits
-uv run python scripts/kb.py heal --agent codex
+| Agent | Flag |
+|---|---|
+| Claude Code | `--agent claude` |
+| OpenAI Codex CLI | `--agent codex` |
+| Google Gemini CLI | `--agent gemini` |
 
-# Ask a question against the vault
-uv run python scripts/kb.py ask --agent claude --question "Which notes define the ingestion contract?"
+---
 
-# Render a memo from the current vault state
-uv run python scripts/kb.py render --agent gemini --format memo --prompt "Summarize the current intake workflow"
-```
+## Guiding Principles
 
-## Project Structure
-
-- `scripts/` for ingestion, compilation, healing, linting, and rendering
-- `templates/` for agent prompts
-- `skills/` for reusable skill definitions
-- `notes/` for the Obsidian vault structure
-- `config/kb_config.yaml` for repo-local path settings
-
-Starter references:
-
-- `notes/Home.md` is the vault entry point
-- `notes/TODO.md` tracks follow-up work
-- `notes/Runbooks/Agent_Workflow_Quick_Reference.md` is the compact workflow map
-- `notes/_Templates/` contains note templates for source summaries and concept pages
-
-## Working Rules
-
-- Keep durable knowledge in `notes/`, not in raw source files.
+- Keep durable knowledge in `notes/`, not buried in raw source files.
 - Prefer small, high-signal edits over broad rewrites.
-- Preserve provenance from source summaries into concept pages.
-- Mark uncertainty explicitly when the evidence is thin.
-- Run `lint` after changes that affect backlinks, note structure, or metadata.
+- Preserve provenance: trace every claim back to a source summary; use `extract-claims` to make that graph machine-readable.
+- Mark uncertainty explicitly when evidence is thin; document conflicts in `## Open Questions` so `extract-contradictions` can surface them.
+- Run `heal` after any change that touches backlinks, structure, or metadata.
+- Run `scorecard` to catch quality drift before it compounds.
 
-## Next Step
+---
 
-Start with one source list, ingest it, and let the vault grow from there. The
-first pass does not need to be perfect. It just needs to be real.
+## Start Here
+
+Open `notes/Home.md` — that is the vault entry point.  
+Check `notes/TODO.md` for pending follow-up work.  
+Reach for `notes/Runbooks/Agent_Workflow_Quick_Reference.md` when you need the compact workflow map.
+
+The first pass does not need to be perfect. **It just needs to be real.**
