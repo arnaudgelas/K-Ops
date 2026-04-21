@@ -59,6 +59,7 @@ def _patch_vs(vs_mod, dirs: dict) -> None:
     })()
     vs_mod.ROOT = dirs["root"]
     vs_mod._CLAIMS_PATH = dirs["root"] / "data" / "claims.json"
+    vs_mod._CONTRADICTIONS_PATH = dirs["root"] / "data" / "contradictions.json"
     vs_mod._RESEARCH_DIR = dirs["root"] / "research"
     vs_mod.SCORECARD_PATH = dirs["root"] / "data" / "scorecard.json"
 
@@ -77,6 +78,58 @@ def test_empty_vault_returns_zeros(tmp_path):
     assert sc["sources"]["total"] == 0
     assert sc["answers"]["total"] == 0
     assert sc["claims"]["total"] == 0
+    assert sc["contradictions"]["total"] == 0
+
+
+def test_scorecard_includes_contradictions_domain(tmp_path):
+    import vault_scorecard as vs
+    dirs = _make_dirs(tmp_path)
+    _patch_vs(vs, dirs)
+    # Write a contradictions.json with one documented record
+    contradictions_path = dirs["root"] / "data" / "contradictions.json"
+    contradictions_path.parent.mkdir(parents=True, exist_ok=True)
+    contradictions_path.write_text(
+        json.dumps({
+            "generated_at": "2026-01-01T00:00:00",
+            "count": 1,
+            "documented": 1,
+            "undocumented": 0,
+            "contradictions": [
+                {"id": "ctr-abc1234567", "concept": "Foo", "open_question": "A vs B",
+                 "documented": True, "claim_ids": [], "source_ids": [], "created_at": ""}
+            ],
+        }),
+        encoding="utf-8",
+    )
+    sc = vs.compute_scorecard()
+    assert sc["contradictions"]["total"] == 1
+    assert sc["contradictions"]["documented"] == 1
+    assert sc["contradictions"]["undocumented"] == 0
+    assert sc["contradictions"]["concepts_affected"] == 1
+
+
+def test_undocumented_contradiction_triggers_health_signal(tmp_path):
+    import vault_scorecard as vs
+    dirs = _make_dirs(tmp_path)
+    _patch_vs(vs, dirs)
+    contradictions_path = dirs["root"] / "data" / "contradictions.json"
+    contradictions_path.parent.mkdir(parents=True, exist_ok=True)
+    contradictions_path.write_text(
+        json.dumps({
+            "generated_at": "2026-01-01T00:00:00",
+            "count": 1,
+            "documented": 0,
+            "undocumented": 1,
+            "contradictions": [
+                {"id": "ctr-xyz9876543", "concept": "Bar", "open_question": None,
+                 "documented": False, "claim_ids": [], "source_ids": [], "created_at": ""}
+            ],
+        }),
+        encoding="utf-8",
+    )
+    sc = vs.compute_scorecard()
+    codes = {s["code"] for s in sc["health_signals"]}
+    assert "undocumented-contradictions" in codes
 
 
 def test_concept_quality_counts(tmp_path):

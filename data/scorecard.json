@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-21T07:30:38",
+  "generated_at": "2026-04-21T07:49:24",
   "project": "K-Ops",
   "concepts": {
     "total": 1,
@@ -39,6 +39,12 @@
     "active": 0,
     "by_phase": {},
     "archived": 0
+  },
+  "contradictions": {
+    "total": 0,
+    "documented": 0,
+    "undocumented": 0,
+    "concepts_affected": 0
   },
   "health_signals": [
     {

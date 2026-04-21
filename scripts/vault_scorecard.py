@@ -28,6 +28,7 @@ from utils import CONFIG, ROOT, ensure_dir, parse_frontmatter
 SCORECARD_PATH = ROOT / "data" / "scorecard.json"
 
 _CLAIMS_PATH = ROOT / "data" / "claims.json"
+_CONTRADICTIONS_PATH = ROOT / "data" / "contradictions.json"
 _RESEARCH_DIR = CONFIG.research_dir
 
 _INLINE_SOURCE_RE = re.compile(r"\(\[\[Sources/src-[0-9a-f]{10}")
@@ -174,6 +175,25 @@ def _score_answers() -> dict:
     }
 
 
+def _score_contradictions() -> dict:
+    if not _CONTRADICTIONS_PATH.exists():
+        return {"total": 0, "documented": 0, "undocumented": 0, "concepts_affected": 0}
+    try:
+        payload = json.loads(_CONTRADICTIONS_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {"total": 0, "documented": 0, "undocumented": 0, "concepts_affected": 0}
+    recs = payload.get("contradictions", [])
+    total = len(recs)
+    documented = sum(1 for r in recs if r.get("documented"))
+    concepts_affected = len({r["concept"] for r in recs if r.get("concept")})
+    return {
+        "total": total,
+        "documented": documented,
+        "undocumented": total - documented,
+        "concepts_affected": concepts_affected,
+    }
+
+
 def _score_research() -> dict:
     if not _RESEARCH_DIR.exists():
         return {"active": 0, "by_phase": {}, "archived": 0}
@@ -190,7 +210,13 @@ def _score_research() -> dict:
     }
 
 
-def _compute_signals(concepts: dict, sources: dict, claims: dict, answers: dict) -> list[dict]:
+def _compute_signals(
+    concepts: dict,
+    sources: dict,
+    claims: dict,
+    answers: dict,
+    contradictions: dict | None = None,
+) -> list[dict]:
     signals: list[dict] = []
 
     if sources["total"] > 0:
@@ -270,6 +296,16 @@ def _compute_signals(concepts: dict, sources: dict, claims: dict, answers: dict)
             "message": f"{answers['revalidation_required']} answer(s) are flagged for revalidation",
         })
 
+    if contradictions and contradictions.get("undocumented", 0) > 0:
+        signals.append({
+            "code": "undocumented-contradictions",
+            "severity": "warning",
+            "message": (
+                f"{contradictions['undocumented']} conflicting concept(s) have no Open Questions "
+                "bullet — run 'extract-contradictions' then add an ## Open Questions section"
+            ),
+        })
+
     return signals
 
 
@@ -280,7 +316,8 @@ def compute_scorecard() -> dict:
     claims = _score_claims()
     answers = _score_answers()
     research = _score_research()
-    signals = _compute_signals(concepts, sources, claims, answers)
+    contradictions = _score_contradictions()
+    signals = _compute_signals(concepts, sources, claims, answers, contradictions)
 
     return {
         "generated_at": dt.datetime.now().replace(microsecond=0).isoformat(),
@@ -290,6 +327,7 @@ def compute_scorecard() -> dict:
         "claims": claims,
         "answers": answers,
         "research": research,
+        "contradictions": contradictions,
         "health_signals": signals,
     }
 
@@ -313,6 +351,7 @@ def print_summary(scorecard: dict) -> None:
     cl = scorecard["claims"]
     a = scorecard["answers"]
     r = scorecard["research"]
+    ct = scorecard.get("contradictions", {})
 
     print(f"\n=== {scorecard['project']} Vault Scorecard ({scorecard['generated_at']}) ===\n")
 
@@ -349,6 +388,14 @@ def print_summary(scorecard: dict) -> None:
     if r["active"] or r["archived"]:
         phase_str = "  ".join(f"{k}:{v}" for k, v in sorted(r["by_phase"].items()))
         print(f"Research : {r['active']} active  |  {r['archived']} archived  |  {phase_str}")
+
+    if ct.get("total", 0) or ct.get("concepts_affected", 0):
+        print(
+            f"Conflicts: {ct.get('total', 0)} records  |  "
+            f"documented: {ct.get('documented', 0)}  |  "
+            f"undocumented: {ct.get('undocumented', 0)}  |  "
+            f"concepts: {ct.get('concepts_affected', 0)}"
+        )
 
     signals = scorecard["health_signals"]
     if signals:
