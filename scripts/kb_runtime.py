@@ -116,8 +116,90 @@ def normalize_answer_quality(answer_path: Path) -> str:
     return desired
 
 
+def run_triage() -> tuple[Path, str]:
+    """Determine which sources need summaries, which are done, which are flagged.
+
+    Reads ``data/registry.json`` and scans ``notes/Sources/`` to classify each
+    source_id.  Writes ``.tmp/compile_plan.json`` and returns ``(plan_path,
+    human_readable_summary)`` for injection into the compile prompt.
+    """
+    if not CONFIG.registry_path.exists():
+        plan = {"to_summarize": [], "skip": [], "flag_for_review": []}
+        summary = "No registry found — nothing to compile."
+        return _write_triage_plan(plan), summary
+
+    registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
+    existing_summaries = {p.stem for p in CONFIG.summaries_dir.glob("src-*.md")} if CONFIG.summaries_dir.exists() else set()
+
+    to_summarize: list[str] = []
+    skip: list[str] = []
+    flag_for_review: list[str] = []
+
+    seen: set[str] = set()
+    for item in registry:
+        source_id = item.get("source_id") or ""
+        if not source_id or source_id in seen:
+            continue
+        seen.add(source_id)
+        raw_paths = list((ROOT / "data" / "raw").glob(f"{source_id}.*"))
+        raw_size = sum(p.stat().st_size for p in raw_paths if p.exists())
+        if source_id in existing_summaries:
+            skip.append(source_id)
+            continue
+        if raw_size < 200:
+            flag_for_review.append(source_id)
+            continue
+        # Detect imported model reports from registry metadata
+        source_kind = item.get("source_kind") or ""
+        if source_kind == "imported_model_report":
+            flag_for_review.append(source_id)
+        else:
+            to_summarize.append(source_id)
+
+    # Also check source notes for source_kind: imported_model_report not yet caught above
+    if CONFIG.summaries_dir.exists():
+        for p in CONFIG.summaries_dir.glob("src-*.md"):
+            if p.stem in seen:
+                continue
+            fm, _ = parse_frontmatter(p.read_text(encoding="utf-8"))
+            if fm.get("source_kind") == "imported_model_report" and p.stem not in existing_summaries:
+                flag_for_review.append(p.stem)
+                seen.add(p.stem)
+
+    plan = {
+        "generated_at": dt.datetime.now().replace(microsecond=0).isoformat(),
+        "to_summarize": to_summarize,
+        "skip": skip,
+        "flag_for_review": flag_for_review,
+    }
+    plan_path = _write_triage_plan(plan)
+
+    lines = [
+        f"Triage complete ({plan_path.relative_to(ROOT)}):",
+        f"  to_summarize   : {len(to_summarize)} source(s)",
+        f"  skip (done)    : {len(skip)} source(s)",
+        f"  flag_for_review: {len(flag_for_review)} source(s) (empty raw or model-generated)",
+    ]
+    if to_summarize:
+        lines.append(f"  IDs to process : {', '.join(to_summarize[:10])}"
+                     + (" …" if len(to_summarize) > 10 else ""))
+    if flag_for_review:
+        lines.append(f"  Flagged IDs    : {', '.join(flag_for_review)}")
+    summary = "\n".join(lines)
+    print(summary)
+    return plan_path, summary
+
+
+def _write_triage_plan(plan: dict) -> Path:
+    plan_path = ROOT / ".tmp" / "compile_plan.json"
+    ensure_dir(plan_path.parent)
+    plan_path.write_text(json.dumps(plan, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return plan_path
+
+
 def cmd_compile(agent: str, dry_run: bool = False) -> None:
-    prompt = build_prompt("compile_prompt.md")
+    _plan_path, plan_summary = run_triage()
+    prompt = build_prompt("compile_prompt.md", plan_summary=plan_summary)
     if dry_run:
         print("--- compile prompt (dry-run, agent not invoked) ---")
         print(prompt.read_text(encoding="utf-8"))
