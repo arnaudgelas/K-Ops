@@ -142,6 +142,8 @@ def source_note_frontmatters() -> dict[str, dict]:
 
 
 def raw_dir_ids() -> set[str]:
+    if not RAW_DIR.exists():
+        return set()
     return {path.name for path in RAW_DIR.iterdir() if path.is_dir()}
 
 
