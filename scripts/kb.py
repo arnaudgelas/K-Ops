@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import csv
 import datetime as dt
 import json
@@ -46,127 +45,12 @@ import contradiction_registry as _conr
 import install_agent_assets as _iaa
 import lint_vault as _lint
 import normalize_github_sources as _ngs
+import kb_eval as _ke
+import kb_runtime as _kr
 import research_workflow as _rw
 import vault_scorecard as _vs
 
 OUTPUTS = CONFIG.outputs_dir
-ANSWER_PLACEHOLDER = "__ANSWER_PENDING__"
-ANSWER_QUALITY_VALUES = {"memo-only", "durable"}
-ANSWER_SCOPE_VALUES = {"private", "shared"}
-VAULT_UPDATES_RE = re.compile(r"## Vault Updates\s+(.*?)(?:\n## |\Z)", re.DOTALL)
-
-
-# ---------------------------------------------------------------------------
-# Answer-workflow helpers
-# ---------------------------------------------------------------------------
-
-
-def update_frontmatter_field(text: str, field: str, value: str) -> tuple[str, bool]:
-    if not text.startswith("---\n"):
-        return text, False
-    parts = text.split("\n---\n", 1)
-    if len(parts) != 2:
-        return text, False
-    frontmatter_lines = parts[0][4:].splitlines()
-    new_line = (
-        f"{field}: {json.dumps(value)}"
-        if field in {"title", "asked_at", "answer_quality"}
-        else f"{field}: {value}"
-    )
-    for index, line in enumerate(frontmatter_lines):
-        if line.startswith(f"{field}:"):
-            if line.strip() == new_line:
-                return text, False
-            frontmatter_lines[index] = new_line
-            return "---\n" + "\n".join(frontmatter_lines) + "\n---\n" + parts[1], True
-    insert_at = len(frontmatter_lines)
-    for index, line in enumerate(frontmatter_lines):
-        if line.startswith("type:"):
-            insert_at = index + 1
-            break
-    frontmatter_lines.insert(insert_at, new_line)
-    return "---\n" + "\n".join(frontmatter_lines) + "\n---\n" + parts[1], True
-
-
-def build_answer_scaffold(question: str, asked_at: str) -> str:
-    title = question.strip() or "Q&A Memo"
-    return "\n".join(
-        [
-            "---",
-            f"title: {json.dumps(title)}",
-            f"asked_at: {json.dumps(asked_at)}",
-            "type: answer",
-            "answer_quality: memo-only",
-            "scope: private",
-            "sources_consulted: []",
-            "tags:",
-            "  - kb/answer",
-            "---",
-            "",
-            "# Question",
-            "",
-            question.strip() or "No question supplied.",
-            "",
-            "---",
-            "",
-            "# Answer",
-            "",
-            ANSWER_PLACEHOLDER,
-            "",
-            "## Vault Updates",
-            "",
-            "- None.",
-            "",
-        ]
-    )
-
-
-def update_recent_answers(answer_path: Path) -> None:
-    text = answer_path.read_text(encoding="utf-8")
-    frontmatter, _ = parse_frontmatter(text)
-    title = str(frontmatter.get("title") or answer_path.stem)
-    asked_at = str(frontmatter.get("asked_at") or "")
-    date_label = asked_at.split("T", 1)[0] if asked_at else answer_path.stem[:10]
-    answer_target = answer_path.relative_to(CONFIG.vault_dir).with_suffix("").as_posix()
-    new_bullet = f"- [[{answer_target}|{date_label}: {title}]]"
-
-    home_text = CONFIG.home_note.read_text(encoding="utf-8")
-    section_re = re.compile(r"(## Recent Answers\s*\n)(.*?)(?=\n## |\Z)", re.DOTALL)
-    match = section_re.search(home_text)
-    if not match:
-        suffix = "\n" if not home_text.endswith("\n") else ""
-        CONFIG.home_note.write_text(
-            home_text + suffix + "\n## Recent Answers\n\n" + new_bullet + "\n",
-            encoding="utf-8",
-        )
-        return
-
-    body = match.group(2).strip("\n")
-    lines = [line.rstrip() for line in body.splitlines()]
-    lines = [line for line in lines if answer_target not in line]
-    if lines and lines[0].strip():
-        lines.insert(0, new_bullet)
-    else:
-        lines = [new_bullet] + [line for line in lines if line.strip()]
-    new_section = "## Recent Answers\n\n" + "\n".join(lines).rstrip() + "\n"
-    home_text = home_text[: match.start()] + new_section + home_text[match.end() :]
-    CONFIG.home_note.write_text(home_text, encoding="utf-8")
-
-
-def normalize_answer_quality(answer_path: Path) -> str:
-    text = answer_path.read_text(encoding="utf-8")
-    frontmatter, body = parse_frontmatter(text)
-    vault_updates = VAULT_UPDATES_RE.search(body)
-    updates_text = vault_updates.group(1).strip() if vault_updates else ""
-    has_durable_updates = bool(updates_text and updates_text != "- None." and updates_text != "None.")
-    desired = "durable" if has_durable_updates else "memo-only"
-    updated_text, changed = update_frontmatter_field(text, "answer_quality", desired)
-    desired_scope = "shared" if desired == "durable" else "private"
-    updated_text, scope_changed = update_frontmatter_field(updated_text, "scope", desired_scope)
-    changed = changed or scope_changed
-    if changed:
-        answer_path.write_text(updated_text, encoding="utf-8")
-    return desired
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +292,7 @@ def run_maintenance(agent: str | None = None) -> None:
             affected = propagate_stale_flags(changed)
             if affected:
                 print(f"Flagged {len(affected)} concept(s) for revalidation.")
-        cmd_compile(agent)
+        _kr.cmd_compile(agent)
     run_normalize_github_sources()
     run_backfill_source_notes()
     run_backfill_source_metadata()
@@ -595,73 +479,11 @@ def run_scorecard(output: str | None = None, fmt: str = "text") -> None:
 
 
 def run_eval_setup() -> None:
-    """Create the golden Q&A evaluation scaffold if it does not exist."""
-    import yaml
-    eval_path = ROOT / "tests" / "qa_golden.yaml"
-    if eval_path.exists():
-        print(f"Eval scaffold already exists: {eval_path.relative_to(ROOT)}")
-        return
-    scaffold = {
-        "version": "1.0",
-        "description": (
-            "Golden Q&A evaluation set for K-Ops vault quality assurance. "
-            "Add questions whose answers should be consistently derivable from the vault."
-        ),
-        "questions": [
-            {
-                "id": "q001",
-                "question": "What is the core purpose of K-Ops?",
-                "expected_themes": ["knowledge base", "agent", "Obsidian", "ingest"],
-                "expected_sources": [],
-                "expected_concepts": [],
-                "notes": "Should be answerable from OPERATING_RULES.md or notes/Home.md",
-            }
-        ],
-    }
-    eval_path.write_text(
-        yaml.safe_dump(scaffold, sort_keys=False, allow_unicode=True, default_flow_style=False),
-        encoding="utf-8",
-    )
-    print(f"Eval scaffold created: {eval_path.relative_to(ROOT)}")
-    print("Add questions to tests/qa_golden.yaml, then run 'eval-check' to validate.")
+    _ke.run_eval_setup()
 
 
 def run_eval_check() -> None:
-    """Validate the golden Q&A file structure and print a summary."""
-    import yaml
-    eval_path = ROOT / "tests" / "qa_golden.yaml"
-    if not eval_path.exists():
-        print("No eval file found. Run 'eval-setup' to create it.")
-        raise SystemExit(1)
-    try:
-        data = yaml.safe_load(eval_path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        print(f"YAML parse error in {eval_path.relative_to(ROOT)}: {exc}")
-        raise SystemExit(1)
-    if not isinstance(data, dict) or "questions" not in data:
-        print("Invalid eval file: missing 'questions' key.")
-        raise SystemExit(1)
-    questions = data["questions"]
-    if not isinstance(questions, list):
-        print("Invalid eval file: 'questions' must be a list.")
-        raise SystemExit(1)
-    errors: list[str] = []
-    for idx, q in enumerate(questions, start=1):
-        if not isinstance(q, dict):
-            errors.append(f"  q{idx}: not a mapping")
-            continue
-        for field in ("id", "question"):
-            if not q.get(field):
-                errors.append(f"  {q.get('id', f'q{idx}')}: missing required field '{field}'")
-    if errors:
-        print(f"Eval check FAILED ({len(errors)} error(s)):")
-        for err in errors:
-            print(err)
-        raise SystemExit(1)
-    print(
-        f"Eval check OK: {len(questions)} question(s) in "
-        f"{eval_path.relative_to(ROOT)} (version {data.get('version', '?')})"
-    )
+    _ke.run_eval_check()
 
 
 def run_claim_search(query: str, limit: int = 20, fmt: str = "text") -> None:
@@ -774,7 +596,7 @@ def cmd_ask(agent: str, question: str) -> None:
     asked_at = dt.datetime.now().replace(microsecond=0).isoformat()
     answer_path = CONFIG.answers_dir / f"{now_stamp()}_{slugify(question)}.md"
     if not answer_path.exists():
-        write_text(answer_path, build_answer_scaffold(question, asked_at))
+        write_text(answer_path, _kr.build_answer_scaffold(question, asked_at))
     prompt = build_prompt(
         "ask_prompt.md",
         question=question,
@@ -784,10 +606,10 @@ def cmd_ask(agent: str, question: str) -> None:
     if not answer_path.exists():
         raise FileNotFoundError(f"Answer memo was not written: {answer_path}")
     answer_text = answer_path.read_text(encoding="utf-8")
-    if ANSWER_PLACEHOLDER in answer_text:
+    if _kr.ANSWER_PLACEHOLDER in answer_text:
         raise RuntimeError(f"Answer memo still contains scaffold placeholders: {answer_path}")
-    answer_quality = normalize_answer_quality(answer_path)
-    update_recent_answers(answer_path)
+    answer_quality = _kr.normalize_answer_quality(answer_path)
+    _kr.update_recent_answers(answer_path)
     print(f"Answer written to {answer_path.relative_to(ROOT)}")
     print(f"Answer quality: {answer_quality}")
     print(f"Home updated with {answer_path.relative_to(CONFIG.vault_dir).with_suffix('').as_posix()}")
@@ -805,293 +627,9 @@ def cmd_render(agent: str, fmt: str, prompt_text: str) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Living research vault workflow")
-    sub = parser.add_subparsers(dest="command", required=True)
+    from kb_commands import main as _main
 
-    p_ingest = sub.add_parser("ingest")
-    p_ingest.add_argument("--input", required=True)
-    p_ingest.add_argument("--branch", help="Optional branch override for GitHub repository URLs in the input list.")
-    p_ingest.add_argument("--fail-fast", action="store_true")
-
-    p_ingest_github = sub.add_parser("ingest-github")
-    p_ingest_github.add_argument("--repo", required=True)
-    p_ingest_github.add_argument("--branch")
-    p_ingest_github.add_argument("--compile-agent", choices=["codex", "claude", "gemini"])
-
-    p_compile = sub.add_parser("compile")
-    p_compile.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_compile.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the prompt that would be sent without invoking the agent.",
-    )
-
-    p_refresh = sub.add_parser("refresh")
-    p_refresh.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_refresh.add_argument("--branch", help="Optional branch override for GitHub repository URLs during refresh.")
-    p_refresh.add_argument("--fail-fast", action="store_true")
-    p_refresh.add_argument(
-        "--force-compile",
-        action="store_true",
-        help="Run compile even if no source content changed.",
-    )
-
-    p_heal = sub.add_parser("heal")
-    p_heal.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_heal.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the prompt that would be sent without invoking the agent.",
-    )
-
-    p_ask = sub.add_parser("ask")
-    p_ask.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_ask.add_argument("--question", required=True)
-
-    p_render = sub.add_parser("render")
-    p_render.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_render.add_argument("--format", required=True, choices=["memo", "slides", "outline", "report"])
-    p_render.add_argument("--prompt", required=True)
-
-    p_install_assets = sub.add_parser("install-agent-assets")
-    p_install_assets.add_argument("--agent", choices=["all", "claude", "gemini", "codex"], default="all")
-    p_install_assets.add_argument("--scope", choices=["project", "home", "both"], default="both")
-    p_install_assets.add_argument("--dry-run", action="store_true")
-    p_install_assets.add_argument("--force", action="store_true")
-
-    p_research_start = sub.add_parser("research-start")
-    p_research_start.add_argument("--topic", required=True)
-    p_research_start.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
-
-    p_research_status = sub.add_parser("research-status")
-    p_research_status.add_argument("topic", nargs="?", default=None)
-    p_research_status.add_argument("--topic", dest="topic_opt")
-
-    p_research_collect = sub.add_parser("research-collect")
-    p_research_collect.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_research_collect.add_argument("--topic", required=True)
-    p_research_collect.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
-
-    p_research_review = sub.add_parser("research-review")
-    p_research_review.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_research_review.add_argument("--topic", required=True)
-    p_research_review.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
-
-    p_research_report = sub.add_parser("research-report")
-    p_research_report.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_research_report.add_argument("--topic", required=True)
-    p_research_report.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
-    p_research_report.add_argument("--allow-missing-review", action="store_true")
-
-    p_research_import = sub.add_parser("research-import")
-    p_research_import.add_argument("--topic", required=True)
-    p_research_import.add_argument("--path", required=True)
-    p_research_import.add_argument(
-        "--provider",
-        choices=["gemini", "openai", "claude", "perplexity", "other"],
-        default="other",
-    )
-    p_research_import.add_argument("--origin")
-    p_research_import.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
-
-    p_research_archive = sub.add_parser("research-archive")
-    p_research_archive.add_argument("--topic", required=True)
-
-    p_export = sub.add_parser("export-vault")
-    p_export.add_argument("--output")
-
-    p_export_index = sub.add_parser("export-index")
-    p_export_index.add_argument("--output")
-    p_export_index.add_argument("--format", choices=["json", "csv"], default="json")
-
-    p_build_graph = sub.add_parser("build-graph")
-    p_build_graph.add_argument("--output")
-    p_build_graph.add_argument("--report-output")
-    p_build_graph.add_argument("--csv-output")
-
-    p_search = sub.add_parser("search")
-    p_search.add_argument("--query", required=True)
-    p_search.add_argument("--limit", type=int, default=10)
-    p_search.add_argument("--scope", choices=["all", "shared"], default="all")
-    p_search.add_argument("--format", choices=["json", "text"], default="json")
-
-    p_traverse = sub.add_parser("graph-traverse")
-    p_traverse.add_argument("--start", required=True)
-    p_traverse.add_argument("--depth", type=int, default=2)
-    p_traverse.add_argument("--relation", action="append")
-    p_traverse.add_argument("--scope", choices=["all", "shared"], default="all")
-    p_traverse.add_argument("--format", choices=["json", "text"], default="json")
-
-    p_retention = sub.add_parser("retention-report")
-    p_retention.add_argument("--output")
-    p_retention.add_argument("--limit", type=int, default=50)
-
-    p_normalize_github = sub.add_parser("normalize-github-sources")
-    p_normalize_github.add_argument("--dry-run", action="store_true")
-
-    sub.add_parser("validate", help="Print the loaded config and verify all required paths.")
-
-    p_bootstrap = sub.add_parser("bootstrap")
-    p_bootstrap.add_argument("--target", required=True, help="Directory for the new blank starter vault.")
-    p_bootstrap.add_argument("--project-name", help="Optional project name to write into the generated config.")
-    p_bootstrap.add_argument("--with-examples", action="store_true", help="Add a tiny examples folder with starter input files.")
-    p_bootstrap.add_argument("--force", action="store_true", help="Overwrite the starter scaffold even if the target already exists.")
-
-    p_backfill_metadata = sub.add_parser("backfill-source-metadata")
-    p_backfill_metadata.add_argument("--dry-run", action="store_true")
-
-    p_backfill_concept_quality = sub.add_parser("backfill-concept-quality")
-    p_backfill_concept_quality.add_argument("--dry-run", action="store_true")
-
-    p_backfill_answer_quality = sub.add_parser("backfill-answer-quality")
-    p_backfill_answer_quality.add_argument("--dry-run", action="store_true")
-
-    p_backfill_notes = sub.add_parser("backfill-source-notes")
-    p_backfill_notes.add_argument("--dry-run", action="store_true")
-
-    p_maintain = sub.add_parser("maintenance")
-    p_maintain.add_argument(
-        "--agent",
-        choices=["codex", "claude", "gemini"],
-        help="Optional agent to refresh and compile before the mechanical maintenance pass.",
-    )
-
-    sub.add_parser("extract-claims", help="Extract atomic claims from concept pages and write data/claims.json.")
-
-    p_claim_search = sub.add_parser("claim-search", help="Search the claims registry by keyword.")
-    p_claim_search.add_argument("--query", required=True)
-    p_claim_search.add_argument("--limit", type=int, default=20)
-    p_claim_search.add_argument("--format", choices=["text", "json"], default="text")
-
-    p_stale_impact = sub.add_parser("stale-impact", help="Report concept pages flagged for revalidation after source changes.")
-    p_stale_impact.add_argument("--format", choices=["text", "json"], default="text")
-
-    p_clear_stale = sub.add_parser("clear-stale-flags", help="Remove revalidation_required flags from all concept pages and answers.")
-    p_clear_stale.add_argument("--dry-run", action="store_true")
-
-    p_scorecard = sub.add_parser("scorecard", help="Compute vault health scorecard and write data/scorecard.json.")
-    p_scorecard.add_argument("--output", help="Override output path.")
-    p_scorecard.add_argument("--format", choices=["text", "json"], default="text")
-
-    sub.add_parser("eval-setup", help="Create the golden Q&A evaluation scaffold at tests/qa_golden.yaml.")
-
-    sub.add_parser("eval-check", help="Validate the golden Q&A file at tests/qa_golden.yaml.")
-
-    sub.add_parser("extract-contradictions", help="Extract contradiction records from conflicting concepts and write data/contradictions.json.")
-
-    p_contradiction_search = sub.add_parser("contradiction-search", help="Search the contradiction registry by keyword.")
-    p_contradiction_search.add_argument("--query", required=True)
-    p_contradiction_search.add_argument("--limit", type=int, default=20)
-    p_contradiction_search.add_argument("--format", choices=["text", "json"], default="text")
-
-    p_lint = sub.add_parser("lint")
-    p_lint.add_argument("--strict", action="store_true")
-    p_lint.add_argument("--fix-backlinks", action="store_true")
-
-    sub.add_parser("render-manifest", help="Print a JSON manifest of the registry and vault files.")
-
-    args = parser.parse_args()
-
-    if args.command == "ingest":
-        run_fetch(args.input, branch=args.branch, fail_fast=args.fail_fast)
-    elif args.command == "ingest-github":
-        run_ingest_github(args.repo, args.branch)
-        if args.compile_agent:
-            cmd_compile(args.compile_agent)
-    elif args.command == "compile":
-        cmd_compile(args.agent, dry_run=args.dry_run)
-    elif args.command == "refresh":
-        _refresh_list, changed = run_refresh_sources(branch=args.branch, fail_fast=args.fail_fast)
-        if changed or args.force_compile:
-            if changed:
-                print(f"{len(changed)} source(s) changed content — running compile.")
-                affected = propagate_stale_flags(changed)
-                if affected:
-                    print(f"Flagged {len(affected)} concept(s) for revalidation (run 'stale-impact' to review):")
-                    for p in affected:
-                        print(f"  - {p.relative_to(ROOT)}")
-            else:
-                print("--force-compile set — running compile despite no content changes.")
-            cmd_compile(args.agent)
-        else:
-            print("All sources unchanged — skipping compile.")
-    elif args.command == "heal":
-        cmd_heal(args.agent, dry_run=args.dry_run)
-    elif args.command == "ask":
-        cmd_ask(args.agent, args.question)
-    elif args.command == "render":
-        cmd_render(args.agent, args.format, args.prompt)
-    elif args.command == "install-agent-assets":
-        run_install_agent_assets(agent=args.agent, scope=args.scope, dry_run=args.dry_run, force=args.force)
-    elif args.command == "research-start":
-        _rw.cmd_research_start(args.topic, tier=args.tier)
-    elif args.command == "research-status":
-        _rw.cmd_research_status(args.topic_opt or args.topic or "all")
-    elif args.command == "research-collect":
-        _rw.cmd_research_collect(args.agent, args.topic, tier=args.tier)
-    elif args.command == "research-review":
-        _rw.cmd_research_review(args.agent, args.topic, tier=args.tier)
-    elif args.command == "research-report":
-        _rw.cmd_research_report(args.agent, args.topic, tier=args.tier, require_review=not args.allow_missing_review)
-    elif args.command == "research-import":
-        _rw.cmd_research_import(args.topic, args.path, args.provider, canonical_origin=args.origin, tier=args.tier)
-    elif args.command == "research-archive":
-        _rw.cmd_research_archive(args.topic)
-    elif args.command == "export-vault":
-        run_export_vault(args.output)
-    elif args.command == "export-index":
-        run_export_index(output=args.output, fmt=args.format)
-    elif args.command == "build-graph":
-        run_build_graph(output=args.output, report_output=args.report_output, csv_output=args.csv_output)
-    elif args.command == "search":
-        run_search_graph(args.query, limit=args.limit, scope=args.scope, fmt=args.format)
-    elif args.command == "graph-traverse":
-        run_traverse_graph(args.start, depth=args.depth, relations=args.relation, scope=args.scope, fmt=args.format)
-    elif args.command == "retention-report":
-        run_retention_report(output=args.output, limit=args.limit)
-    elif args.command == "normalize-github-sources":
-        run_normalize_github_sources(dry_run=args.dry_run)
-    elif args.command == "bootstrap":
-        run_bootstrap(
-            target=args.target,
-            project_name=args.project_name,
-            with_examples=args.with_examples,
-            force=args.force,
-        )
-    elif args.command == "backfill-source-notes":
-        run_backfill_source_notes(dry_run=args.dry_run)
-    elif args.command == "backfill-source-metadata":
-        run_backfill_source_metadata(dry_run=args.dry_run)
-    elif args.command == "backfill-concept-quality":
-        run_backfill_concept_quality(dry_run=args.dry_run)
-    elif args.command == "backfill-answer-quality":
-        run_backfill_answer_quality(dry_run=args.dry_run)
-    elif args.command == "maintenance":
-        run_maintenance(agent=args.agent)
-    elif args.command == "extract-claims":
-        run_extract_claims()
-    elif args.command == "claim-search":
-        run_claim_search(args.query, limit=args.limit, fmt=args.format)
-    elif args.command == "stale-impact":
-        run_stale_impact(fmt=args.format)
-    elif args.command == "clear-stale-flags":
-        run_clear_stale_flags(dry_run=args.dry_run)
-    elif args.command == "scorecard":
-        run_scorecard(output=args.output, fmt=args.format)
-    elif args.command == "eval-setup":
-        run_eval_setup()
-    elif args.command == "eval-check":
-        run_eval_check()
-    elif args.command == "extract-contradictions":
-        run_extract_contradictions()
-    elif args.command == "contradiction-search":
-        run_contradiction_search(args.query, limit=args.limit, fmt=args.format)
-    elif args.command == "lint":
-        run_lint(strict=args.strict, fix_backlinks=args.fix_backlinks)
-    elif args.command == "render-manifest":
-        _rm.main()
-    elif args.command == "validate":
-        run_validate_config()
+    _main()
 
 
 if __name__ == "__main__":
