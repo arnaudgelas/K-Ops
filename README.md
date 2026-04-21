@@ -108,6 +108,11 @@ uv run python scripts/kb.py install-agent-assets --agent all --scope project
 | Templates | `notes/_Templates/` | Consistent note structure |
 | Runbooks | `notes/Runbooks/` | Step-by-step workflow guides |
 
+## Operational Aids
+
+- `notes/Runbooks/Obsidian_Plugin_Setup.md`: recommended Obsidian plugins for querying and maintaining frontmatter-driven vaults
+- `skills/research-workflow/SKILL.md`: resumable research-run workflow for source collection, review, reporting, and archiving
+
 ---
 
 ## Multi-Agent by Design
@@ -138,5 +143,6 @@ K-Ops is not locked to a single AI provider. Swap agents mid-workflow without ch
 Open `notes/Home.md` — that is the vault entry point.  
 Check `notes/TODO.md` for pending follow-up work.  
 Reach for `notes/Runbooks/Agent_Workflow_Quick_Reference.md` when you need the compact workflow map.
+Use `notes/Runbooks/Obsidian_Plugin_Setup.md` when you want to turn the vault's metadata into Obsidian dashboards.
 
 The first pass does not need to be perfect. **It just needs to be real.**

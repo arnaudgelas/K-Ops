@@ -67,4 +67,4 @@ Enables committing vault changes directly from Obsidian. Useful if you edit note
 ## Notes
 
 - Community plugins require enabling "Community plugins" in Settings → Community plugins (toggle off Restricted Mode).
-- Dataview queries work best with consistent frontmatter — run `lint` and `backfill-concept-quality` to normalize the vault before building dashboards.
+- Dataview queries work best with consistent frontmatter - run `lint` and `backfill-concept-quality` to normalize the vault before building dashboards.
