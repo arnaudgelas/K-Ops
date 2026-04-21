@@ -227,7 +227,15 @@ def build_runtime_prompt(name: str, text: str) -> Path:
     return prompt_path
 
 
-def agent_run(agent: str, prompt_path: Path) -> None:
+def agent_run(agent: str, prompt_path: Path, *, command: str = "unknown") -> None:
+    """Invoke the agent CLI with the rendered prompt and emit a run trace.
+
+    The ``command`` keyword arg names the K-Ops workflow step (e.g. ``"compile"``,
+    ``"ask"``, ``"research-collect"``).  It is used only for the trace filename
+    and has no effect on agent behavior.
+    """
+    import trace_log as _tl
+
     base_cmd = detect_agent_command(agent)
     prompt_text = prompt_path.read_text(encoding="utf-8")
     if agent == "codex":
@@ -239,4 +247,5 @@ def agent_run(agent: str, prompt_path: Path) -> None:
     else:
         raise ValueError(agent)
     print(f"\nRunning: {shell_join(cmd)}\n")
-    subprocess.run(cmd, check=True, cwd=ROOT)
+    with _tl.TraceContext(command, agent, prompt_path):
+        subprocess.run(cmd, check=True, cwd=ROOT)

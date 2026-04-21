@@ -38,7 +38,22 @@ ANSWER_HEADING_RE = re.compile(r"^#\s+", re.MULTILINE)
 ANSWER_SUBHEADING_RE = re.compile(r"^##\s+", re.MULTILINE)
 ANSWER_VAULT_UPDATES_RE = re.compile(r"## Vault Updates\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 ANSWER_PLACEHOLDER = "__ANSWER_PENDING__"
-VALID_EVIDENCE_STRENGTHS = {"primary-doc", "secondary", "stub", "image-only", "strong"}
+VALID_EVIDENCE_STRENGTHS = {
+    # Original values
+    "primary-doc",          # canonical primary source documentation
+    "strong",               # high-confidence non-primary evidence
+    "secondary",            # secondary analysis, commentary, or survey
+    "stub",                 # minimal or placeholder capture
+    "image-only",           # screenshot or image, no extractable text
+    # Extended taxonomy
+    "official-spec",        # official specification or standard
+    "code",                 # source code or implementation artifact
+    "maintainer-commentary",  # from the repo maintainer or original author
+    "changelog",            # release notes or changelog
+    "pr-issue",             # pull request or issue thread
+    "model-generated",      # AI/model-generated content (treat as secondary)
+    "citation-only",        # citation stub not yet fetched
+}
 VALID_CLAIM_QUALITIES = {"supported", "provisional", "weak", "conflicting", "stale"}
 VALID_ANSWER_QUALITIES = {"memo-only", "durable"}
 VALID_ANSWER_SCOPES = {"private", "shared"}
@@ -541,6 +556,27 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                             f"{page_path.relative_to(ROOT)} relies only on imported model-generated reports in its Evidence section",
                         )
                     )
+
+            # Conflicting quality must document the conflict in an Open Questions section.
+            if claim_quality == "conflicting" and "## Open Questions" not in text:
+                findings.append(
+                    Finding(
+                        "warning",
+                        "conflicting-claim-no-open-questions",
+                        f"{page_path.relative_to(ROOT)} has claim_quality: conflicting but no ## Open Questions section documenting the conflict",
+                    )
+                )
+
+            # Revalidation flag — set by `refresh` when an upstream source changed content.
+            if frontmatter.get("revalidation_required"):
+                findings.append(
+                    Finding(
+                        "warning",
+                        "revalidation-required",
+                        f"{page_path.relative_to(ROOT)} is flagged for revalidation (upstream source changed); review and run 'clear-stale-flags' when done",
+                    )
+                )
+
         for match in SOURCE_REF_RE.finditer(text):
             source_id = match.group(1)
             if source_id not in note_ids:

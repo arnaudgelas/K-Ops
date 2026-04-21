@@ -13,3 +13,19 @@ outputs_dir: outputs
 allow_web_fetch_during_qa: false
 file_answer_back_into_vault: true
 use_obsidian_wikilinks: true
+
+# Reliability priors for each evidence_strength value (1.0 = authoritative).
+# Used to communicate trust levels; not yet wired into graph scoring.
+evidence_reliability:
+  primary-doc: 1.0          # canonical primary source documentation
+  official-spec: 1.0        # official specification or standard
+  strong: 0.9               # high-confidence, non-primary evidence
+  code: 0.85                # source code or implementation artifact
+  maintainer-commentary: 0.80  # from repo maintainer or original author
+  changelog: 0.75           # release notes or changelog
+  pr-issue: 0.70            # pull request or issue thread
+  secondary: 0.60           # secondary analysis, commentary, or survey
+  model-generated: 0.40     # AI/model-generated content (treat as secondary)
+  stub: 0.20                # minimal or placeholder capture
+  citation-only: 0.15       # citation stub not yet fetched
+  image-only: 0.10          # screenshot or image with no extractable text

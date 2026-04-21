@@ -41,10 +41,12 @@ import backfill_answer_quality as _baq
 import backfill_concept_quality as _bcq
 import backfill_source_metadata as _bsm
 import backfill_source_notes as _bsn
+import claim_registry as _cr
 import install_agent_assets as _iaa
 import lint_vault as _lint
 import normalize_github_sources as _ngs
 import research_workflow as _rw
+import vault_scorecard as _vs
 
 OUTPUTS = CONFIG.outputs_dir
 ANSWER_PLACEHOLDER = "__ANSWER_PENDING__"
@@ -95,6 +97,7 @@ def build_answer_scaffold(question: str, asked_at: str) -> str:
             "type: answer",
             "answer_quality: memo-only",
             "scope: private",
+            "sources_consulted: []",
             "tags:",
             "  - kb/answer",
             "---",
@@ -399,22 +402,242 @@ def run_validate_config() -> None:
 
 def run_maintenance(agent: str | None = None) -> None:
     if agent:
-        _refresh_list, _changed = run_refresh_sources()
+        _refresh_list, changed = run_refresh_sources()
+        if changed:
+            affected = propagate_stale_flags(changed)
+            if affected:
+                print(f"Flagged {len(affected)} concept(s) for revalidation.")
         cmd_compile(agent)
     run_normalize_github_sources()
     run_backfill_source_notes()
     run_backfill_source_metadata()
     run_backfill_concept_quality()
     run_backfill_answer_quality()
+    run_extract_claims()
     run_build_graph()
     run_lint(fix_backlinks=True)
     run_retention_report(limit=10)
+    run_scorecard()
 
 
 def run_lint(strict: bool = False, fix_backlinks: bool = False) -> None:
     exit_code = _lint.run(strict=strict, fix_backlinks=fix_backlinks)
     if exit_code != 0:
         raise SystemExit(exit_code)
+
+
+def propagate_stale_flags(changed_source_ids: list[str]) -> list[Path]:
+    """Set ``revalidation_required: true`` on notes that cite changed sources.
+
+    Scans concept pages (via Evidence section wikilinks) and answer memos
+    (via ``sources_consulted`` frontmatter).  Any page that references at least
+    one of the changed source IDs gets flagged unless already flagged.
+
+    Returns the list of newly-flagged paths (concepts + answers combined).
+    """
+    if not changed_source_ids:
+        return []
+    changed_set = set(changed_source_ids)
+    affected: list[Path] = []
+
+    # --- Concept pages ---
+    for page_path in sorted(CONFIG.concepts_dir.glob("*.md")):
+        text = page_path.read_text(encoding="utf-8")
+        cited = _lint.extract_evidence_source_ids(text)
+        if not cited.intersection(changed_set):
+            continue
+        frontmatter, body = parse_frontmatter(text)
+        if frontmatter.get("revalidation_required"):
+            continue
+        frontmatter["revalidation_required"] = True
+        page_path.write_text(dump_frontmatter(frontmatter) + body, encoding="utf-8")
+        affected.append(page_path)
+
+    # --- Answer memos ---
+    for page_path in sorted(CONFIG.answers_dir.glob("*.md")):
+        text = page_path.read_text(encoding="utf-8")
+        frontmatter, body = parse_frontmatter(text)
+        if frontmatter.get("type") != "answer":
+            continue
+        sc = frontmatter.get("sources_consulted")
+        consulted = set(sc) if isinstance(sc, list) else set()
+        if not consulted.intersection(changed_set):
+            continue
+        if frontmatter.get("revalidation_required"):
+            continue
+        frontmatter["revalidation_required"] = True
+        page_path.write_text(dump_frontmatter(frontmatter) + body, encoding="utf-8")
+        affected.append(page_path)
+
+    return affected
+
+
+def run_extract_claims() -> None:
+    _cr.run()
+
+
+def run_scorecard(output: str | None = None, fmt: str = "text") -> None:
+    from vault_scorecard import run as _sc_run, print_summary as _sc_print, SCORECARD_PATH
+    out_path = Path(output).resolve() if output else None
+    scorecard = _sc_run(output=out_path)
+    saved_path = out_path or SCORECARD_PATH
+    if fmt == "json":
+        print(json.dumps(scorecard, indent=2, ensure_ascii=False))
+    else:
+        _sc_print(scorecard)
+        print(f"Scorecard saved: {saved_path.relative_to(ROOT) if saved_path.is_relative_to(ROOT) else saved_path}")
+
+
+def run_eval_setup() -> None:
+    """Create the golden Q&A evaluation scaffold if it does not exist."""
+    import yaml
+    eval_path = ROOT / "tests" / "qa_golden.yaml"
+    if eval_path.exists():
+        print(f"Eval scaffold already exists: {eval_path.relative_to(ROOT)}")
+        return
+    scaffold = {
+        "version": "1.0",
+        "description": (
+            "Golden Q&A evaluation set for K-Ops vault quality assurance. "
+            "Add questions whose answers should be consistently derivable from the vault."
+        ),
+        "questions": [
+            {
+                "id": "q001",
+                "question": "What is the core purpose of K-Ops?",
+                "expected_themes": ["knowledge base", "agent", "Obsidian", "ingest"],
+                "expected_sources": [],
+                "expected_concepts": [],
+                "notes": "Should be answerable from OPERATING_RULES.md or notes/Home.md",
+            }
+        ],
+    }
+    eval_path.write_text(
+        yaml.safe_dump(scaffold, sort_keys=False, allow_unicode=True, default_flow_style=False),
+        encoding="utf-8",
+    )
+    print(f"Eval scaffold created: {eval_path.relative_to(ROOT)}")
+    print("Add questions to tests/qa_golden.yaml, then run 'eval-check' to validate.")
+
+
+def run_eval_check() -> None:
+    """Validate the golden Q&A file structure and print a summary."""
+    import yaml
+    eval_path = ROOT / "tests" / "qa_golden.yaml"
+    if not eval_path.exists():
+        print("No eval file found. Run 'eval-setup' to create it.")
+        raise SystemExit(1)
+    try:
+        data = yaml.safe_load(eval_path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        print(f"YAML parse error in {eval_path.relative_to(ROOT)}: {exc}")
+        raise SystemExit(1)
+    if not isinstance(data, dict) or "questions" not in data:
+        print("Invalid eval file: missing 'questions' key.")
+        raise SystemExit(1)
+    questions = data["questions"]
+    if not isinstance(questions, list):
+        print("Invalid eval file: 'questions' must be a list.")
+        raise SystemExit(1)
+    errors: list[str] = []
+    for idx, q in enumerate(questions, start=1):
+        if not isinstance(q, dict):
+            errors.append(f"  q{idx}: not a mapping")
+            continue
+        for field in ("id", "question"):
+            if not q.get(field):
+                errors.append(f"  {q.get('id', f'q{idx}')}: missing required field '{field}'")
+    if errors:
+        print(f"Eval check FAILED ({len(errors)} error(s)):")
+        for err in errors:
+            print(err)
+        raise SystemExit(1)
+    print(
+        f"Eval check OK: {len(questions)} question(s) in "
+        f"{eval_path.relative_to(ROOT)} (version {data.get('version', '?')})"
+    )
+
+
+def run_claim_search(query: str, limit: int = 20, fmt: str = "text") -> None:
+    claims = _cr.load_claims()
+    results = _cr.search_claims(claims, query, limit=limit)
+    if fmt == "json":
+        print(json.dumps({"query": query, "count": len(results), "results": results}, indent=2, ensure_ascii=False))
+        return
+    if not results:
+        print("No matching claims.")
+        return
+    for item in results:
+        print(f"[{item['claim_quality'] or '?'}] {item['concept']} — {item['text']}")
+        if item["source_ids"]:
+            print(f"  sources: {', '.join(item['source_ids'])}")
+
+
+def run_stale_impact(fmt: str = "text") -> None:
+    """Report concepts and answers flagged for revalidation after upstream source changes."""
+    flagged: list[dict] = []
+
+    for page_path in sorted(CONFIG.concepts_dir.glob("*.md")):
+        text = page_path.read_text(encoding="utf-8")
+        frontmatter, _ = parse_frontmatter(text)
+        if not frontmatter.get("revalidation_required"):
+            continue
+        cited = sorted(_lint.extract_evidence_source_ids(text))
+        flagged.append(
+            {
+                "kind": "concept",
+                "path": page_path.relative_to(ROOT).as_posix(),
+                "title": str(frontmatter.get("title") or page_path.stem),
+                "quality": str(frontmatter.get("claim_quality") or ""),
+                "cited_sources": cited,
+            }
+        )
+
+    for page_path in sorted(CONFIG.answers_dir.glob("*.md")):
+        text = page_path.read_text(encoding="utf-8")
+        frontmatter, _ = parse_frontmatter(text)
+        if frontmatter.get("type") != "answer" or not frontmatter.get("revalidation_required"):
+            continue
+        sc = frontmatter.get("sources_consulted")
+        consulted = sorted(sc) if isinstance(sc, list) else []
+        flagged.append(
+            {
+                "kind": "answer",
+                "path": page_path.relative_to(ROOT).as_posix(),
+                "title": str(frontmatter.get("title") or page_path.stem),
+                "quality": str(frontmatter.get("answer_quality") or ""),
+                "cited_sources": consulted,
+            }
+        )
+
+    if fmt == "json":
+        print(json.dumps({"count": len(flagged), "flagged": flagged}, indent=2, ensure_ascii=False))
+        return
+    if not flagged:
+        print("No notes flagged for revalidation.")
+        return
+    print(f"{len(flagged)} note(s) flagged for revalidation:")
+    for item in flagged:
+        sources_label = ", ".join(item["cited_sources"]) or "none"
+        print(f"  - [{item['kind']}] {item['path']} (quality: {item['quality']}, sources: {sources_label})")
+
+
+def run_clear_stale_flags(dry_run: bool = False) -> None:
+    """Remove ``revalidation_required`` from all concept pages and answer memos."""
+    cleared: list[str] = []
+    scan_paths = list(sorted(CONFIG.concepts_dir.glob("*.md"))) + list(sorted(CONFIG.answers_dir.glob("*.md")))
+    for page_path in scan_paths:
+        text = page_path.read_text(encoding="utf-8")
+        frontmatter, body = parse_frontmatter(text)
+        if not frontmatter.pop("revalidation_required", None):
+            continue
+        if not dry_run:
+            page_path.write_text(dump_frontmatter(frontmatter) + body, encoding="utf-8")
+        cleared.append(page_path.relative_to(ROOT).as_posix())
+    label = "Would clear" if dry_run else "Cleared"
+    print(f"{label} revalidation flags from {len(cleared)} note(s)")
+    for path in cleared:
+        print(f"  - {path}")
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +651,7 @@ def cmd_compile(agent: str, dry_run: bool = False) -> None:
         print("--- compile prompt (dry-run, agent not invoked) ---")
         print(prompt.read_text(encoding="utf-8"))
         return
-    agent_run(agent, prompt)
+    agent_run(agent, prompt, command="compile")
 
 
 def cmd_heal(agent: str, dry_run: bool = False) -> None:
@@ -437,7 +660,7 @@ def cmd_heal(agent: str, dry_run: bool = False) -> None:
         print("--- heal prompt (dry-run, agent not invoked) ---")
         print(prompt.read_text(encoding="utf-8"))
         return
-    agent_run(agent, prompt)
+    agent_run(agent, prompt, command="heal")
 
 
 def cmd_ask(agent: str, question: str) -> None:
@@ -450,7 +673,7 @@ def cmd_ask(agent: str, question: str) -> None:
         question=question,
         answer_path=str(answer_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt)
+    agent_run(agent, prompt, command="ask")
     if not answer_path.exists():
         raise FileNotFoundError(f"Answer memo was not written: {answer_path}")
     answer_text = answer_path.read_text(encoding="utf-8")
@@ -466,7 +689,7 @@ def cmd_ask(agent: str, question: str) -> None:
 def cmd_render(agent: str, fmt: str, prompt_text: str) -> None:
     ensure_dir(OUTPUTS)
     prompt = build_prompt("render_prompt.md", format=fmt, prompt=prompt_text)
-    agent_run(agent, prompt)
+    agent_run(agent, prompt, command=f"render-{fmt}")
 
 
 # ---------------------------------------------------------------------------
@@ -626,6 +849,27 @@ def main() -> None:
         help="Optional agent to refresh and compile before the mechanical maintenance pass.",
     )
 
+    sub.add_parser("extract-claims", help="Extract atomic claims from concept pages and write data/claims.json.")
+
+    p_claim_search = sub.add_parser("claim-search", help="Search the claims registry by keyword.")
+    p_claim_search.add_argument("--query", required=True)
+    p_claim_search.add_argument("--limit", type=int, default=20)
+    p_claim_search.add_argument("--format", choices=["text", "json"], default="text")
+
+    p_stale_impact = sub.add_parser("stale-impact", help="Report concept pages flagged for revalidation after source changes.")
+    p_stale_impact.add_argument("--format", choices=["text", "json"], default="text")
+
+    p_clear_stale = sub.add_parser("clear-stale-flags", help="Remove revalidation_required flags from all concept pages and answers.")
+    p_clear_stale.add_argument("--dry-run", action="store_true")
+
+    p_scorecard = sub.add_parser("scorecard", help="Compute vault health scorecard and write data/scorecard.json.")
+    p_scorecard.add_argument("--output", help="Override output path.")
+    p_scorecard.add_argument("--format", choices=["text", "json"], default="text")
+
+    sub.add_parser("eval-setup", help="Create the golden Q&A evaluation scaffold at tests/qa_golden.yaml.")
+
+    sub.add_parser("eval-check", help="Validate the golden Q&A file at tests/qa_golden.yaml.")
+
     p_lint = sub.add_parser("lint")
     p_lint.add_argument("--strict", action="store_true")
     p_lint.add_argument("--fix-backlinks", action="store_true")
@@ -647,6 +891,11 @@ def main() -> None:
         if changed or args.force_compile:
             if changed:
                 print(f"{len(changed)} source(s) changed content — running compile.")
+                affected = propagate_stale_flags(changed)
+                if affected:
+                    print(f"Flagged {len(affected)} concept(s) for revalidation (run 'stale-impact' to review):")
+                    for p in affected:
+                        print(f"  - {p.relative_to(ROOT)}")
             else:
                 print("--force-compile set — running compile despite no content changes.")
             cmd_compile(args.agent)
@@ -705,6 +954,20 @@ def main() -> None:
         run_backfill_answer_quality(dry_run=args.dry_run)
     elif args.command == "maintenance":
         run_maintenance(agent=args.agent)
+    elif args.command == "extract-claims":
+        run_extract_claims()
+    elif args.command == "claim-search":
+        run_claim_search(args.query, limit=args.limit, fmt=args.format)
+    elif args.command == "stale-impact":
+        run_stale_impact(fmt=args.format)
+    elif args.command == "clear-stale-flags":
+        run_clear_stale_flags(dry_run=args.dry_run)
+    elif args.command == "scorecard":
+        run_scorecard(output=args.output, fmt=args.format)
+    elif args.command == "eval-setup":
+        run_eval_setup()
+    elif args.command == "eval-check":
+        run_eval_check()
     elif args.command == "lint":
         run_lint(strict=args.strict, fix_backlinks=args.fix_backlinks)
     elif args.command == "render-manifest":
