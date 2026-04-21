@@ -15,6 +15,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+import research_artifacts as _ra
 from utils import (
     CONFIG,
     ROOT,
@@ -129,264 +130,6 @@ def parse_research_file(path: Path) -> tuple[dict, str]:
 
 def write_markdown(path: Path, data: dict, body: str) -> None:
     write_text(path, dump_frontmatter(data) + body.rstrip() + "\n")
-
-
-# ---------------------------------------------------------------------------
-# Document renderers
-# ---------------------------------------------------------------------------
-
-
-def render_research_brief(
-    topic: str,
-    slug: str,
-    tier: str,
-    created_at: str,
-    brief_path: Path,
-    status_path: Path,
-) -> str:
-    return "\n".join(
-        [
-            dump_frontmatter(
-                {
-                    "title": topic.strip() or slug,
-                    "type": "research-brief",
-                    "topic_slug": slug,
-                    "quality_tier": tier,
-                    "created_at": created_at,
-                    "updated_at": created_at,
-                    "status_path": str(status_path.relative_to(ROOT)),
-                    "brief_path": str(brief_path.relative_to(ROOT)),
-                }
-            ).rstrip(),
-            "# Research Brief",
-            "",
-            "## Research Question",
-            "",
-            topic.strip() or slug,
-            "",
-            "## Scope",
-            "",
-            "- Working question:",
-            f"  - {topic.strip() or slug}",
-            f"- Quality tier: `{tier}`",
-            "",
-            "## Assumptions",
-            "",
-            "- None recorded yet.",
-            "",
-            "## Subquestions",
-            "",
-            "- Triage and refine this question.",
-            "",
-            "## Open Questions",
-            "",
-            "- What evidence would falsify the emerging thesis?",
-            "",
-        ]
-    )
-
-
-def render_research_status(
-    topic: str,
-    slug: str,
-    tier: str,
-    phase: str,
-    created_at: str,
-    updated_at: str,
-    brief_path: Path,
-    progress_path: Path,
-    findings_path: Path | None,
-    review_path: Path,
-    report_path: Path | None,
-    imports_dir: Path,
-) -> str:
-    data: dict = {
-        "title": topic.strip() or slug,
-        "type": "research-status",
-        "topic_slug": slug,
-        "quality_tier": tier,
-        "phase": phase,
-        "created_at": created_at,
-        "updated_at": updated_at,
-        "brief_path": str(brief_path.relative_to(ROOT)),
-        "progress_path": str(progress_path.relative_to(ROOT)),
-        "review_path": str(review_path.relative_to(ROOT)),
-        "imports_path": str(imports_dir.relative_to(ROOT)),
-    }
-    if findings_path:
-        data["findings_path"] = str(findings_path.relative_to(ROOT))
-    if report_path:
-        data["report_path"] = str(report_path.relative_to(ROOT))
-    body = "\n".join(
-        [
-            "# Research Status",
-            "",
-            f"- Topic: {topic.strip() or slug}",
-            f"- Slug: `{slug}`",
-            f"- Quality tier: `{tier}`",
-            f"- Phase: `{phase}`",
-            f"- Updated: {updated_at}",
-            "",
-            "## Next Step",
-            "",
-            "- Resume from the first incomplete phase recorded here.",
-            "",
-            "## Files",
-            "",
-            f"- Brief: `{brief_path.relative_to(ROOT)}`",
-            f"- Progress: `{progress_path.relative_to(ROOT)}`",
-            f"- Review: `{review_path.relative_to(ROOT)}`",
-            f"- Imports: `{imports_dir.relative_to(ROOT)}`",
-            f"- Findings: `{findings_path.relative_to(ROOT) if findings_path else 'pending'}`",
-            f"- Report: `{report_path.relative_to(ROOT) if report_path else 'pending'}`",
-            "",
-        ]
-    )
-    return dump_frontmatter(data) + body
-
-
-def render_research_progress(topic: str, slug: str, tier: str, created_at: str) -> str:
-    return dump_frontmatter(
-        {
-            "title": topic.strip() or slug,
-            "type": "research-progress",
-            "topic_slug": slug,
-            "quality_tier": tier,
-            "created_at": created_at,
-            "updated_at": created_at,
-        }
-    ) + "\n".join(
-        [
-            "# Progress Log",
-            "",
-            f"- [{created_at}] Initialized research run for `{topic.strip() or slug}` at tier `{tier}`.",
-            "",
-        ]
-    )
-
-
-def render_research_findings(
-    topic: str, slug: str, tier: str, created_at: str, status_path: Path
-) -> str:
-    return dump_frontmatter(
-        {
-            "title": topic.strip() or slug,
-            "type": "research-findings",
-            "topic_slug": slug,
-            "quality_tier": tier,
-            "created_at": created_at,
-            "updated_at": created_at,
-            "status_path": str(status_path.relative_to(ROOT)),
-        }
-    ) + "\n".join(
-        [
-            "# Findings",
-            "",
-            "## Key Claims",
-            "",
-            "- Pending source collection.",
-            "",
-            "## Evidence",
-            "",
-            "- Pending source notes.",
-            "",
-            "## Open Questions",
-            "",
-            "- Pending research.",
-            "",
-        ]
-    )
-
-
-def render_research_review(
-    topic: str, slug: str, tier: str, created_at: str, status_path: Path
-) -> str:
-    return dump_frontmatter(
-        {
-            "title": topic.strip() or slug,
-            "type": "research-review",
-            "topic_slug": slug,
-            "quality_tier": tier,
-            "created_at": created_at,
-            "updated_at": created_at,
-            "status_path": str(status_path.relative_to(ROOT)),
-        }
-    ) + "\n".join(
-        [
-            "# Contrarian Review",
-            "",
-            "## Strongest Objections",
-            "",
-            "- Pending review.",
-            "",
-            "## Missing Evidence",
-            "",
-            "- Pending review.",
-            "",
-            "## Claims To Soften",
-            "",
-            "- Pending review.",
-            "",
-        ]
-    )
-
-
-def render_research_report(
-    topic: str,
-    slug: str,
-    tier: str,
-    created_at: str,
-    status_path: Path,
-    review_path: Path,
-) -> str:
-    return dump_frontmatter(
-        {
-            "title": topic.strip() or slug,
-            "type": "research-report",
-            "topic_slug": slug,
-            "quality_tier": tier,
-            "created_at": created_at,
-            "updated_at": created_at,
-            "status_path": str(status_path.relative_to(ROOT)),
-            "review_path": str(review_path.relative_to(ROOT)),
-        }
-    ) + "\n".join(
-        [
-            "# Report",
-            "",
-            "## Executive Summary",
-            "",
-            "- Pending synthesis.",
-            "",
-            "## Methodology",
-            "",
-            "- Pending synthesis.",
-            "",
-            "## Evidence and Analysis",
-            "",
-            "- Pending synthesis.",
-            "",
-            "## Contradictory or Missing Evidence",
-            "",
-            "- Pending synthesis.",
-            "",
-        ]
-    )
-
-
-def render_research_manifest(
-    topic: str, slug: str, tier: str, archive_date: str, final_phase: str, moved_files: list[str]
-) -> str:
-    return dump_frontmatter(
-        {
-            "title": topic.strip() or slug,
-            "type": "research-archive-manifest",
-            "topic_slug": slug,
-            "quality_tier": tier,
-            "archive_date": archive_date,
-            "final_phase": final_phase,
-        }
-    ) + "\n".join(["# Archive Manifest", "", *[f"- {item}" for item in moved_files], ""])
 
 
 def render_imported_report_source_note(
@@ -615,13 +358,13 @@ def ensure_research_scaffold(
     ensure_dir(imports_dir)
 
     if not brief_path.exists():
-        write_text(brief_path, render_research_brief(topic, slug, tier, created_at, brief_path, status_path))
+        write_text(brief_path, _ra.render_research_brief(topic, slug, tier, created_at, brief_path, status_path))
     if not progress_path.exists():
-        write_text(progress_path, render_research_progress(topic, slug, tier, created_at))
+        write_text(progress_path, _ra.render_research_progress(topic, slug, tier, created_at))
     if not status_path.exists():
         write_text(
             status_path,
-            render_research_status(
+            _ra.render_research_status(
                 topic,
                 slug,
                 tier,
@@ -869,7 +612,7 @@ def cmd_research_collect(agent: str, topic: str, tier: str = "standard") -> None
         report_path=report_path,
     )
     if not findings_path.exists():
-        write_text(findings_path, render_research_findings(topic, slug, tier, research_timestamp(), status_path))
+        write_text(findings_path, _ra.render_research_findings(topic, slug, tier, research_timestamp(), status_path))
     prompt = build_prompt(
         "research_collect_prompt.md",
         slug=slug,
@@ -903,7 +646,7 @@ def cmd_research_review(agent: str, topic: str, tier: str = "standard") -> None:
     if not findings_path.exists():
         raise FileNotFoundError(f"Cannot review `{slug}` before findings exist: {findings_path}")
     if not review_path.exists():
-        write_text(review_path, render_research_review(topic, slug, tier, research_timestamp(), status_path))
+        write_text(review_path, _ra.render_research_review(topic, slug, tier, research_timestamp(), status_path))
     set_research_status_phase(
         slug,
         topic=topic,
@@ -943,7 +686,7 @@ def cmd_research_report(
     if not report_path.exists():
         write_text(
             report_path,
-            render_research_report(topic, slug, tier, research_timestamp(), status_path, review_path),
+            _ra.render_research_report(topic, slug, tier, research_timestamp(), status_path, review_path),
         )
     set_research_status_phase(
         slug,
@@ -1058,6 +801,6 @@ def cmd_research_archive(topic: str) -> None:
         shutil.move(str(path), str(destination))
         moved.append(str(destination.relative_to(ROOT)))
     manifest_path = archive_root / "MANIFEST.md"
-    write_text(manifest_path, render_research_manifest(topic_title, slug, tier, archive_date, phase, moved))
+    write_text(manifest_path, _ra.render_research_manifest(topic_title, slug, tier, archive_date, phase, moved))
     print(f"Archived run written to {archive_root.relative_to(ROOT)}")
     print(f"Manifest: {manifest_path.relative_to(ROOT)}")
