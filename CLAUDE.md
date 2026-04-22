@@ -8,6 +8,7 @@ This repository is a starter Obsidian-aligned living research vault. The same op
 
 - Raw evidence lives in `data/raw/` (immutable).
 - Curated knowledge lives in `notes/` (Obsidian vault).
+- `research/` is the active run workspace for resumable research jobs; keep it separate from curated notes.
 - Use `scripts/kb.py` commands for ingestion, compilation, Q&A, healing, and rendering.
 - Run `lint` after any structural edits.
 - File durable answers back into the vault.

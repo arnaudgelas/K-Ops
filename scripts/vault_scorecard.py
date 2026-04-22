@@ -111,7 +111,7 @@ def _score_sources() -> dict:
     )
     model_gen_count = strength_counter.get("model-generated", 0) + kind_counter.get(
         "imported_model_report", 0
-    )
+    ) + kind_counter.get("imported_model_report_citation", 0)
 
     return {
         "total": total,

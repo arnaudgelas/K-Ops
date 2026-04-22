@@ -549,7 +549,10 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                             f"{page_path.relative_to(ROOT)} relies only on stub/image-only evidence in its Evidence section",
                         )
                     )
-                imported_kinds = [kind for kind in observed_kinds if kind == "imported_model_report"]
+                imported_kinds = [
+                    kind for kind in observed_kinds
+                    if kind in {"imported_model_report", "imported_model_report_citation"}
+                ]
                 if imported_kinds and len(imported_kinds) == len([kind for kind in observed_kinds if kind is not None]):
                     findings.append(
                         Finding(

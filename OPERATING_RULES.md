@@ -13,6 +13,7 @@ Turn raw sources into a durable Markdown knowledge base. Every answer should eit
 
 - Treat `data/raw/` as immutable source evidence.
 - Treat `notes/` as the curated Obsidian vault.
+- Treat `research/` as the active run workspace for resumable research jobs, not as a substitute for the curated vault.
 - Prefer updating existing concept pages instead of creating duplicates.
 - Keep always-on instructions short; move command detail into runbooks, skills, or templates.
 - Every concept page should link to related pages and relevant source summaries.
@@ -49,6 +50,15 @@ Use the skills in `skills/` when relevant:
 - `lint-heal`
 - `qa-agent`
 - `render-output`
+
+## Research Runs
+
+When a topic needs a full research run, use the resumable workflow in `research/`:
+- create a brief, status checkpoint, and progress log
+- record the `quality_tier` as `fast`, `standard`, or `deep`
+- collect sources into `notes/Sources/`
+- write findings, run a contrarian review, then draft the final report
+- archive completed runs with a manifest that lists every moved artifact
 
 ## Claim & Freshness Rules
 

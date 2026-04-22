@@ -102,6 +102,7 @@ uv run python scripts/kb.py install-agent-assets --agent all --scope project
 | Source summaries | `notes/Sources/` | Normalized per-source digests |
 | Concept pages | `notes/Concepts/` | Durable, interlinked knowledge |
 | Answer memos | `notes/Answers/` | Grounded Q&A, filed back into the vault |
+| Research runs | `research/` | Resumable working area for briefs, findings, reports, and imports |
 | Claim registry | `data/claims.json` | Atomic claims extracted from concept pages, searchable by keyword |
 | Contradiction registry | `data/contradictions.json` | Structured conflict records — one entry per Open Questions bullet |
 | Vault scorecard | `data/scorecard.json` | Quality metrics across all domains; health signals for early warnings |
@@ -111,6 +112,7 @@ uv run python scripts/kb.py install-agent-assets --agent all --scope project
 ## Operational Aids
 
 - `notes/Runbooks/Obsidian_Plugin_Setup.md`: recommended Obsidian plugins for querying and maintaining frontmatter-driven vaults
+- `notes/Runbooks/Research_Workflow.md`: resumable research-run workflow for source collection, review, reporting, and archiving
 - `skills/research-workflow/SKILL.md`: resumable research-run workflow for source collection, review, reporting, and archiving
 
 ---

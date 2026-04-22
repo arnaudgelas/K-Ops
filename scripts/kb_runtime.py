@@ -151,7 +151,7 @@ def run_triage() -> tuple[Path, str]:
             continue
         # Detect imported model reports from registry metadata
         source_kind = item.get("source_kind") or ""
-        if source_kind == "imported_model_report":
+        if source_kind in {"imported_model_report", "imported_model_report_citation"}:
             flag_for_review.append(source_id)
         else:
             to_summarize.append(source_id)
@@ -162,7 +162,7 @@ def run_triage() -> tuple[Path, str]:
             if p.stem in seen:
                 continue
             fm, _ = parse_frontmatter(p.read_text(encoding="utf-8"))
-            if fm.get("source_kind") == "imported_model_report" and p.stem not in existing_summaries:
+            if fm.get("source_kind") in {"imported_model_report", "imported_model_report_citation"} and p.stem not in existing_summaries:
                 flag_for_review.append(p.stem)
                 seen.add(p.stem)
 

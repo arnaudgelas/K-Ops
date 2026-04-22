@@ -31,7 +31,7 @@ Do not read every file in `notes/Concepts/` upfront. Read concept pages on deman
 
 For each source_id in `to_summarize`:
 1. Read `data/raw/<source_id>.*` — the raw fetched content.
-2. If `source_kind` is `imported_model_report`: treat as a lead only. Verify key claims against other sources before promoting into concept pages. Mark `evidence_strength: model-generated`.
+2. If `source_kind` is `imported_model_report` or `imported_model_report_citation`: treat as a lead only. Verify key claims against other sources before promoting into concept pages. Mark `evidence_strength: secondary` for imported model reports and `evidence_strength: stub` for citation-only imports.
 3. Write `notes/Sources/<source_id>.md` using the schema below.
 
 **Source summary schema** — copy this structure exactly:
@@ -65,7 +65,7 @@ tags:
 `primary-doc` | `official-spec` | `strong` | `code` | `maintainer-commentary` | `changelog` | `pr-issue` | `secondary` | `model-generated` | `stub` | `citation-only` | `image-only`
 
 `source_kind` — pick exactly one:
-`web-page` | `github-repo` | `pdf` | `imported_model_report` | `other`
+`web-page` | `github-repo` | `pdf` | `imported_model_report` | `imported_model_report_citation` | `other`
 
 ---
 
