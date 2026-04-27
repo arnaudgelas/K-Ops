@@ -1,0 +1,14 @@
+{
+  "_schema": {
+    "source_id": "canonical src- ID or pending-* for not-yet-ingested",
+    "url": "target URL",
+    "failure_mode": "paywall | 404 | 404-wayback-blocked | rate-limited | bot-detection | auth-required | blocked",
+    "last_attempted": "YYYYMMDD",
+    "workaround": "manual-access | manual-retrieval | institutional-access | skip | none",
+    "priority": "high | medium | low",
+    "load_bearing": "bool — true if a concept page depends on this source for a key claim",
+    "load_bearing_concepts": "list of concept page names that depend on this source",
+    "notes": "free text"
+  },
+  "sources": []
+}
