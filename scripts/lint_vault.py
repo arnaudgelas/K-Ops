@@ -6,8 +6,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
 from utils import CONFIG, ROOT, parse_frontmatter
 
 REGISTRY_PATH = CONFIG.registry_path
@@ -15,6 +13,7 @@ RAW_DIR = CONFIG.raw_dir
 SOURCES_DIR = CONFIG.summaries_dir
 ANSWERS_DIR = CONFIG.answers_dir
 CONCEPTS_DIR = CONFIG.concepts_dir
+INDEXES_DIR = CONFIG.indexes_dir
 HOME_PATH = CONFIG.home_note
 RESEARCH_DIR = CONFIG.research_dir
 RESEARCH_NOTES_DIR = RESEARCH_DIR / "notes"
@@ -24,7 +23,7 @@ RESEARCH_REPORTS_DIR = RESEARCH_DIR / "reports"
 RESEARCH_IMPORTS_DIR = RESEARCH_DIR / "imports"
 RESEARCH_ARCHIVE_DIR = RESEARCH_DIR / "archive"
 
-SOURCE_REF_RE = re.compile(r"\[\[Sources/(src-[0-9a-f]{10})\|")
+SOURCE_REF_RE = re.compile(r"\[\[Sources/(?:[^/]+/)?(src-[0-9a-f]{10})\|")
 RELATED_CONCEPT_RE = re.compile(r"\[\[(Concepts/[^|\]]+)")
 SOURCE_ID_RE = re.compile(r"^source_id:\s*(src-[0-9a-f]{10})\s*$", re.MULTILINE)
 TITLE_RE = re.compile(r'^title:\s*"([^"]+)"\s*$', re.MULTILINE)
@@ -33,7 +32,6 @@ RELATED_SECTION_RE = re.compile(r"## Related Concepts\s+(.*?)(?:\n## |\Z)", re.D
 EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 CONCEPT_LINK_IN_SECTION_RE = re.compile(r"\[\[Concepts/([^|\]]+)")
 EVIDENCE_STRENGTH_RE = re.compile(r"^evidence_strength:\s*(\S+)\s*$", re.MULTILINE)
-ANSWER_FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
 ANSWER_HEADING_RE = re.compile(r"^#\s+", re.MULTILINE)
 ANSWER_SUBHEADING_RE = re.compile(r"^##\s+", re.MULTILINE)
 ANSWER_VAULT_UPDATES_RE = re.compile(r"## Vault Updates\s+(.*?)(?:\n## |\Z)", re.DOTALL)
@@ -67,6 +65,18 @@ class Finding:
     severity: str
     code: str
     message: str
+
+
+def has_markdown_heading(text: str, heading: str) -> bool:
+    return bool(re.search(rf"(?m)^##\s+{re.escape(heading)}\s*$", text))
+
+
+def has_any_markdown_heading(text: str, headings: tuple[str, ...]) -> bool:
+    return any(has_markdown_heading(text, heading) for heading in headings)
+
+
+def has_open_questions_heading(text: str) -> bool:
+    return bool(re.search(r"(?mi)^##\s+.*Open Questions\b.*$", text))
 
 
 def section_body(text: str, heading: str) -> tuple[str, str, str] | None:
@@ -128,14 +138,21 @@ def load_registry() -> list[dict]:
     return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
 
 
-
 def source_note_ids() -> set[str]:
-    return {path.stem for path in SOURCES_DIR.glob("src-*.md")}
+    return {path.stem for path in SOURCES_DIR.rglob("src-*.md")}
+
+
+def source_note_id_paths() -> dict[str, list[Path]]:
+    """Return a mapping of canonical source_id stem to all paths that claim it."""
+    mapping: dict[str, list[Path]] = {}
+    for path in sorted(SOURCES_DIR.rglob("src-*.md")):
+        mapping.setdefault(path.stem, []).append(path)
+    return mapping
 
 
 def source_note_frontmatters() -> dict[str, dict]:
     metadata: dict[str, dict] = {}
-    for path in sorted(SOURCES_DIR.glob("src-*.md")):
+    for path in sorted(SOURCES_DIR.rglob("src-*.md")):
         frontmatter, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
         metadata[path.stem] = frontmatter
     return metadata
@@ -149,6 +166,10 @@ def raw_dir_ids() -> set[str]:
 
 def concept_paths() -> list[Path]:
     return sorted(CONCEPTS_DIR.glob("*.md")) + [HOME_PATH]
+
+
+def index_paths() -> list[Path]:
+    return sorted(INDEXES_DIR.glob("*.md"))
 
 
 def research_paths(pattern: str) -> list[Path]:
@@ -209,7 +230,7 @@ def build_backlink_bullet(source_id: str, note_path: Path) -> str:
 
 def collect_backlink_fixes(strict: bool = False) -> list[BacklinkFix]:
     fixes: list[BacklinkFix] = []
-    for note_path in sorted(SOURCES_DIR.glob("src-*.md")):
+    for note_path in sorted(SOURCES_DIR.rglob("src-*.md")):
         text = note_path.read_text(encoding="utf-8")
         related_concepts = sorted(set(RELATED_CONCEPT_RE.findall(text)))
         for concept_ref in related_concepts:
@@ -299,11 +320,37 @@ def collect_findings(strict: bool = False) -> list[Finding]:
     except json.JSONDecodeError as exc:
         return [Finding("error", "registry-json", f"{REGISTRY_PATH} is not valid JSON: {exc}")]
 
+    # Load Topic Atlas concept set for atlas-stale check
+    _atlas_concepts: set[str] = set()
+    _atlas_path = INDEXES_DIR / "Topic_Atlas.md"
+    if _atlas_path.exists():
+        _atlas_text = _atlas_path.read_text(encoding="utf-8")
+        _atlas_concepts = set(re.findall(r"\[\[Concepts/([^|\]]+)", _atlas_text))
+
     registry_ids = [item["id"] for item in registry]
     registry_id_set = set(registry_ids)
     raw_ids = raw_dir_ids()
     note_ids = source_note_ids()
     source_note_meta = source_note_frontmatters()
+
+    # Check for duplicate source notes (same source_id in multiple paths)
+    id_paths = source_note_id_paths()
+    for source_id, paths in sorted(id_paths.items()):
+        if len(paths) > 1:
+            path_list = ", ".join(p.relative_to(ROOT).as_posix() for p in paths)
+            findings.append(Finding("error", "duplicate-source-note", f"Source ID `{source_id}` has multiple note files: {path_list}"))
+
+    # Check for non-canonical source filenames (files in Sources/ not matching src-[hex]{10}.md)
+    _canonical_re = re.compile(r"^src-[0-9a-f]{10}$")
+    for path in sorted(SOURCES_DIR.rglob("*.md")):
+        if not _canonical_re.match(path.stem):
+            findings.append(
+                Finding(
+                    "warning",
+                    "noncanonical-source-filename",
+                    f"{path.relative_to(ROOT)} does not follow the canonical src-[0-9a-f]{{10}} naming convention and is invisible to most tooling",
+                )
+            )
 
     seen: set[str] = set()
     for source_id in registry_ids:
@@ -351,7 +398,7 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                     )
                 )
 
-    for note_path in sorted(SOURCES_DIR.glob("src-*.md")):
+    for note_path in sorted(SOURCES_DIR.rglob("src-*.md")):
         text = note_path.read_text(encoding="utf-8")
         frontmatter, _ = parse_frontmatter(text)
         match = SOURCE_ID_RE.search(text)
@@ -436,6 +483,35 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                         f"{note_path.relative_to(ROOT)} should usually use `evidence_strength: stub`",
                     )
                 )
+        required_source_sections = {
+            "Reliability notes": (
+                "Reliability notes",
+                "Reliability Notes",
+                "Extraction quality",
+                "Extraction Quality",
+                "Notes on Extraction Quality",
+            ),
+            "Candidate concepts": (
+                "Candidate concepts",
+                "Candidate Concepts",
+                "Candidate Concepts to Promote",
+                "Related Concepts",
+            ),
+        }
+        for display_name, accepted_headings in required_source_sections.items():
+            if not has_any_markdown_heading(text, accepted_headings):
+                findings.append(
+                    Finding(
+                        "warning",
+                        "missing-source-section",
+                        f"{note_path.relative_to(ROOT)} is missing section `## {display_name}`",
+                    )
+                )
+        if strict:
+            if not frontmatter.get("source_url"):
+                findings.append(Finding("warning", "missing-source-metadata", f"{note_path.relative_to(ROOT)} is missing `source_url` frontmatter"))
+            if not frontmatter.get("source_kind"):
+                findings.append(Finding("warning", "missing-source-metadata", f"{note_path.relative_to(ROOT)} is missing `source_kind` frontmatter"))
 
     for status_path in sorted(RESEARCH_NOTES_DIR.glob("*-status.md")):
         frontmatter, _ = parse_frontmatter(status_path.read_text(encoding="utf-8"))
@@ -498,89 +574,147 @@ def collect_findings(strict: bool = False) -> list[Finding]:
         if not frontmatter.get("topic_slug") or not frontmatter.get("archive_date") or not frontmatter.get("final_phase"):
             findings.append(Finding("error", "missing-archive-manifest-fields", f"{manifest_path.relative_to(ROOT)} is missing required archive manifest frontmatter"))
 
+    home_text = HOME_PATH.read_text(encoding="utf-8")
+    home_frontmatter, _ = parse_frontmatter(home_text)
+    if home_frontmatter.get("type") != "home":
+        findings.append(Finding("error", "invalid-home-type", f"{HOME_PATH.relative_to(ROOT)} must declare `type: home`"))
+    if not home_frontmatter.get("title"):
+        findings.append(Finding("error", "missing-home-title", f"{HOME_PATH.relative_to(ROOT)} is missing a `title` frontmatter field"))
+    if not home_frontmatter.get("tags"):
+        findings.append(Finding("error", "missing-home-tags", f"{HOME_PATH.relative_to(ROOT)} is missing `tags` frontmatter"))
+    for target in ("Indexes/Vault_Dashboard", "Indexes/Workflow_Atlas", "Indexes/Topic_Atlas", "Runbooks/Agent_Workflow_Quick_Reference", "TODO"):
+        if f"[[{target}" not in home_text:
+            findings.append(Finding("warning", "missing-home-navigation-link", f"{HOME_PATH.relative_to(ROOT)} is missing a navigation link to `{target}`"))
+
     for page_path in concept_paths():
         text = page_path.read_text(encoding="utf-8")
-        if page_path != HOME_PATH:
+        if page_path == HOME_PATH:
+            pass
+        else:
             frontmatter, _ = parse_frontmatter(text)
-            if frontmatter.get("type") != "concept":
-                findings.append(Finding("error", "invalid-concept-type", f"{page_path.relative_to(ROOT)} must declare `type: concept`"))
-            if not frontmatter.get("title"):
-                findings.append(Finding("error", "missing-concept-title", f"{page_path.relative_to(ROOT)} is missing a `title` frontmatter field"))
-            if not frontmatter.get("tags"):
-                findings.append(Finding("error", "missing-concept-tags", f"{page_path.relative_to(ROOT)} is missing `tags` frontmatter"))
-            claim_quality = frontmatter.get("claim_quality")
-            if not claim_quality:
-                findings.append(Finding("error", "missing-claim-quality-frontmatter", f"{page_path.relative_to(ROOT)} is missing `claim_quality` frontmatter"))
-            elif claim_quality not in VALID_CLAIM_QUALITIES:
-                findings.append(
-                    Finding(
-                        "error",
-                        "invalid-claim-quality",
-                        f"{page_path.relative_to(ROOT)} declares unsupported claim quality `{claim_quality}`",
-                    )
-                )
-            evidence_source_ids = extract_evidence_source_ids(text)
-            if not evidence_source_ids:
-                findings.append(
-                    Finding(
-                        "warning",
-                        "unsupported-claim-risk",
-                        f"{page_path.relative_to(ROOT)} has no cited source summaries in its Evidence section",
-                    )
-                )
+            if frontmatter.get("type") == "redirect":
+                pass
             else:
-                observed_strengths: list[str | None] = []
-                observed_kinds: list[str | None] = []
-                for source_id in evidence_source_ids:
-                    source_path = SOURCES_DIR / f"{source_id}.md"
-                    if not source_path.exists():
-                        continue
-                    source_text = source_path.read_text(encoding="utf-8")
-                    source_meta = source_note_meta.get(source_id, {})
-                    observed_kinds.append(source_meta.get("source_kind"))
-                    m = EVIDENCE_STRENGTH_RE.search(source_text)
-                    if m:
-                        observed_strengths.append(m.group(1))
-                if observed_strengths and all(strength in {"stub", "image-only"} for strength in observed_strengths):
+                if frontmatter.get("type") != "concept":
+                    findings.append(Finding("error", "invalid-concept-type", f"{page_path.relative_to(ROOT)} must declare `type: concept`"))
+                if not frontmatter.get("title"):
+                    findings.append(Finding("error", "missing-concept-title", f"{page_path.relative_to(ROOT)} is missing a `title` frontmatter field"))
+                if not frontmatter.get("tags"):
+                    findings.append(Finding("error", "missing-concept-tags", f"{page_path.relative_to(ROOT)} is missing `tags` frontmatter"))
+                claim_quality = frontmatter.get("claim_quality")
+                if not claim_quality:
+                    findings.append(Finding("error", "missing-claim-quality-frontmatter", f"{page_path.relative_to(ROOT)} is missing `claim_quality` frontmatter"))
+                elif claim_quality not in VALID_CLAIM_QUALITIES:
+                    findings.append(
+                        Finding(
+                            "error",
+                            "invalid-claim-quality",
+                            f"{page_path.relative_to(ROOT)} declares unsupported claim quality `{claim_quality}`",
+                        )
+                    )
+                evidence_source_ids = extract_evidence_source_ids(text)
+                if not evidence_source_ids:
                     findings.append(
                         Finding(
                             "warning",
                             "unsupported-claim-risk",
-                            f"{page_path.relative_to(ROOT)} relies only on stub/image-only evidence in its Evidence section",
+                            f"{page_path.relative_to(ROOT)} has no cited source summaries in its Evidence section",
                         )
                     )
-                imported_kinds = [
-                    kind for kind in observed_kinds
-                    if kind in {"imported_model_report", "imported_model_report_citation"}
-                ]
-                if imported_kinds and len(imported_kinds) == len([kind for kind in observed_kinds if kind is not None]):
+                else:
+                    observed_strengths: list[str | None] = []
+                    observed_kinds: list[str | None] = []
+                    for source_id in evidence_source_ids:
+                        source_path = SOURCES_DIR / f"{source_id}.md"
+                        if not source_path.exists():
+                            continue
+                        source_text = source_path.read_text(encoding="utf-8")
+                        source_meta = source_note_meta.get(source_id, {})
+                        observed_kinds.append(source_meta.get("source_kind"))
+                        m = EVIDENCE_STRENGTH_RE.search(source_text)
+                        if m:
+                            observed_strengths.append(m.group(1))
+                    if observed_strengths and all(strength in {"stub", "image-only"} for strength in observed_strengths):
+                        findings.append(
+                            Finding(
+                                "warning",
+                                "unsupported-claim-risk",
+                                f"{page_path.relative_to(ROOT)} relies only on stub/image-only evidence in its Evidence section",
+                            )
+                        )
+                    if strict and observed_strengths and any(s == "stub" for s in observed_strengths):
+                        stub_count = observed_strengths.count("stub")
+                        findings.append(
+                            Finding(
+                                "warning",
+                                "stub-source-cited-by-concept",
+                                f"{page_path.relative_to(ROOT)} cites {stub_count} stub source(s) in its Evidence section",
+                            )
+                        )
+                    imported_kinds = [kind for kind in observed_kinds if kind == "imported_model_report"]
+                    if imported_kinds and len(imported_kinds) == len([kind for kind in observed_kinds if kind is not None]):
+                        findings.append(
+                            Finding(
+                                "warning",
+                                "imported-report-only-evidence",
+                                f"{page_path.relative_to(ROOT)} relies only on imported model-generated reports in its Evidence section",
+                            )
+                        )
+
+                if claim_quality == "conflicting" and not has_open_questions_heading(text):
                     findings.append(
                         Finding(
                             "warning",
-                            "imported-report-only-evidence",
-                            f"{page_path.relative_to(ROOT)} relies only on imported model-generated reports in its Evidence section",
+                            "conflicting-claim-no-open-questions",
+                            f"{page_path.relative_to(ROOT)} has claim_quality: conflicting but no ## Open Questions section documenting the conflict",
                         )
                     )
-
-            # Conflicting quality must document the conflict in an Open Questions section.
-            if claim_quality == "conflicting" and "## Open Questions" not in text:
-                findings.append(
-                    Finding(
-                        "warning",
-                        "conflicting-claim-no-open-questions",
-                        f"{page_path.relative_to(ROOT)} has claim_quality: conflicting but no ## Open Questions section documenting the conflict",
+                if claim_quality not in (None, "conflicting") and not has_open_questions_heading(text):
+                    findings.append(
+                        Finding(
+                            "warning",
+                            "missing-open-questions",
+                            f"{page_path.relative_to(ROOT)} is missing a ## Open Questions section",
+                        )
                     )
-                )
-
-            # Revalidation flag — set by `refresh` when an upstream source changed content.
-            if frontmatter.get("revalidation_required"):
-                findings.append(
-                    Finding(
-                        "warning",
-                        "revalidation-required",
-                        f"{page_path.relative_to(ROOT)} is flagged for revalidation (upstream source changed); review and run 'clear-stale-flags' when done",
+                # Quality-illusion check: supported concept with very low inline citation rate
+                if claim_quality == "supported":
+                    inline_citations = len(SOURCE_REF_RE.findall(text))
+                    claim_bullets = len(re.findall(r"^- .+", text, re.MULTILINE))
+                    if claim_bullets > 0 and inline_citations == 0:
+                        findings.append(
+                            Finding(
+                                "warning",
+                                "supported-but-no-inline-citations",
+                                f"{page_path.relative_to(ROOT)} is claim_quality: supported but has zero inline source citations",
+                            )
+                        )
+                # Concept page length warning
+                line_count = text.count("\n")
+                if line_count > 400:
+                    findings.append(
+                        Finding(
+                            "warning",
+                            "concept-page-too-long",
+                            f"{page_path.relative_to(ROOT)} has {line_count} lines (>400) — consider splitting into child concept pages",
+                        )
                     )
-                )
+                if frontmatter.get("revalidation_required"):
+                    findings.append(
+                        Finding(
+                            "warning",
+                            "revalidation-required",
+                            f"{page_path.relative_to(ROOT)} is flagged for revalidation (upstream source changed); review and clear the flag when done",
+                        )
+                    )
+                if strict and _atlas_concepts and page_path.stem not in _atlas_concepts:
+                    findings.append(
+                        Finding(
+                            "warning",
+                            "atlas-stale",
+                            f"{page_path.relative_to(ROOT)} is not listed in `notes/Indexes/Topic_Atlas.md`",
+                        )
+                    )
 
         for match in SOURCE_REF_RE.finditer(text):
             source_id = match.group(1)
@@ -593,7 +727,16 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                     )
                 )
 
-    home_text = HOME_PATH.read_text(encoding="utf-8")
+    for index_path in index_paths():
+        text = index_path.read_text(encoding="utf-8")
+        frontmatter, _ = parse_frontmatter(text)
+        if frontmatter.get("type") != "index":
+            findings.append(Finding("error", "invalid-index-type", f"{index_path.relative_to(ROOT)} must declare `type: index`"))
+        if not frontmatter.get("title"):
+            findings.append(Finding("error", "missing-index-title", f"{index_path.relative_to(ROOT)} is missing a `title` frontmatter field"))
+        if not frontmatter.get("tags"):
+            findings.append(Finding("error", "missing-index-tags", f"{index_path.relative_to(ROOT)} is missing `tags` frontmatter"))
+
     for answer_path in sorted(ANSWERS_DIR.glob("*.md")):
         answer_text = answer_path.read_text(encoding="utf-8")
         frontmatter, body = parse_frontmatter(answer_text)
@@ -623,6 +766,31 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                     "error",
                     "invalid-answer-scope",
                     f"{answer_path.relative_to(ROOT)} declares unsupported answer scope `{answer_scope}`",
+                )
+            )
+        sources_consulted = frontmatter.get("sources_consulted")
+        if sources_consulted is not None and not isinstance(sources_consulted, list):
+            findings.append(
+                Finding(
+                    "error",
+                    "invalid-answer-sources-consulted",
+                    f"{answer_path.relative_to(ROOT)} must declare `sources_consulted` as a list when present",
+                )
+            )
+        if answer_quality == "durable" and not sources_consulted:
+            findings.append(
+                Finding(
+                    "warning",
+                    "answer-missing-provenance",
+                    f"{answer_path.relative_to(ROOT)} is durable but has no structured `sources_consulted` provenance list",
+                )
+            )
+        if frontmatter.get("revalidation_required"):
+            findings.append(
+                Finding(
+                    "warning",
+                    "answer-revalidation-required",
+                    f"{answer_path.relative_to(ROOT)} is flagged for revalidation (upstream source changed); review and clear the flag when done",
                 )
             )
         if not ANSWER_HEADING_RE.search(body):
@@ -670,26 +838,27 @@ def collect_findings(strict: bool = False) -> list[Finding]:
         if answer_link not in home_text and f"[[Answers/{answer_path.stem}]]" not in home_text:
             findings.append(Finding("error", "missing-answer-home-link", f"{answer_path.relative_to(ROOT)} is not linked from notes/Home.md"))
 
-    # Check reciprocal Related Concepts links between concept pages
+    # Check reciprocal Related Concepts links between concept pages (strict-only: knowledge is hierarchical)
     concept_texts: dict[str, str] = {}
     for page_path in sorted(CONCEPTS_DIR.glob("*.md")):
         concept_texts[page_path.stem] = page_path.read_text(encoding="utf-8")
 
-    for concept_name, text in sorted(concept_texts.items()):
-        for related_name in sorted(extract_related_concept_names(text)):
-            if related_name not in concept_texts:
-                continue  # missing page caught separately
-            if concept_name not in extract_related_concept_names(concept_texts[related_name]):
-                findings.append(
-                    Finding(
-                        "warning",
-                        "missing-reciprocal-concept-link",
-                        f"notes/Concepts/{concept_name}.md lists {related_name} in Related Concepts but the reverse link is absent",
+    if strict:
+        for concept_name, text in sorted(concept_texts.items()):
+            for related_name in sorted(extract_related_concept_names(text)):
+                if related_name not in concept_texts:
+                    continue  # missing page caught separately
+                if concept_name not in extract_related_concept_names(concept_texts[related_name]):
+                    findings.append(
+                        Finding(
+                            "warning",
+                            "missing-reciprocal-concept-link",
+                            f"notes/Concepts/{concept_name}.md lists {related_name} in Related Concepts but the reverse link is absent",
+                        )
                     )
-                )
 
     backlink_severity = "error" if strict else "warning"
-    for note_path in sorted(SOURCES_DIR.glob("src-*.md")):
+    for note_path in sorted(SOURCES_DIR.rglob("src-*.md")):
         text = note_path.read_text(encoding="utf-8")
         related_concepts = sorted(set(RELATED_CONCEPT_RE.findall(text)))
         for concept_ref in related_concepts:
@@ -712,6 +881,30 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                     )
                 )
 
+    return findings
+
+
+def lint_vault(strict: bool = False, fix_backlinks: bool = False) -> list[Finding]:
+    """Public alias for the full lint pass that returns findings (mirrors agkb API)."""
+    if fix_backlinks:
+        fixes = collect_backlink_fixes(strict=strict)
+        applied = apply_backlink_fixes(fixes)
+        print(f"Applied {applied} backlink fix(es)")
+
+    findings = collect_findings(strict=strict)
+    errors = [finding for finding in findings if finding.severity == "error"]
+    warnings = [finding for finding in findings if finding.severity == "warning"]
+
+    print(f"Lint results: {len(errors)} error(s), {len(warnings)} warning(s)")
+    for severity in ("error", "warning"):
+        group = [finding for finding in findings if finding.severity == severity]
+        if not group:
+            continue
+        print(f"\n{severity.upper()}:")
+        for finding in group:
+            print(f"- [{finding.code}] {finding.message}")
+    if errors:
+        raise SystemExit(1)
     return findings
 
 

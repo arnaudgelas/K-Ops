@@ -1,0 +1,37 @@
+# Vault frontmatter schema — mandatory fields per note type.
+# Used by scripts/kb_schema.py Validator and kb.py validate --strict.
+# Add new fields here instead of writing backfill scripts.
+
+source_note:
+  required:
+    - source_id        # canonical src-[0-9a-f]{10}
+    - title            # human-readable title
+    - source_url       # original URL or file path
+    - source_kind      # web-page | github-repo | pdf | imported_model_report | imported_model_report_citation | other
+    - evidence_strength # primary-doc | official-spec | strong | code | maintainer-commentary | changelog | pr-issue | secondary | model-generated | stub | citation-only | image-only
+    - ingested_at      # ISO-8601 date
+  recommended:
+    - content_hash     # SHA-256 of raw content for staleness detection
+    - tags             # kb/source + topic tags
+
+concept_page:
+  required:
+    - title
+    - type             # concept | redirect
+    - claim_quality    # supported | provisional | weak | conflicting | stale
+    - tags             # must include kb/concept
+  recommended:
+    - created          # ISO-8601 date
+    - updated          # ISO-8601 date
+    - evidence_status  # seed | synthesized | verified | contested (machine-derived; set by compile-wiki)
+
+answer_memo:
+  required:
+    - title
+    - type             # answer
+    - asked_at         # ISO-8601 datetime
+    - answer_quality   # memo-only | durable
+    - scope            # private | shared
+    - sources_consulted # YAML list (may be empty)
+  recommended:
+    - created

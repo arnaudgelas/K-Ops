@@ -12,6 +12,9 @@ dependencies = [
   "trafilatura>=1.9.0",
 ]
 
+[project.scripts]
+k-ops = "scripts.kb:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0.0",

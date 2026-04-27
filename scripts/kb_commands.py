@@ -133,7 +133,8 @@ def main() -> None:
     p_normalize_github = sub.add_parser("normalize-github-sources")
     p_normalize_github.add_argument("--dry-run", action="store_true")
 
-    sub.add_parser("validate", help="Print the loaded config and verify all required paths.")
+    p_validate = sub.add_parser("validate", help="Print the loaded config and verify all required paths.")
+    p_validate.add_argument("--strict", action="store_true", help="Also run schema validation via kb_schema.py.")
 
     p_bootstrap = sub.add_parser("bootstrap")
     p_bootstrap.add_argument("--target", required=True, help="Directory for the new blank starter vault.")
@@ -159,6 +160,7 @@ def main() -> None:
         choices=["codex", "claude", "gemini"],
         help="Optional agent to refresh and compile before the mechanical maintenance pass.",
     )
+    p_maintain.add_argument("--clean-tmp", action="store_true", help="Delete rendered prompt snapshots in .tmp/ older than 7 days.")
 
     sub.add_parser("extract-claims", help="Extract atomic claims from concept pages and write data/claims.json.")
 
@@ -191,6 +193,43 @@ def main() -> None:
     p_lint.add_argument("--fix-backlinks", action="store_true")
 
     sub.add_parser("render-manifest", help="Print a JSON manifest of the registry and vault files.")
+
+    # --- New commands from agkb ---
+    p_claim_map = sub.add_parser("claim-map", help="Generate a Mermaid argument map for a concept from claims.json.")
+    p_claim_map.add_argument("--concept", required=True, help="Concept stem (e.g. My_Concept)")
+    p_claim_map.add_argument("--output", choices=["stdout", "file"], default="stdout")
+
+    p_suggest = sub.add_parser("suggest-links", help="Suggest new wikilinks using graph- and text-analysis techniques.")
+    p_suggest.add_argument(
+        "--approach",
+        choices=["all", "co-citation", "shared-sources", "embedding",
+                 "conceptual-gravity", "analogical-mapping", "triadic-closure",
+                 "eigenvector-centrality", "friction", "contradiction-mapping"],
+        default="all",
+    )
+    p_suggest.add_argument("--min-co-cite", type=int, default=2)
+    p_suggest.add_argument("--min-shared", type=int, default=2)
+    p_suggest.add_argument("--emb-threshold", type=float, default=0.75)
+    p_suggest.add_argument("--min-gravity", type=float, default=0.5)
+    p_suggest.add_argument("--min-jaccard", type=float, default=0.25)
+    p_suggest.add_argument("--min-triadic", type=int, default=2)
+    p_suggest.add_argument("--ev-top-frac", type=float, default=0.33)
+    p_suggest.add_argument("--min-friction", type=float, default=0.15)
+    p_suggest.add_argument("--limit", type=int, default=50)
+    p_suggest.add_argument("--format", choices=["json", "text"], default="json")
+    p_suggest.add_argument("--output", help="Write JSON output to this path.")
+
+    p_migrate_fields = sub.add_parser("migrate-source-fields", help="Batch-derive source_kind/ingested_at/source_url for source notes from registry.json.")
+    p_migrate_fields.add_argument("--dry-run", action="store_true")
+
+    p_normalize_fm = sub.add_parser("normalize-frontmatter", help="Normalize frontmatter: kb/ tag namespace, bare enum values, updated timestamps.")
+    p_normalize_fm.add_argument("--dry-run", action="store_true")
+
+    p_fetch_queue = sub.add_parser("fetch-queue", help="List blocked URLs in data/fetch_queue.json.")
+    p_fetch_queue.add_argument("--format", choices=["text", "json"], default="text")
+
+    p_source_registry = sub.add_parser("generate-source-registry", help="Generate notes/Indexes/Source_Registry.md from registry.json.")
+    p_source_registry.add_argument("--output", help="Override output path.")
 
     args = parser.parse_args()
 
@@ -269,7 +308,7 @@ def main() -> None:
     elif args.command == "backfill-answer-quality":
         _kb.run_backfill_answer_quality(dry_run=args.dry_run)
     elif args.command == "maintenance":
-        _kb.run_maintenance(agent=args.agent)
+        _kb.run_maintenance(agent=args.agent, clean_tmp=args.clean_tmp)
     elif args.command == "extract-claims":
         _kb.run_extract_claims()
     elif args.command == "claim-search":
@@ -293,4 +332,29 @@ def main() -> None:
     elif args.command == "render-manifest":
         _rm.main()
     elif args.command == "validate":
-        _kb.run_validate_config()
+        _kb.run_validate_config(strict=args.strict)
+    elif args.command == "claim-map":
+        _kb.cmd_claim_map(args.concept, output=args.output)
+    elif args.command == "suggest-links":
+        _kb.run_suggest_links(
+            approach=args.approach,
+            min_co_cite=args.min_co_cite,
+            min_shared=args.min_shared,
+            emb_threshold=args.emb_threshold,
+            min_gravity=args.min_gravity,
+            min_jaccard=args.min_jaccard,
+            min_triadic=args.min_triadic,
+            ev_top_frac=args.ev_top_frac,
+            min_friction=args.min_friction,
+            limit=args.limit,
+            fmt=args.format,
+            output=args.output,
+        )
+    elif args.command == "migrate-source-fields":
+        _kb.run_migrate_source_fields(dry_run=args.dry_run)
+    elif args.command == "normalize-frontmatter":
+        _kb.run_normalize_frontmatter_cmd(dry_run=args.dry_run)
+    elif args.command == "fetch-queue":
+        _kb.run_fetch_queue(fmt=args.format)
+    elif args.command == "generate-source-registry":
+        _kb.run_generate_source_registry(output=args.output)

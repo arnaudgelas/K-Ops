@@ -47,6 +47,7 @@ class KBPaths:
     home_note: Path
     todo_note: Path
     concepts_dir: Path
+    indexes_dir: Path
     summaries_dir: Path
     answers_dir: Path
     attachments_dir: Path
@@ -89,6 +90,7 @@ def load_config() -> KBPaths:
         home_note=ROOT / data["home_note"],
         todo_note=ROOT / data["todo_note"],
         concepts_dir=ROOT / data["concepts_dir"],
+        indexes_dir=ROOT / data.get("indexes_dir", "notes/Indexes"),
         summaries_dir=ROOT / data["summaries_dir"],
         answers_dir=ROOT / data["answers_dir"],
         attachments_dir=ROOT / data["attachments_dir"],
@@ -99,7 +101,24 @@ def load_config() -> KBPaths:
     )
 
 
-CONFIG = load_config()
+get_config = load_config  # backward-compatible alias; both are LRU-cached
+
+
+class _ConfigProxy:
+    """Lazy-reload wrapper: attribute accesses always go through load_config().
+
+    This means tests can call ``load_config.cache_clear()`` and the module-level
+    ``CONFIG`` singleton will automatically reflect the new config on next access.
+    """
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_config(), name)
+
+    def __dir__(self) -> list[str]:
+        return sorted(set(dir(type(self)) + list(get_config().__dict__.keys())))
+
+
+CONFIG = _ConfigProxy()
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +244,35 @@ def build_runtime_prompt(name: str, text: str) -> Path:
     ensure_dir(prompt_path.parent)
     write_text(prompt_path, text)
     return prompt_path
+
+
+def find_source_note(source_id: str) -> Path | None:
+    """Locate an existing source note under summaries_dir (any subfolder).
+
+    Returns the first matching path, or None if not found.
+    """
+    for candidate in get_config().summaries_dir.rglob(f"{source_id}.md"):
+        return candidate
+    return None
+
+
+def resolve_content_path(metadata: dict) -> str:
+    """Return the best available content path for a source.
+
+    Prefers ``normalized_path`` when present (web/PDF sources where
+    normalization actually transformed the content).  Falls back to
+    ``original_path`` for sources where no separate normalized file exists
+    (GitHub repo snapshots, local files whose normalized copy was identical).
+    """
+    norm = metadata.get("normalized_path")
+    if norm:
+        candidate = ROOT / norm
+        if candidate.exists():
+            return str(candidate)
+    orig = metadata.get("original_path")
+    if orig:
+        return str(ROOT / orig)
+    raise FileNotFoundError(f"No content file found for source {metadata.get('id')}")
 
 
 def agent_run(agent: str, prompt_path: Path, *, command: str = "unknown") -> None:

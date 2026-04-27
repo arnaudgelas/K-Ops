@@ -259,7 +259,7 @@ def run_retention_report(output: str | None = None, limit: int = 50) -> None:
     )
 
 
-def run_validate_config() -> None:
+def run_validate_config(strict: bool = False) -> None:
     """Print a summary of the loaded config and confirm all required keys are present."""
     from utils import load_config, _REQUIRED_KEYS
 
@@ -283,9 +283,35 @@ def run_validate_config() -> None:
             print(f"  {d}")
     else:
         print("  All configured directories exist.")
+    if strict:
+        try:
+            import kb_schema as _ks
+            _ks.validate_config(cfg)
+            print("  Schema validation passed.")
+        except ImportError:
+            print("  Warning: kb_schema.py not found — strict schema validation skipped.")
+        except Exception as exc:
+            raise SystemExit(f"[validate --strict] Schema validation failed: {exc}")
 
 
-def run_maintenance(agent: str | None = None) -> None:
+def _clean_tmp(max_age_days: int = 7) -> None:
+    import time
+
+    tmp_dir = ROOT / ".tmp"
+    if not tmp_dir.exists():
+        return
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    for path in tmp_dir.iterdir():
+        if path.is_file() and path.stat().st_mtime < cutoff:
+            path.unlink()
+            removed += 1
+    print(f"Cleaned {removed} file(s) from .tmp/ (older than {max_age_days} days)")
+
+
+def run_maintenance(agent: str | None = None, clean_tmp: bool = False) -> None:
+    if clean_tmp:
+        _clean_tmp()
     if agent:
         _refresh_list, changed = run_refresh_sources()
         if changed:
@@ -485,6 +511,261 @@ def run_clear_stale_flags(dry_run: bool = False) -> None:
     print(f"{label} revalidation flags from {len(cleared)} note(s)")
     for path in cleared:
         print(f"  - {path}")
+
+
+# ---------------------------------------------------------------------------
+# New command runners (ported from agkb)
+# ---------------------------------------------------------------------------
+
+
+def cmd_claim_map(concept: str, output: str = "stdout") -> None:
+    """Generate a Mermaid argument-map diagram for a concept from claims.json."""
+    import textwrap
+
+    claims_path = ROOT / "data" / "claims.json"
+    if not claims_path.exists():
+        print(f"claims.json not found at {claims_path}")
+        return
+
+    payload = json.loads(claims_path.read_text(encoding="utf-8"))
+    all_claims = payload.get("claims", [])
+    concept_claims = [c for c in all_claims if c.get("concept") == concept]
+
+    if not concept_claims:
+        print(f"No claims found for concept '{concept}'. Check the stem matches claims.json 'concept' field.")
+        return
+
+    def safe_id(text: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9_]", "_", text)
+
+    def trunc(text: str, n: int = 55) -> str:
+        return textwrap.shorten(text, width=n, placeholder="…")
+
+    lines: list[str] = ["graph TD"]
+    concept_node = safe_id(concept)
+    lines.append(f'    {concept_node}["{concept}"]')
+    lines.append("")
+
+    source_ids: set[str] = set()
+    for claim in concept_claims:
+        cid = safe_id(claim["id"])
+        label = trunc(claim.get("text", ""))
+        lines.append(f'    {cid}["{label}"]')
+        lines.append(f"    {concept_node} --> {cid}")
+        for sid in claim.get("source_ids", []):
+            source_ids.add(sid)
+            src_node = safe_id(sid)
+            lines.append(f"    {cid} --> {src_node}")
+    lines.append("")
+
+    for sid in sorted(source_ids):
+        src_node = safe_id(sid)
+        lines.append(f'    {src_node}(["{sid}"])')
+
+    diagram = "\n".join(lines)
+
+    if output == "stdout":
+        print(diagram)
+    else:
+        out_path = ROOT / "outputs" / f"{concept}_argument_map.mermaid"
+        ensure_dir(out_path.parent)
+        out_path.write_text(diagram + "\n", encoding="utf-8")
+        print(f"Argument map written to {out_path.relative_to(ROOT)}")
+
+
+def run_suggest_links(
+    approach: str = "all",
+    min_co_cite: int = 2,
+    min_shared: int = 2,
+    emb_threshold: float = 0.75,
+    min_gravity: float = 0.5,
+    min_jaccard: float = 0.25,
+    min_triadic: int = 2,
+    ev_top_frac: float = 0.33,
+    min_friction: float = 0.15,
+    limit: int = 50,
+    fmt: str = "json",
+    output: str | None = None,
+) -> None:
+    try:
+        from kb_suggest_links import run_suggest_links as _suggest
+    except ImportError:
+        raise SystemExit("kb_suggest_links.py not found — install it or copy from agkb/scripts/.")
+
+    data = _suggest(
+        approach=approach,
+        min_co_cite=min_co_cite,
+        min_shared=min_shared,
+        emb_threshold=emb_threshold,
+        min_gravity=min_gravity,
+        min_jaccard=min_jaccard,
+        min_triadic=min_triadic,
+        ev_top_frac=ev_top_frac,
+        min_friction=min_friction,
+        limit=limit,
+    )
+
+    if output:
+        out_path = Path(output).resolve()
+        ensure_dir(out_path.parent)
+        out_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"Suggestions written to {out_path} ({data['total_candidates']} candidates)")
+        return
+
+    if fmt == "json":
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return
+
+    if not data["candidates"]:
+        print("No new link candidates found.")
+        return
+    for c in data["candidates"]:
+        stars = "*" * c["signals"]
+        print(f"{stars} {c['concept_a']}  <->  {c['concept_b']}")
+        for reason in c["reasons"]:
+            print(f"    {reason}")
+        print(f"    Add to {c['concept_a']}: {c['wikilink_in_a']}")
+        print(f"    Add to {c['concept_b']}: {c['wikilink_in_b']}")
+
+
+def run_migrate_source_fields(dry_run: bool = False) -> None:
+    """Batch-derive source_kind and ingested_at for source notes missing them, using data/registry.json."""
+    registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
+    reg_by_id = {item["id"]: item for item in registry}
+
+    FRONT_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+    fixed = 0
+    skipped = 0
+    for path in sorted(CONFIG.summaries_dir.rglob("src-*.md")):
+        text = path.read_text(encoding="utf-8")
+        fm_match = FRONT_RE.match(text)
+        if not fm_match:
+            continue
+        fm_block = fm_match.group(1)
+        body = text[fm_match.end():]
+
+        sid_m = re.search(r"^source_id:\s*(\S+)", fm_block, re.MULTILINE)
+        if not sid_m:
+            continue
+        sid = sid_m.group(1).strip('"\'')
+        reg = reg_by_id.get(sid)
+        if not reg:
+            continue
+
+        changed = False
+        if not re.search(r"^source_kind:", fm_block, re.MULTILINE):
+            raw_kind = reg.get("kind", "")
+            fm_block += f"\nsource_kind: {raw_kind}"
+            changed = True
+        if not re.search(r"^ingested_at:", fm_block, re.MULTILINE):
+            ingested_at = reg.get("ingested_at", "")
+            if ingested_at:
+                fm_block += f"\ningested_at: \"{ingested_at}\""
+                changed = True
+        existing_url_m = re.search(r'^source_url:\s*"?([^"\n]*)"?', fm_block, re.MULTILINE)
+        has_nonempty_url = existing_url_m and existing_url_m.group(1).strip()
+        if not has_nonempty_url:
+            source_url = reg.get("source", "")
+            if source_url:
+                if existing_url_m:
+                    fm_block = fm_block[:existing_url_m.start()] + f'source_url: "{source_url}"' + fm_block[existing_url_m.end():]
+                else:
+                    fm_block += f"\nsource_url: \"{source_url}\""
+                changed = True
+        if not re.search(r"^title:", fm_block, re.MULTILINE):
+            title_guess = reg.get("title_guess", "")
+            if title_guess:
+                fm_block += f"\ntitle: \"{title_guess}\""
+                changed = True
+
+        if changed:
+            new_text = f"---\n{fm_block}\n---\n{body}"
+            if not dry_run:
+                path.write_text(new_text, encoding="utf-8")
+            fixed += 1
+        else:
+            skipped += 1
+
+    label = "would fix" if dry_run else "fixed"
+    print(f"migrate-source-fields: {label} {fixed} source note(s), {skipped} already complete")
+
+
+def run_normalize_frontmatter_cmd(dry_run: bool = False) -> None:
+    try:
+        from normalize_frontmatter import run_normalize_frontmatter
+        run_normalize_frontmatter(dry_run=dry_run)
+    except ImportError:
+        raise SystemExit("normalize_frontmatter.py not found — install it or copy from agkb/scripts/.")
+
+
+def run_fetch_queue(fmt: str = "text") -> None:
+    queue_path = ROOT / "data" / "fetch_queue.json"
+    if not queue_path.exists():
+        print("data/fetch_queue.json not found. Run: touch data/fetch_queue.json")
+        return
+    data = json.loads(queue_path.read_text(encoding="utf-8"))
+    blocked = data.get("blocked", [])
+    if fmt == "json":
+        print(json.dumps(blocked, indent=2, ensure_ascii=False))
+        return
+    print(f"Fetch queue: {len(blocked)} blocked URL(s)")
+    for item in blocked:
+        priority = item.get("priority", "?")
+        lb = " [LOAD-BEARING]" if item.get("load_bearing") else ""
+        print(f"  [{priority}]{lb} {item.get('source_id','?')} — {item.get('failure_mode','?')} — {item.get('workaround','?')}")
+        if item.get("notes"):
+            print(f"          {item['notes']}")
+
+
+def run_generate_source_registry(output: str | None = None) -> None:
+    registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
+    TITLE_RE = re.compile(r'^title:\s*["\'](.+?)["\']', re.MULTILINE)
+    rows = []
+    for item in registry:
+        sid = item.get("id", "")
+        source = item.get("source", "")
+        kind = item.get("kind", "")
+        notes_path = item.get("notes_path", "")
+        title = item.get("title_guess", sid)
+        if notes_path:
+            npath = ROOT / notes_path
+            if npath.exists():
+                m = TITLE_RE.search(npath.read_text(encoding="utf-8"))
+                if m:
+                    title = m.group(1)
+        rows.append((sid, kind, title, source, notes_path))
+    rows.sort(key=lambda x: x[0])
+    lines = [
+        '---',
+        'title: "Source Registry"',
+        'type: index',
+        'tags:',
+        '  - kb/index',
+        '---',
+        '# Source Registry',
+        '',
+        f'Flat lookup: source_id -> title, kind, origin. {len(rows)} sources.',
+        '',
+        '| source_id | kind | title | origin |',
+        '|-----------|------|-------|--------|',
+    ]
+    for sid, kind, title, source, notes_path in rows:
+        short_title = (title[:55] + '...') if len(title) > 55 else title
+        short_source = (source[:55] + '...') if len(source) > 55 else source
+        short_title = short_title.replace('|', '-')
+        short_source = short_source.replace('|', '-')
+        if notes_path:
+            rel = notes_path.replace('notes/Sources/', '').replace('.md', '')
+            sid_link = f'[[Sources/{rel}|{sid}]]'
+        else:
+            sid_link = sid
+        lines.append(f'| {sid_link} | {kind} | {short_title} | {short_source} |')
+    content = '\n'.join(lines) + '\n'
+    out_path = Path(output).resolve() if output else ROOT / 'notes' / 'Indexes' / 'Source_Registry.md'
+    ensure_dir(out_path.parent)
+    out_path.write_text(content, encoding='utf-8')
+    print(f"Wrote {len(rows)} sources to {out_path.relative_to(ROOT)}")
 
 
 # ---------------------------------------------------------------------------

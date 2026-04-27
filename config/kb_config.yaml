@@ -6,6 +6,7 @@ research_dir: research
 home_note: notes/Home.md
 todo_note: notes/TODO.md
 concepts_dir: notes/Concepts
+indexes_dir: notes/Indexes
 summaries_dir: notes/Sources
 answers_dir: notes/Answers
 attachments_dir: notes/Attachments
