@@ -18,17 +18,34 @@ This skill covers the **agent-driven** step that follows: reading the normalized
 - `data/raw/<id>/metadata.json` — source metadata (URL, type, timestamps)
 - Existing `notes/Sources/<id>.md` if a prior summary exists
 
-## Steps
-1. Identify source folders in `data/raw/` that are missing or have stale `notes/Sources/<id>.md` files.
-2. For each source, determine its type, topic, and likely importance.
-3. Draft or update `notes/Sources/<id>.md` with the required output shape below.
-4. Extract candidate concepts, entities, claims, and open questions.
-5. Flag sources with weak extraction quality or missing content for manual repair.
+## Output contract
+- Update only the source notes that need to change.
+- Preserve provenance and uncertainty explicitly.
+- Flag weak or incomplete captures instead of smoothing them over.
 
-## Output shape for each source summary
-- Title and source ID
-- What the source is and where it came from
-- Key claims with evidence quotes or references
-- Candidate concepts to promote into `notes/Concepts/`
-- Open questions and reliability notes
-- `evidence_strength` frontmatter (`primary-doc`, `secondary`, `strong`, `stub`, `image-only`)
+## Required note shape
+
+Frontmatter (all fields mandatory per `config/schema.yaml`):
+- `source_id` (canonical `src-[0-9a-f]{10}`)
+- `title`
+- `source_url`
+- `source_kind` (`web-page` | `github-repo` | `pdf` | `imported_model_report` | `imported_model_report_citation` | `other`)
+- `evidence_strength`
+- `ingested_at` (ISO-8601 date)
+- `tags` (include `kb/source`)
+
+Sections (in this order, all required):
+- `## Summary`
+- `## What this source is`
+- `## Key claims`
+- `## Important evidence / details`
+- `## Candidate concepts`
+- `## Open questions`
+- `## Reliability notes`
+- `## Related Concepts`
+- `## Backlinks`
+
+## Safe behavior
+- Prefer updating an existing note over creating a duplicate.
+- Keep the summary anchored in the raw capture and registry metadata.
+- If the source is too thin, use `stub` or `citation-only` rather than inventing detail.

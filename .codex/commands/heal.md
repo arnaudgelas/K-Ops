@@ -14,6 +14,14 @@ Read this section before touching any file.
 - Do not touch `data/raw/` — those files are immutable.
 - Do not run more than one pass over each directory.
 
+## Repair order
+
+1. Fix broken wikilinks.
+2. Add missing required sections as empty scaffolds.
+3. Add missing frontmatter fields with safe defaults.
+4. Record revalidation-required pages in `notes/TODO.md`.
+5. On source notes, add `evidence_strength` and `source_id` before anything else.
+
 If you are uncertain whether a fix is safe, record it in `notes/TODO.md` instead of making it.
 
 ---
@@ -27,7 +35,8 @@ Make exactly one pass over `notes/Concepts/` and one pass over `notes/Sources/`.
 For each concept page, check and fix in this order:
 
 1. **Broken wikilinks** — `[[Target]]` where `Target` does not exist as a vault file.
-   → Fix the path if you can determine the correct target. Remove the link if the target is genuinely gone. Do not guess.
+   → Fix the path if you can determine the correct target (e.g. spaces/hyphens → underscores, add `Concepts/` prefix).
+   → If the target cannot be resolved: convert `[[Target]]` to plain text `Target` and add `_Concept not yet created: Target_` to the `## Open Questions` section. Never silently delete concept vocabulary.
 
 2. **Missing required sections** — a concept page must have: `## What It Is`, `## Key Claims`, `## Evidence / Source Basis`.
    → If a section is missing, add an empty scaffold with a `<!-- TODO: populate -->` comment. Do not populate content.
@@ -36,7 +45,7 @@ For each concept page, check and fix in this order:
    → Add `## Open Questions` with a `<!-- TODO: document the contradiction between sources -->` comment.
 
 4. **Missing required frontmatter fields** — `title`, `type`, `claim_quality`, `tags`.
-   → Add missing fields with safe defaults: `claim_quality: unknown`, `type: concept`.
+   → Add missing fields with safe defaults: `claim_quality: provisional`, `type: concept`. Never use `claim_quality: unknown` — it is not a valid value.
 
 5. **Revalidation flag** — `revalidation_required: true` in frontmatter.
    → Do not remove this flag. Record the page path in `notes/TODO.md` under a "Revalidation Required" heading so a human can review it.

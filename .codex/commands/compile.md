@@ -39,24 +39,37 @@ For each source_id in `to_summarize`:
 ```markdown
 ---
 title: "<Descriptive title of the source>"
-type: source
+type: source-summary
 source_id: <source_id>
-evidence_strength: <value>
+source_url: "<source url or file path>"
 source_kind: <value>
+evidence_strength: <value>
 tags:
   - kb/source
 ---
 
-## Summary
+## What this source is
 
-<2–4 sentence digest of what this source says and why it matters.>
+<2-4 sentence digest of what this source says and why it matters.>
 
-## Key Findings
+## Key claims
 
 - <Atomic finding 1>
 - <Atomic finding 2>
 
-## Limitations
+## Important evidence / details
+
+- <Methodology, provenance, or limitations>
+
+## Candidate concepts
+
+- <Concept candidates>
+
+## Open questions
+
+- <Gaps or contradictions>
+
+## Reliability notes
 
 <What this source does not cover, its methodology weaknesses, or why it might be wrong.>
 ```
@@ -108,7 +121,7 @@ tags:
 ```
 
 `claim_quality` — pick exactly one:
-`supported` | `provisional` | `conflicting` | `unknown`
+`supported` | `provisional` | `weak` | `conflicting` | `stale`
 
 **Inline citation rule**: every bullet in `## Key Claims` that makes a factual claim must end with at least one `([[Sources/<source_id>|<source_id>]])`. If you cannot identify a supporting source, mark the claim `(unverified)` and set `claim_quality: provisional`.
 
@@ -129,7 +142,6 @@ tags:
 - Do not delete or wholesale-replace existing concept page content.
 - Do not invent claims not grounded in a source you actually read.
 - Do not create duplicate concept pages for themes already in the vault.
-- Do not set `claim_quality: weak` or `claim_quality: stale` — these are not valid values.
 - Do not read more than 15 existing concept pages in a single run.
 
 ---

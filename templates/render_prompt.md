@@ -13,6 +13,7 @@ Rules:
 - Do not add claims not supported by the vault.
 - Prefer concise, reusable output structures.
 - If the prompt asks for slides, create a markdown slide outline rather than a binary deck.
+- Include a compact source map when it helps the output stay auditable.
 
 When done:
 - Print created files.

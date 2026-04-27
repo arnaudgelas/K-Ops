@@ -4,6 +4,9 @@ Question: the user's question
 
 Answer file: a timestamped file under notes/Answers/
 
+Web fetch policy:
+- disabled
+
 ---
 
 ## Idempotency guard
@@ -24,6 +27,7 @@ Work through these steps in order. Stop reading when you have enough to answer c
 6. Stop after reading at most 10 concept pages total. If the question is unanswerable within that budget, say so and explain what is missing.
 
 Do not scan `notes/Sources/` or `notes/Answers/` exhaustively. Follow evidence links from concept pages.
+If web fetch policy is disabled, do not browse the web.
 
 ---
 
