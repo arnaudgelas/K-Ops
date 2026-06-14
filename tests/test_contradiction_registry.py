@@ -1,11 +1,11 @@
 """Tests for contradiction_registry.py."""
+
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -28,9 +28,8 @@ def _write_concept(
     body: str = "",
 ) -> None:
     text = (
-        f"---\ntitle: \"{stem}\"\ntype: concept\nclaim_quality: {claim_quality}\n"
-        "tags:\n  - kb/concept\n---\n"
-        + (body or "## What It Is\n\nSomething.\n")
+        f'---\ntitle: "{stem}"\ntype: concept\nclaim_quality: {claim_quality}\n'
+        "tags:\n  - kb/concept\n---\n" + (body or "## What It Is\n\nSomething.\n")
     )
     (dirs["concepts"] / f"{stem}.md").write_text(text, encoding="utf-8")
 
@@ -56,6 +55,7 @@ def _patch_cr(cr_mod, dirs: dict) -> None:
 
 def test_empty_vault_returns_empty(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
     result = cr.extract_all_contradictions()
@@ -64,6 +64,7 @@ def test_empty_vault_returns_empty(tmp_path):
 
 def test_non_conflicting_concept_excluded(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
     _write_concept(dirs, "SupportedPage", "supported")
@@ -73,6 +74,7 @@ def test_non_conflicting_concept_excluded(tmp_path):
 
 def test_conflicting_with_oq_produces_one_record_per_bullet(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
     body = (
@@ -92,6 +94,7 @@ def test_conflicting_with_oq_produces_one_record_per_bullet(tmp_path):
 
 def test_conflicting_without_oq_produces_undocumented_record(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
     body = "## Key Claims\n\n- A claim.\n"
@@ -104,6 +107,7 @@ def test_conflicting_without_oq_produces_undocumented_record(tmp_path):
 
 def test_stable_id_is_deterministic(tmp_path):
     import contradiction_registry as cr
+
     id1 = cr.contradiction_stable_id("ConceptA", "Source X disagrees with Y")
     id2 = cr.contradiction_stable_id("ConceptA", "Source X disagrees with Y")
     assert id1 == id2
@@ -113,6 +117,7 @@ def test_stable_id_is_deterministic(tmp_path):
 
 def test_different_oq_bullets_produce_different_ids(tmp_path):
     import contradiction_registry as cr
+
     id1 = cr.contradiction_stable_id("Concept", "Bullet one")
     id2 = cr.contradiction_stable_id("Concept", "Bullet two")
     assert id1 != id2
@@ -120,6 +125,7 @@ def test_different_oq_bullets_produce_different_ids(tmp_path):
 
 def test_source_ids_linked_from_evidence_section(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
     body = (
@@ -135,12 +141,23 @@ def test_source_ids_linked_from_evidence_section(tmp_path):
 
 def test_claim_ids_linked_from_claims_json(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
-    _write_claims_json(dirs, [
-        {"id": "clm-abc1234567", "concept": "ClaimConcept", "text": "A claim.", "claim_quality": "conflicting",
-         "source_ids": [], "claim_index": 1, "last_updated": ""},
-    ])
+    _write_claims_json(
+        dirs,
+        [
+            {
+                "id": "clm-abc1234567",
+                "concept": "ClaimConcept",
+                "text": "A claim.",
+                "claim_quality": "conflicting",
+                "source_ids": [],
+                "claim_index": 1,
+                "last_updated": "",
+            },
+        ],
+    )
     body = "## Key Claims\n\n- A claim.\n\n## Open Questions\n\n- Disagreement here.\n"
     _write_concept(dirs, "ClaimConcept", "conflicting", body=body)
     result = cr.extract_all_contradictions()
@@ -149,6 +166,7 @@ def test_claim_ids_linked_from_claims_json(tmp_path):
 
 def test_run_writes_contradictions_json(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
     body = "## Key Claims\n\n- A claim.\n\n## Open Questions\n\n- A disputes B.\n"
@@ -163,6 +181,7 @@ def test_run_writes_contradictions_json(tmp_path):
 
 def test_run_is_idempotent(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
     _write_concept(dirs, "C", "conflicting", body="## Open Questions\n\n- A vs B.\n")
@@ -175,6 +194,7 @@ def test_run_is_idempotent(tmp_path):
 
 def test_load_contradictions_falls_back_to_extract(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
     _write_concept(dirs, "D", "conflicting", body="## Open Questions\n\n- Something.\n")
@@ -185,9 +205,20 @@ def test_load_contradictions_falls_back_to_extract(tmp_path):
 
 def test_search_matches_by_keyword(tmp_path):
     import contradiction_registry as cr
+
     recs = [
-        {"id": "ctr-a", "concept": "FooBar", "open_question": "Source A and B disagree on timelines", "documented": True},
-        {"id": "ctr-b", "concept": "BazQux", "open_question": "Methodology differs", "documented": True},
+        {
+            "id": "ctr-a",
+            "concept": "FooBar",
+            "open_question": "Source A and B disagree on timelines",
+            "documented": True,
+        },
+        {
+            "id": "ctr-b",
+            "concept": "BazQux",
+            "open_question": "Methodology differs",
+            "documented": True,
+        },
     ]
     results = cr.search_contradictions(recs, "timeline")
     assert len(results) == 1
@@ -196,6 +227,7 @@ def test_search_matches_by_keyword(tmp_path):
 
 def test_search_empty_query_returns_all(tmp_path):
     import contradiction_registry as cr
+
     recs = [
         {"id": "ctr-a", "concept": "X", "open_question": "something", "documented": True},
         {"id": "ctr-b", "concept": "Y", "open_question": "other", "documented": True},
@@ -206,6 +238,7 @@ def test_search_empty_query_returns_all(tmp_path):
 
 def test_undocumented_count_in_run_output(tmp_path):
     import contradiction_registry as cr
+
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
     # One documented, one undocumented

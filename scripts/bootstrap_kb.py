@@ -11,7 +11,6 @@ from utils import ensure_dir, slugify
 
 ROOT = Path(__file__).resolve().parent.parent
 MACHINERY_DIRS = ("scripts", "templates", "skills")
-AGENT_RUNTIME_DIRS = (".claude", ".gemini", ".codex")
 GITIGNORE_SOURCE = ROOT / ".gitignore"
 
 
@@ -22,8 +21,9 @@ def pretty_name(project_name: str) -> str:
 
 def render_readme(project_name: str) -> str:
     title = pretty_name(project_name)
-    return textwrap.dedent(
-        f"""\
+    return (
+        textwrap.dedent(
+            f"""\
         # {title}
 
         `{project_name}` is a blank, agent-first Markdown knowledge base starter.
@@ -50,16 +50,20 @@ def render_readme(project_name: str) -> str:
         ## Starter Notes
 
         - `notes/Home.md` is the Obsidian entry point.
+        - `notes/Indexes/` contains dashboards and map pages.
         - `notes/TODO.md` tracks follow-up work.
         - `notes/Runbooks/Agent_Workflow_Quick_Reference.md` summarizes the repo commands.
-        - `notes/_Templates/` contains note templates for source summaries and concept pages.
+        - `notes/_Templates/` contains note templates for source summaries, concept pages, indexes, dashboards, and answers.
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
 
 
 def render_agents() -> str:
-    return textwrap.dedent(
-        """\
+    return (
+        textwrap.dedent(
+            """\
         # AGENTS.md
 
         This repo is designed for agentic CLI workflows.
@@ -85,6 +89,7 @@ def render_agents() -> str:
         - `data/raw/` holds source evidence
         - `notes/Sources/` holds per-source summaries
         - `notes/Concepts/` holds durable knowledge pages
+        - `notes/Indexes/` holds dashboards and map pages
         - `notes/Answers/` holds generated answer memos
         - `notes/Home.md` is the Obsidian entry point
         - `notes/TODO.md` tracks gaps and healing tasks
@@ -95,19 +100,16 @@ def render_agents() -> str:
         - Prefer precise edits over broad rewrites.
         - Preserve provenance from source summaries into concept pages.
         - When uncertain, mark uncertainty explicitly.
-
-        ## Codex-Specific Notes
-        - Use `uv run python scripts/install_agent_assets.py` to sync canonical skills/templates to the Codex runtime directory.
-        - Use `uv run python scripts/kb.py validate` to confirm config loads before running workflows.
-        - Prefer `uv run python scripts/kb.py compile --agent codex` when you want Codex to do the compilation pass.
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
 
 
 def render_claude(project_name: str) -> str:
-    title = pretty_name(project_name)
-    return textwrap.dedent(
-        f"""\
+    return (
+        textwrap.dedent(
+            """\
         # CLAUDE.md
 
         This repository is a starter Obsidian-aligned living research vault. The same operating contract should work whether the active CLI is Claude Code, Codex CLI, or Gemini CLI.
@@ -154,13 +156,15 @@ def render_claude(project_name: str) -> str:
         - Keep note filenames stable and human-readable.
         - Prefer frontmatter on durable notes so properties remain queryable in Obsidian.
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
 
 
 def render_home(project_name: str) -> str:
-    title = pretty_name(project_name)
-    return textwrap.dedent(
-        f"""\
+    return (
+        textwrap.dedent(
+            """\
         ---
         title: "Home"
         type: home
@@ -169,30 +173,26 @@ def render_home(project_name: str) -> str:
         ---
         # Home
 
-        ## Scope
-
-        `{title}` starts empty. Add sources, compile summaries, and let the vault grow from there.
-
         ## Start Here
 
-        - Read `notes/Runbooks/Agent_Workflow_Quick_Reference.md`
-        - Add your first source list
-        - Run `uv run python scripts/kb.py ingest --input <file>`
-        - Compile with `uv run python scripts/kb.py compile --agent codex`
-
-        ## Maintenance
-
+        - [[Indexes/Vault_Dashboard|Vault Dashboard]]
+        - [[Indexes/Workflow_Atlas|Workflow Atlas]]
+        - [[Indexes/Topic_Atlas|Topic Atlas]]
+        - [[Runbooks/Agent_Workflow_Quick_Reference|Agent Workflow Quick Reference]]
         - [[TODO|TODO]]
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
 
 
 def render_todo() -> str:
-    return textwrap.dedent(
-        """\
+    return (
+        textwrap.dedent(
+            """\
         ---
         title: "TODO"
-        type: note
+        type: maintenance
         tags:
           - kb/todo
         ---
@@ -205,12 +205,144 @@ def render_todo() -> str:
         - Compile the first concept pages.
         - Replace these placeholder tasks with project-specific follow-ups.
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
+
+
+def render_answer_template() -> str:
+    return (
+        textwrap.dedent(
+            """\
+        ---
+        title: "{{title}}"
+        asked_at: "{{asked_at}}"
+        type: answer
+        scope: private
+        answer_quality: memo-only
+        query_class: synthesis
+        sources_consulted: []
+        retrieval_path: []
+        fetch_required: false
+        tags:
+          - kb/answer
+        ---
+
+        # Question
+
+        {{question}}
+
+        ---
+
+        # Answer
+
+        __ANSWER_PENDING__
+
+        ## Vault Updates
+
+        - None.
+        """
+        ).strip()
+        + "\n"
+    )
+
+
+def render_answer_with_provenance_template() -> str:
+    return (
+        textwrap.dedent(
+            """\
+        ---
+        title: "{{title}}"
+        asked_at: "{{asked_at}}"
+        type: answer
+        scope: private
+        answer_quality: memo-only
+        query_class: synthesis
+        sources_consulted: []
+        retrieval_path:
+          - method: exact
+            layer: concept
+            query: "{{question}}"
+            results_count: 0
+        fetch_required: false
+        tags:
+          - kb/answer
+        ---
+
+        # Question
+
+        {{question}}
+
+        ---
+
+        # Answer
+
+        __ANSWER_PENDING__
+
+        ## Vault Updates
+
+        - None.
+        """
+        ).strip()
+        + "\n"
+    )
+
+
+def render_index_template() -> str:
+    return (
+        textwrap.dedent(
+            """\
+        ---
+        title: "{{title}}"
+        type: index
+        tags:
+          - kb/index
+        ---
+        # {{title}}
+
+        ## What It Is
+
+        ## Links
+
+        ## Related Notes
+
+        ## Backlinks
+        """
+        ).strip()
+        + "\n"
+    )
+
+
+def render_dashboard_template() -> str:
+    return (
+        textwrap.dedent(
+            """\
+        ---
+        title: "{{title}}"
+        type: index
+        tags:
+          - kb/index
+          - kb/dashboard
+        ---
+        # {{title}}
+
+        ## What It Is
+
+        ## Dashboard
+
+        ## Related Notes
+
+        ## Backlinks
+        """
+        ).strip()
+        + "\n"
+    )
 
 
 def render_runbook() -> str:
-    return textwrap.dedent(
-        """\
+    return (
+        textwrap.dedent(
+            """\
         ---
         title: "Agent Workflow Quick Reference"
         type: maintenance
@@ -250,12 +382,15 @@ def render_runbook() -> str:
         - Keep `notes/Home.md` as the main navigation entry point.
         - Use `notes/_Templates/` for note templates, not for source evidence.
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
 
 
 def render_source_template() -> str:
-    return textwrap.dedent(
-        """\
+    return (
+        textwrap.dedent(
+            """\
         ---
         title: "{{title}}"
         type: source-summary
@@ -277,12 +412,15 @@ def render_source_template() -> str:
 
         ## Backlinks
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
 
 
 def render_concept_template() -> str:
-    return textwrap.dedent(
-        """\
+    return (
+        textwrap.dedent(
+            """\
         ---
         title: "{{title}}"
         type: concept
@@ -307,12 +445,15 @@ def render_concept_template() -> str:
 
         ## Backlinks
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
 
 
 def render_readme_example() -> str:
-    return textwrap.dedent(
-        """\
+    return (
+        textwrap.dedent(
+            """\
         # Sample Note
 
         This is a local note that can be ingested like any other source.
@@ -320,13 +461,17 @@ def render_readme_example() -> str:
         - A living wiki is more inspectable than an opaque retrieval index.
         - Durable answers should be filed back into the knowledge base.
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
 
 
 def copy_dir(source: Path, target: Path) -> None:
     if not source.exists():
         return
-    shutil.copytree(source, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    shutil.copytree(
+        source, target, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
+    )
 
 
 def create_obsidian_files(target_root: Path) -> None:
@@ -390,7 +535,9 @@ def create_obsidian_files(target_root: Path) -> None:
         + "\n",
         encoding="utf-8",
     )
-    (obsidian_dir / "templates.json").write_text('{ "folder": "notes/_Templates" }\n', encoding="utf-8")
+    (obsidian_dir / "templates.json").write_text(
+        '{ "folder": "notes/_Templates" }\n', encoding="utf-8"
+    )
     (obsidian_dir / "workspace.json").write_text("{}\n", encoding="utf-8")
 
 
@@ -400,8 +547,9 @@ def create_gitignore(target_root: Path) -> None:
 
 
 def create_pyproject(target_root: Path, project_name: str) -> None:
-    pyproject = textwrap.dedent(
-        f"""\
+    pyproject = (
+        textwrap.dedent(
+            f"""\
         [project]
         name = "{project_name}"
         version = "0.1.0"
@@ -423,15 +571,18 @@ def create_pyproject(target_root: Path, project_name: str) -> None:
         [tool.uv]
         package = false
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
     (target_root / "pyproject.toml").write_text(pyproject, encoding="utf-8")
 
 
 def create_config(target_root: Path, project_name: str) -> None:
     config_dir = target_root / "config"
     ensure_dir(config_dir)
-    config_text = textwrap.dedent(
-        f"""\
+    config_text = (
+        textwrap.dedent(
+            f"""\
         project_name: {project_name}
         raw_dir: data/raw
         registry_path: data/registry.json
@@ -439,6 +590,7 @@ def create_config(target_root: Path, project_name: str) -> None:
         home_note: notes/Home.md
         todo_note: notes/TODO.md
         concepts_dir: notes/Concepts
+        indexes_dir: notes/Indexes
         summaries_dir: notes/Sources
         answers_dir: notes/Answers
         attachments_dir: notes/Attachments
@@ -447,7 +599,9 @@ def create_config(target_root: Path, project_name: str) -> None:
         file_answer_back_into_vault: true
         use_obsidian_wikilinks: true
         """
-    ).strip() + "\n"
+        ).strip()
+        + "\n"
+    )
     (config_dir / "kb_config.yaml").write_text(config_text, encoding="utf-8")
 
 
@@ -457,22 +611,54 @@ def create_data_layout(target_root: Path) -> None:
     ensure_dir(raw_dir)
     (data_dir / "registry.json").write_text("[]\n", encoding="utf-8")
     (raw_dir / ".gitkeep").write_text("", encoding="utf-8")
+    ensure_dir(target_root / "research")
+    (target_root / "research" / ".gitkeep").write_text("", encoding="utf-8")
+    ensure_dir(target_root / "outputs")
+    (target_root / "outputs" / ".gitkeep").write_text("", encoding="utf-8")
 
 
 def create_notes_layout(target_root: Path, project_name: str) -> None:
     notes_dir = target_root / "notes"
     ensure_dir(notes_dir)
-    for subdir in ("Concepts", "Sources", "Answers", "Attachments", "Runbooks", "_Archive", "_Templates"):
+    for subdir in (
+        "Concepts",
+        "Indexes",
+        "Sources",
+        "Answers",
+        "Attachments",
+        "Runbooks",
+        "_Archive",
+        "_Templates",
+    ):
         ensure_dir(notes_dir / subdir)
 
     (notes_dir / "Home.md").write_text(render_home(project_name), encoding="utf-8")
     (notes_dir / "TODO.md").write_text(render_todo(), encoding="utf-8")
-    (notes_dir / "Runbooks" / "Agent_Workflow_Quick_Reference.md").write_text(render_runbook(), encoding="utf-8")
-    (notes_dir / "_Templates" / "Source_Summary.md").write_text(render_source_template(), encoding="utf-8")
-    (notes_dir / "_Templates" / "Concept_Note.md").write_text(render_concept_template(), encoding="utf-8")
+    (notes_dir / "Runbooks" / "Agent_Workflow_Quick_Reference.md").write_text(
+        render_runbook(), encoding="utf-8"
+    )
+    (notes_dir / "_Templates" / "Source_Summary.md").write_text(
+        render_source_template(), encoding="utf-8"
+    )
+    (notes_dir / "_Templates" / "Concept_Note.md").write_text(
+        render_concept_template(), encoding="utf-8"
+    )
+    (notes_dir / "_Templates" / "Index_Note.md").write_text(
+        render_index_template(), encoding="utf-8"
+    )
+    (notes_dir / "_Templates" / "Dashboard_Note.md").write_text(
+        render_dashboard_template(), encoding="utf-8"
+    )
+    (notes_dir / "_Templates" / "Answer_Note.md").write_text(
+        render_answer_template(), encoding="utf-8"
+    )
+    (notes_dir / "_Templates" / "Answer_With_Provenance.md").write_text(
+        render_answer_with_provenance_template(), encoding="utf-8"
+    )
 
     for path in (
         notes_dir / "Concepts" / ".gitkeep",
+        notes_dir / "Indexes" / ".gitkeep",
         notes_dir / "Sources" / ".gitkeep",
         notes_dir / "Answers" / ".gitkeep",
         notes_dir / "Attachments" / ".gitkeep",
@@ -498,7 +684,9 @@ def create_examples(target_root: Path) -> None:
     )
 
 
-def bootstrap(target: Path, project_name: str | None = None, with_examples: bool = False, force: bool = False) -> None:
+def bootstrap(
+    target: Path, project_name: str | None = None, with_examples: bool = False, force: bool = False
+) -> None:
     if target.exists() and any(target.iterdir()) and not force:
         raise SystemExit(f"Target directory already exists and is not empty: {target}")
     ensure_dir(target)
@@ -507,13 +695,6 @@ def bootstrap(target: Path, project_name: str | None = None, with_examples: bool
 
     for directory in MACHINERY_DIRS:
         copy_dir(ROOT / directory, target / directory)
-
-    # Copy agent runtime configs so the bootstrapped vault is immediately usable
-    # with Claude Code, Gemini CLI, and Codex CLI without running install-agent-assets.
-    for directory in AGENT_RUNTIME_DIRS:
-        src = ROOT / directory
-        if src.exists():
-            copy_dir(src, target / directory)
 
     create_gitignore(target)
     create_pyproject(target, project)
@@ -530,15 +711,31 @@ def bootstrap(target: Path, project_name: str | None = None, with_examples: bool
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create a blank starter knowledge-base repository.")
-    parser.add_argument("--target", required=True, help="Directory to create for the new starter vault.")
-    parser.add_argument("--project-name", help="Optional project name to write into config and metadata.")
-    parser.add_argument("--with-examples", action="store_true", help="Add a small examples/ folder with starter input files.")
-    parser.add_argument("--force", action="store_true", help="Overwrite the starter scaffold even if the target directory already exists.")
+    parser = argparse.ArgumentParser(
+        description="Create a blank starter knowledge-base repository."
+    )
+    parser.add_argument(
+        "--target", required=True, help="Directory to create for the new starter vault."
+    )
+    parser.add_argument(
+        "--project-name", help="Optional project name to write into config and metadata."
+    )
+    parser.add_argument(
+        "--with-examples",
+        action="store_true",
+        help="Add a small examples/ folder with starter input files.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite the starter scaffold even if the target directory already exists.",
+    )
     args = parser.parse_args()
 
     target = Path(args.target).expanduser().resolve()
-    bootstrap(target, project_name=args.project_name, with_examples=args.with_examples, force=args.force)
+    bootstrap(
+        target, project_name=args.project_name, with_examples=args.with_examples, force=args.force
+    )
     print(f"Created starter knowledge base at {target}")
 
 

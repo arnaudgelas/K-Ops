@@ -52,7 +52,9 @@ def export_vault(output_path: Path) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Export the Obsidian vault contents as a zip archive.")
+    parser = argparse.ArgumentParser(
+        description="Export the Obsidian vault contents as a zip archive."
+    )
     parser.add_argument(
         "--output",
         help="Output zip path. Defaults to outputs/<repo>-obsidian-vault-<timestamp>.zip",

@@ -10,13 +10,17 @@ from contradiction_registry import (
     search_contradictions,
 )
 from utils import CONFIG, ROOT, dump_frontmatter, parse_frontmatter
-from vault_scorecard import SCORECARD_PATH, print_summary as print_scorecard_summary, run as run_scorecard_registry
+from vault_scorecard import (
+    SCORECARD_PATH,
+    print_summary as print_scorecard_summary,
+    run as run_scorecard_registry,
+)
 
 
-def run_lint(*, strict: bool = False, fix_backlinks: bool = False) -> None:
+def run_lint(*, strict: bool = False, fix_backlinks: bool = False, check: bool = False) -> None:
     from lint_vault import lint_vault
 
-    lint_vault(strict=strict, fix_backlinks=fix_backlinks)
+    lint_vault(strict=strict, fix_backlinks=fix_backlinks, check=check)
 
 
 def run_validate_config(strict: bool = False) -> None:
@@ -44,20 +48,27 @@ def run_validate_config(strict: bool = False) -> None:
         raise SystemExit(1)
     if strict:
         from kb_schema import run_strict_validation
+
         error_count = run_strict_validation()
         if error_count:
             raise SystemExit(1)
 
 
-def run_extract_claims() -> None:
-    run_claim_registry()
+def run_extract_claims(check: bool = False, dry_run: bool = False) -> None:
+    run_claim_registry(check=check, dry_run=dry_run)
 
 
 def run_claim_search(query: str, limit: int = 20, fmt: str = "text") -> None:
     claims = load_claims()
     results = search_claims(claims, query, limit=limit)
     if fmt == "json":
-        print(json.dumps({"query": query, "count": len(results), "results": results}, indent=2, ensure_ascii=False))
+        print(
+            json.dumps(
+                {"query": query, "count": len(results), "results": results},
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
         return
     if not results:
         print("No matching claims.")
@@ -68,15 +79,21 @@ def run_claim_search(query: str, limit: int = 20, fmt: str = "text") -> None:
             print(f"  sources: {', '.join(item['source_ids'])}")
 
 
-def run_extract_contradictions() -> None:
-    run_contradiction_registry()
+def run_extract_contradictions(check: bool = False, dry_run: bool = False) -> None:
+    run_contradiction_registry(check=check, dry_run=dry_run)
 
 
 def run_contradiction_search(query: str, limit: int = 20, fmt: str = "text") -> None:
     contradictions = load_contradictions()
     results = search_contradictions(contradictions, query, limit=limit)
     if fmt == "json":
-        print(json.dumps({"query": query, "count": len(results), "results": results}, indent=2, ensure_ascii=False))
+        print(
+            json.dumps(
+                {"query": query, "count": len(results), "results": results},
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
         return
     if not results:
         print("No matching contradiction records.")
@@ -91,15 +108,26 @@ def run_contradiction_search(query: str, limit: int = 20, fmt: str = "text") -> 
             print(f"  claims : {', '.join(item['claim_ids'])}")
 
 
-def run_scorecard(output: str | None = None, fmt: str = "text") -> None:
+def run_scorecard(
+    output: str | None = None, fmt: str = "text", check: bool = False, dry_run: bool = False
+) -> None:
     out_path = Path(output).resolve() if output else None
-    scorecard = run_scorecard_registry(output=out_path)
+    scorecard = run_scorecard_registry(
+        output=str(out_path) if out_path else None, check=check, dry_run=dry_run
+    )
     saved_path = out_path or SCORECARD_PATH
     if fmt == "json":
         print(json.dumps(scorecard, indent=2, ensure_ascii=False))
         return
     print_scorecard_summary(scorecard)
-    print(f"Scorecard saved: {saved_path.relative_to(ROOT) if saved_path.is_relative_to(ROOT) else saved_path}")
+    if dry_run:
+        print(
+            f"Scorecard would be saved: {saved_path.relative_to(ROOT) if saved_path.is_relative_to(ROOT) else saved_path}"
+        )
+    else:
+        print(
+            f"Scorecard saved: {saved_path.relative_to(ROOT) if saved_path.is_relative_to(ROOT) else saved_path}"
+        )
 
 
 def run_stale_impact(fmt: str = "text") -> None:
@@ -144,12 +172,23 @@ def run_stale_impact(fmt: str = "text") -> None:
 
 def run_clear_stale_flags(dry_run: bool = False) -> None:
     cleared: list[str] = []
-    scan_paths = list(sorted(CONFIG.concepts_dir.glob("*.md"))) + list(sorted(CONFIG.answers_dir.glob("*.md")))
+    scan_paths = list(sorted(CONFIG.concepts_dir.glob("*.md"))) + list(
+        sorted(CONFIG.answers_dir.glob("*.md"))
+    )
     for page_path in scan_paths:
         text = page_path.read_text(encoding="utf-8")
         frontmatter, body = parse_frontmatter(text)
-        if not frontmatter.pop("revalidation_required", None):
+        if not frontmatter.get("revalidation_required"):
             continue
+
+        # Prevent clearing if there are unresolved coverage gaps
+        if "## Coverage Gaps" in body and "[Unresolved]" in body:
+            print(
+                f"Skipping {page_path.relative_to(ROOT).as_posix()}: contains unresolved coverage gaps. Run compilation and evaluation again to pass and clear them."
+            )
+            continue
+
+        frontmatter.pop("revalidation_required", None)
         if not dry_run:
             page_path.write_text(dump_frontmatter(frontmatter) + body, encoding="utf-8")
         cleared.append(page_path.relative_to(ROOT).as_posix())

@@ -9,8 +9,6 @@ from collections import Counter, deque
 from pathlib import Path
 from typing import Iterable
 
-import yaml
-
 from utils import CONFIG, ROOT, ensure_dir, parse_frontmatter
 
 
@@ -18,7 +16,6 @@ GRAPH_DIR = ROOT / "data" / "graph"
 GRAPH_PATH = GRAPH_DIR / "vault_graph.json"
 RETENTION_REPORT_PATH = GRAPH_DIR / "retention_report.json"
 
-FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
 ANSWER_VAULT_UPDATES_RE = re.compile(r"## Vault Updates\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 RELATED_SECTION_RE = re.compile(r"## Related Concepts\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
@@ -26,9 +23,9 @@ CLAIMS_SECTION_RE = re.compile(r"## Key Claims\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 SOURCE_LINK_RE = re.compile(r"\[\[Sources/(src-[0-9a-f]{10})\|")
 CONCEPT_LINK_RE = re.compile(r"\[\[Concepts/([^|\]]+)")
 GENERIC_LINK_RE = re.compile(r"\[\[((?:Concepts|Sources)/[^|\]]+)")
+INDEX_LINK_RE = re.compile(r"\[\[(Indexes/[^|\]]+)")
 ANSWER_LINK_RE = re.compile(r"\[\[(Answers/[^|\]]+)")
 BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S.*?)\s*$")
-
 
 
 def read_note(path: Path) -> tuple[dict, str]:
@@ -36,7 +33,10 @@ def read_note(path: Path) -> tuple[dict, str]:
 
 
 def file_age_days(path: Path) -> float:
-    return max(0.0, (dt.datetime.now().date() - dt.datetime.fromtimestamp(path.stat().st_mtime).date()).days)
+    return max(
+        0.0,
+        (dt.datetime.now().date() - dt.datetime.fromtimestamp(path.stat().st_mtime).date()).days,
+    )
 
 
 def parse_iso_date(value: str | None) -> dt.datetime | None:
@@ -52,7 +52,9 @@ def parse_iso_date(value: str | None) -> dt.datetime | None:
 def note_kind(path: Path) -> str:
     if path.parent == CONFIG.concepts_dir:
         return "concept"
-    if path.parent == CONFIG.summaries_dir:
+    if path.parent == CONFIG.indexes_dir:
+        return "index"
+    if CONFIG.summaries_dir in path.parents:
         return "source"
     if path.parent == CONFIG.answers_dir:
         return "answer"
@@ -61,7 +63,10 @@ def note_kind(path: Path) -> str:
 
 def note_scope(kind: str, frontmatter: dict) -> str:
     if kind == "answer":
-        return str(frontmatter.get("scope") or ("shared" if frontmatter.get("answer_quality") == "durable" else "private"))
+        return str(
+            frontmatter.get("scope")
+            or ("shared" if frontmatter.get("answer_quality") == "durable" else "private")
+        )
     return "shared"
 
 
@@ -84,6 +89,8 @@ def retention_half_life(kind: str, frontmatter: dict) -> float:
         if strength == "secondary":
             return 180.0
         return 45.0
+    if kind == "index":
+        return 120.0
     quality = str(frontmatter.get("claim_quality") or "")
     if quality == "supported":
         return 365.0
@@ -153,9 +160,15 @@ def base_node(kind: str, stem: str, path: Path, frontmatter: dict, body: str) ->
                 checked_at = None
         age_source = checked_at
     else:
-        age_source = parse_iso_date(str(frontmatter.get("created") or frontmatter.get("updated") or ""))
+        age_source = parse_iso_date(
+            str(frontmatter.get("created") or frontmatter.get("updated") or "")
+        )
 
-    age_days = file_age_days(path) if age_source is None else max(0.0, (dt.datetime.now().date() - age_source.date()).days)
+    age_days = (
+        file_age_days(path)
+        if age_source is None
+        else max(0.0, (dt.datetime.now().date() - age_source.date()).days)
+    )
     half_life = retention_half_life(kind, frontmatter)
     score = retention_score(age_days, half_life)
 
@@ -164,6 +177,9 @@ def base_node(kind: str, stem: str, path: Path, frontmatter: dict, body: str) ->
         scope = note_scope(kind, frontmatter)
     elif kind == "source":
         quality = str(frontmatter.get("evidence_strength") or "")
+        scope = "shared"
+    elif kind == "index":
+        quality = str(frontmatter.get("type") or "index")
         scope = "shared"
     else:
         quality = str(frontmatter.get("claim_quality") or "")
@@ -186,13 +202,25 @@ def base_node(kind: str, stem: str, path: Path, frontmatter: dict, body: str) ->
     }
 
 
-def claim_node(concept_path: Path, concept_frontmatter: dict, concept_body: str, claim_text: str, claim_index: int) -> dict:
+def claim_node(
+    concept_path: Path,
+    concept_frontmatter: dict,
+    concept_body: str,
+    claim_text: str,
+    claim_index: int,
+) -> dict:
     concept_stem = concept_path.stem
     concept_title = str(concept_frontmatter.get("title") or concept_stem)
     claim_id = node_id("claim", f"{concept_stem}-{claim_index:02d}")
     claim_quality = str(concept_frontmatter.get("claim_quality") or "")
-    age_source = parse_iso_date(str(concept_frontmatter.get("created") or concept_frontmatter.get("updated") or ""))
-    age_days = file_age_days(concept_path) if age_source is None else max(0.0, (dt.datetime.now().date() - age_source.date()).days)
+    age_source = parse_iso_date(
+        str(concept_frontmatter.get("created") or concept_frontmatter.get("updated") or "")
+    )
+    age_days = (
+        file_age_days(concept_path)
+        if age_source is None
+        else max(0.0, (dt.datetime.now().date() - age_source.date()).days)
+    )
     half_life = retention_half_life("claim", concept_frontmatter)
     score = retention_score(age_days, half_life)
     claim_title = claim_text[:96].rstrip(" ,;:") or f"{concept_title} claim {claim_index}"
@@ -227,7 +255,13 @@ def extract_section_links(text: str, section_re: re.Pattern[str]) -> list[str]:
 
 
 def extract_any_links(text: str) -> list[str]:
-    return sorted(set(GENERIC_LINK_RE.findall(text) + ANSWER_LINK_RE.findall(text)))
+    return sorted(
+        set(
+            GENERIC_LINK_RE.findall(text)
+            + INDEX_LINK_RE.findall(text)
+            + ANSWER_LINK_RE.findall(text)
+        )
+    )
 
 
 def build_nodes_and_edges() -> dict:
@@ -283,9 +317,13 @@ def build_nodes_and_edges() -> dict:
                         }
                     )
 
-    for path in sorted(CONFIG.summaries_dir.glob("src-*.md")):
+    for path in sorted(CONFIG.summaries_dir.rglob("src-*.md")):
         frontmatter, body = read_note(path)
         add_node("source", path, frontmatter, body)
+
+    for path in sorted(CONFIG.indexes_dir.glob("*.md")):
+        frontmatter, body = read_note(path)
+        add_node("index", path, frontmatter, body)
 
     for path in sorted(CONFIG.answers_dir.glob("*.md")):
         frontmatter, body = read_note(path)
@@ -293,7 +331,9 @@ def build_nodes_and_edges() -> dict:
             continue
         add_node("answer", path, frontmatter, body)
 
-    def add_edge(source: str, target: str, relation: str, section: str, weight: float = 1.0) -> None:
+    def add_edge(
+        source: str, target: str, relation: str, section: str, weight: float = 1.0
+    ) -> None:
         if source == target:
             return
         if source not in node_map or target not in node_map:
@@ -312,12 +352,17 @@ def build_nodes_and_edges() -> dict:
         frontmatter, body = read_note(path)
         source_id = node_id("concept", path.stem)
         for linked_source in extract_section_links(body, EVIDENCE_SECTION_RE):
-            add_edge(source_id, node_id("source", linked_source), "cites_source", "Evidence / Source Basis")
+            add_edge(
+                source_id,
+                node_id("source", linked_source),
+                "cites_source",
+                "Evidence / Source Basis",
+            )
         for related in extract_section_links(body, RELATED_SECTION_RE):
             add_edge(source_id, node_id("concept", related), "related_to", "Related Concepts")
             add_edge(node_id("concept", related), source_id, "related_to", "Related Concepts")
 
-    for path in sorted(CONFIG.summaries_dir.glob("src-*.md")):
+    for path in sorted(CONFIG.summaries_dir.rglob("src-*.md")):
         frontmatter, body = read_note(path)
         source_id = node_id("source", path.stem)
         for related in extract_section_links(body, RELATED_SECTION_RE):
@@ -331,12 +376,36 @@ def build_nodes_and_edges() -> dict:
         updates_match = ANSWER_VAULT_UPDATES_RE.search(body)
         updates_section = updates_match.group(1) if updates_match else ""
         for linked in extract_any_links(updates_section or body):
-            target_kind = "source" if linked.startswith("Sources/") else "concept" if linked.startswith("Concepts/") else "answer"
+            target_kind = (
+                "source"
+                if linked.startswith("Sources/")
+                else "concept"
+                if linked.startswith("Concepts/")
+                else "answer"
+            )
             if linked.startswith("Answers/"):
                 target_kind = "answer"
             stem = linked.split("/", 1)[1] if "/" in linked else linked
             relation = "updates" if updates_section else "mentions"
             add_edge(answer_id, node_id(target_kind, stem), relation, "Vault Updates")
+
+    for path in sorted(CONFIG.indexes_dir.glob("*.md")):
+        frontmatter, body = read_note(path)
+        index_id = node_id("index", path.stem)
+        for linked in extract_any_links(body):
+            target_kind = (
+                "source"
+                if linked.startswith("Sources/")
+                else "concept"
+                if linked.startswith("Concepts/")
+                else "index"
+                if linked.startswith("Indexes/")
+                else "answer"
+            )
+            if linked.startswith("Answers/"):
+                target_kind = "answer"
+            stem = linked.split("/", 1)[1] if "/" in linked else linked
+            add_edge(index_id, node_id(target_kind, stem), "links_to", "Links")
 
     return {
         "project": CONFIG.project_name,
@@ -398,7 +467,9 @@ def lexical_rank(graph: dict, query: str, scope: str = "all") -> list[tuple[str,
     return scored
 
 
-def graph_rank(graph: dict, query: str, max_depth: int = 2, scope: str = "all") -> list[tuple[str, float]]:
+def graph_rank(
+    graph: dict, query: str, max_depth: int = 2, scope: str = "all"
+) -> list[tuple[str, float]]:
     terms = [term for term in re.split(r"\W+", query.lower()) if term]
     lookup = node_lookup(graph)
     adj = adjacency(graph)
@@ -430,7 +501,9 @@ def graph_rank(graph: dict, query: str, max_depth: int = 2, scope: str = "all") 
     return ranked
 
 
-def reciprocal_rank_fusion(rankings: Iterable[list[tuple[str, float]]], k: int = 60) -> list[tuple[str, float]]:
+def reciprocal_rank_fusion(
+    rankings: Iterable[list[tuple[str, float]]], k: int = 60
+) -> list[tuple[str, float]]:
     scores: dict[str, float] = {}
     for ranking in rankings:
         for rank, (node_id, _score) in enumerate(ranking, start=1):
@@ -454,17 +527,26 @@ def search_graph(graph: dict, query: str, limit: int = 10, scope: str = "all") -
     return results
 
 
-def traverse_graph(graph: dict, start: str, depth: int = 2, relations: set[str] | None = None, scope: str = "all") -> list[dict]:
+def traverse_graph(
+    graph: dict, start: str, depth: int = 2, relations: set[str] | None = None, scope: str = "all"
+) -> list[dict]:
     lookup = node_lookup(graph)
     adj = adjacency(graph)
     matches = [
         node
         for node in graph["nodes"]
         if visible_node(node, scope)
-        and (start.lower() in {node["id"].lower(), node["title"].lower()} or start.lower() in node["path"].lower())
+        and (
+            start.lower() in {node["id"].lower(), node["title"].lower()}
+            or start.lower() in node["path"].lower()
+        )
     ]
     if not matches:
-        matches = [node for node in graph["nodes"] if visible_node(node, scope) and start.lower() in node["title"].lower()]
+        matches = [
+            node
+            for node in graph["nodes"]
+            if visible_node(node, scope) and start.lower() in node["title"].lower()
+        ]
     if not matches:
         return []
     start_ids = [node["id"] for node in matches[:3]]
@@ -498,7 +580,9 @@ def retention_report(graph: dict, limit: int = 50) -> list[dict]:
     return ranked[:limit]
 
 
-def write_retention_report(graph: dict, path: Path = RETENTION_REPORT_PATH, limit: int = 50) -> bool:
+def write_retention_report(
+    graph: dict, path: Path = RETENTION_REPORT_PATH, limit: int = 50
+) -> bool:
     ensure_dir(path.parent)
     top_nodes = retention_report(graph, limit=limit)
     summary = Counter((node["kind"], node["retention_tier"]) for node in graph["nodes"])
@@ -509,7 +593,9 @@ def write_retention_report(graph: dict, path: Path = RETENTION_REPORT_PATH, limi
             "edges": len(graph["edges"]),
             "by_kind": dict(Counter(node["kind"] for node in graph["nodes"])),
             "by_tier": dict(Counter(node["retention_tier"] for node in graph["nodes"])),
-            "by_kind_and_tier": {f"{kind}:{tier}": count for (kind, tier), count in summary.items()},
+            "by_kind_and_tier": {
+                f"{kind}:{tier}": count for (kind, tier), count in summary.items()
+            },
         },
         "lowest_retention": top_nodes,
     }
@@ -536,3 +622,114 @@ def export_csv_rows(graph: dict) -> list[dict]:
             }
         )
     return rows
+
+
+def would_save_graph_change(graph: dict, path: Path = GRAPH_PATH) -> bool:
+    content = json.dumps(graph, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    return not path.exists() or path.read_text(encoding="utf-8") != content
+
+
+def would_retention_report_change(
+    graph: dict, path: Path = RETENTION_REPORT_PATH, limit: int = 50
+) -> bool:
+    top_nodes = retention_report(graph, limit=limit)
+    summary = Counter((node["kind"], node["retention_tier"]) for node in graph["nodes"])
+    payload = {
+        "project": CONFIG.project_name,
+        "counts": {
+            "nodes": len(graph["nodes"]),
+            "edges": len(graph["edges"]),
+            "by_kind": dict(Counter(node["kind"] for node in graph["nodes"])),
+            "by_tier": dict(Counter(node["retention_tier"] for node in graph["nodes"])),
+            "by_kind_and_tier": {
+                f"{kind}:{tier}": count for (kind, tier), count in summary.items()
+            },
+        },
+        "lowest_retention": top_nodes,
+    }
+    content = json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    return not path.exists() or path.read_text(encoding="utf-8") != content
+
+
+def would_csv_change(graph: dict, csv_path: Path) -> bool:
+    rows = export_csv_rows(graph)
+    fieldnames = sorted({key for row in rows for key in row.keys()})
+    import io
+
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+    content = output.getvalue()
+    return not csv_path.exists() or csv_path.read_text(encoding="utf-8") != content
+
+
+def run(
+    output: str | None = None,
+    report_output: str | None = None,
+    csv_output: str | None = None,
+    check: bool = False,
+    dry_run: bool = False,
+) -> None:
+    graph = build_nodes_and_edges()
+    graph_path = Path(output).resolve() if output else GRAPH_PATH
+    report_path = Path(report_output).resolve() if report_output else RETENTION_REPORT_PATH
+    csv_path = Path(csv_output).resolve() if csv_output else None
+
+    graph_changed = would_save_graph_change(graph, graph_path)
+    report_changed = would_retention_report_change(graph, report_path)
+    csv_changed = would_csv_change(graph, csv_path) if csv_path else False
+
+    any_changed = graph_changed or report_changed or csv_changed
+
+    if any_changed:
+        if check:
+            print("Vault graph or reports are out of sync!")
+            import sys
+
+            sys.exit(1)
+        elif dry_run:
+            print("[DRY-RUN] Vault graph or reports would be updated:")
+            if graph_changed:
+                print(f"  - {graph_path}")
+            if report_changed:
+                print(f"  - {report_path}")
+            if csv_changed and csv_path:
+                print(f"  - {csv_path}")
+        else:
+            save_graph(graph, graph_path)
+            write_retention_report(graph, report_path)
+            if csv_path:
+                ensure_dir(csv_path.parent)
+                rows = export_csv_rows(graph)
+                fieldnames = sorted({key for row in rows for key in row.keys()})
+                with csv_path.open("w", encoding="utf-8", newline="") as handle:
+                    writer = csv.DictWriter(handle, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(rows)
+            print("Vault graph and reports updated.")
+    else:
+        print("Vault graph and reports are up to date.")
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Build vault nodes and edges graph.")
+    parser.add_argument("--output", help="Path to write vault_graph.json")
+    parser.add_argument("--report-output", help="Path to write retention_report.json")
+    parser.add_argument("--csv-output", help="Path to write CSV export")
+    parser.add_argument("--check", action="store_true", help="Fail if files are out of sync.")
+    parser.add_argument("--dry-run", action="store_true", help="Run without mutating files.")
+    args = parser.parse_args()
+    run(
+        output=args.output,
+        report_output=args.report_output,
+        csv_output=args.csv_output,
+        check=args.check,
+        dry_run=args.dry_run,
+    )
+
+
+if __name__ == "__main__":
+    main()

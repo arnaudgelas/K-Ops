@@ -10,7 +10,16 @@ from collections import Counter
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from utils import CONFIG, ROOT, ensure_dir, load_json, now_stamp, save_json, short_hash
+from utils import (
+    CONFIG,
+    ROOT,
+    ensure_dir,
+    load_json,
+    now_stamp,
+    resolve_content_path,
+    save_json,
+    short_hash,
+)
 
 REGISTRY_PATH = CONFIG.registry_path
 RAW_DIR = CONFIG.raw_dir
@@ -153,18 +162,26 @@ def github_home_url(repo: str) -> str:
     return f"https://github.com/{owner}/{repo_name}"
 
 
-def run_git(args: list[str], cwd: Path | None = None) -> str:
+def run_git(args: list[str], cwd: Path | None = None, env: dict | None = None) -> str:
+    import os
+
+    run_env = os.environ.copy()
+    if env:
+        run_env.update(env)
     result = subprocess.run(
         ["git", *args],
         check=False,
         cwd=cwd,
         capture_output=True,
         text=True,
+        env=run_env,
     )
     if result.returncode != 0:
         stderr = result.stderr.strip()
         stdout = result.stdout.strip()
-        details = stderr or stdout or f"`git {' '.join(args)}` exited with status {result.returncode}"
+        details = (
+            stderr or stdout or f"`git {' '.join(args)}` exited with status {result.returncode}"
+        )
         raise RuntimeError(details)
     return result.stdout.strip()
 
@@ -176,7 +193,9 @@ def clone_repo(repo_url: str, branch: str | None) -> Path:
     if branch:
         cmd.extend(["--branch", branch])
     cmd.extend([github_clone_url(repo_url), str(clone_dir)])
-    run_git(cmd)
+    # Skip LFS object downloads — we only want text files and LFS tracks binaries.
+    # This also makes clones work when git-lfs is not installed.
+    run_git(cmd, env={"GIT_LFS_SKIP_SMUDGE": "1"})
     return clone_dir
 
 
@@ -287,9 +306,40 @@ def file_category(path: Path, repo_dir: Path) -> str:
     return "other"
 
 
+def extract_readme_refs(repo_dir: Path, tracked_resolved: set[Path]) -> list[Path]:
+    """Return .md files that README.md links to, in link order."""
+    readme = repo_dir / "README.md"
+    if not readme.exists():
+        return []
+    text = read_text_file(readme)
+    readme_dir = readme.parent
+    seen: set[Path] = set()
+    result: list[Path] = []
+    for match in re.finditer(r"\[(?:[^\]]*)\]\(([^)]+)\)", text):
+        target = match.group(1).split("#")[0].strip()
+        if not target or target.startswith(("http://", "https://", "mailto:")):
+            continue
+        resolved = (readme_dir / target).resolve()
+        if (
+            resolved.suffix.lower() == ".md"
+            and resolved in tracked_resolved
+            and resolved not in seen
+        ):
+            seen.add(resolved)
+            result.append(resolved)
+    return result
+
+
 def collect_candidate_files(repo_dir: Path, tracked_files: list[Path]) -> list[Path]:
     candidates = [path for path in tracked_files if is_text_candidate(path)]
     candidates.sort(key=lambda path: file_priority(path, repo_dir))
+
+    resolved_to_orig = {p.resolve(): p for p in candidates}
+    readme_refs = [
+        resolved_to_orig[r]
+        for r in extract_readme_refs(repo_dir, set(resolved_to_orig.keys()))
+        if r in resolved_to_orig
+    ]
 
     chosen: list[Path] = []
     seen: set[Path] = set()
@@ -305,7 +355,15 @@ def collect_candidate_files(repo_dir: Path, tracked_files: list[Path]) -> list[P
             if len(chosen) >= MAX_EVIDENCE_FILES or added >= limit:
                 break
 
-    architecture_candidates = [path for path in candidates if file_category(path, repo_dir) == "architecture"]
+    # README-referenced files are always included, outside the general cap
+    for path in readme_refs:
+        if path not in seen:
+            chosen.append(path)
+            seen.add(path)
+
+    architecture_candidates = [
+        path for path in candidates if file_category(path, repo_dir) == "architecture"
+    ]
     concept_candidates = [path for path in candidates if file_category(path, repo_dir) == "concept"]
     other_candidates = [path for path in candidates if file_category(path, repo_dir) == "other"]
 
@@ -345,13 +403,18 @@ def detect_project_signals(tracked_files: list[Path], repo_dir: Path) -> dict[st
     }
 
 
-def summarize_files(owner: str, repo_name: str, branch: str, repo_dir: Path, files: list[Path]) -> list[dict[str, str | list[str]]]:
+def summarize_files(
+    owner: str, repo_name: str, branch: str, repo_dir: Path, files: list[Path]
+) -> list[dict[str, str | list[str]]]:
     summaries: list[dict[str, str | list[str]]] = []
     for path in files:
         rel = path.relative_to(repo_dir)
         text = read_text_file(path)
         title = first_heading(text) or rel.name
-        paragraph = extract_first_paragraph(text) or "No concise prose summary was detected near the top of this document."
+        paragraph = (
+            extract_first_paragraph(text)
+            or "No concise prose summary was detected near the top of this document."
+        )
         headings = extract_headings(text)
         summaries.append(
             {
@@ -375,7 +438,9 @@ def is_concept_evidence(path: str) -> bool:
     return any(hint in lower for hint in CONCEPT_HINTS)
 
 
-def build_key_concepts(signals: dict[str, list[str] | int], file_summaries: list[dict[str, str | list[str]]]) -> list[str]:
+def build_key_concepts(
+    signals: dict[str, list[str] | int], file_summaries: list[dict[str, str | list[str]]]
+) -> list[str]:
     concepts: list[str] = []
 
     languages = signals["languages"]
@@ -422,28 +487,41 @@ def build_architectural_decisions(file_summaries: list[dict[str, str | list[str]
     return decisions
 
 
-def build_overview(owner: str, repo_name: str, signals: dict[str, list[str] | int], file_summaries: list[dict[str, str | list[str]]]) -> str:
+def build_overview(
+    owner: str,
+    repo_name: str,
+    signals: dict[str, list[str] | int],
+    file_summaries: list[dict[str, str | list[str]]],
+) -> str:
     file_count = signals["file_count"]
     manifests = signals["manifests"]
     languages = signals["languages"]
     top_dirs = signals["top_dirs"]
     lead_summary = file_summaries[0]["paragraph"] if file_summaries else None
 
-    parts = [f"`{owner}/{repo_name}` is a GitHub repository snapshot with about `{file_count}` tracked files"]
+    parts = [
+        f"`{owner}/{repo_name}` is a GitHub repository snapshot with about `{file_count}` tracked files"
+    ]
     if languages:
-        parts.append(f"and the visible code mix is led by {', '.join(f'`{language}`' for language in languages)}")
+        parts.append(
+            f"and the visible code mix is led by {', '.join(f'`{language}`' for language in languages)}"
+        )
     if manifests:
         manifest_names = ", ".join(f"`{item.split(' ')[0]}`" for item in manifests[:4])
         parts.append(f"The repo includes manifest or build files such as {manifest_names}")
     if top_dirs:
-        parts.append(f"High-signal top-level areas include {', '.join(f'`{name}`' for name in top_dirs[:5])}")
+        parts.append(
+            f"High-signal top-level areas include {', '.join(f'`{name}`' for name in top_dirs[:5])}"
+        )
     overview = ". ".join(parts) + "."
     if lead_summary:
         overview += f" The leading evidence file says: {lead_summary}"
     return overview
 
 
-def build_claims(signals: dict[str, list[str] | int], file_summaries: list[dict[str, str | list[str]]]) -> list[str]:
+def build_claims(
+    signals: dict[str, list[str] | int], file_summaries: list[dict[str, str | list[str]]]
+) -> list[str]:
     claims: list[str] = []
     if file_summaries:
         claims.append(
@@ -516,7 +594,9 @@ def render_snapshot_markdown(
         for decision in decisions:
             lines.append(f"- {decision}")
     else:
-        lines.append("- No explicit architectural decision files were detected from the tracked evidence.")
+        lines.append(
+            "- No explicit architectural decision files were detected from the tracked evidence."
+        )
 
     lines.extend(
         [
@@ -533,7 +613,9 @@ def render_snapshot_markdown(
     if manifests:
         lines.append(f"- Manifest or build files: {', '.join(f'`{item}`' for item in manifests)}")
     if languages:
-        lines.append(f"- Dominant visible languages: {', '.join(f'`{item}`' for item in languages)}")
+        lines.append(
+            f"- Dominant visible languages: {', '.join(f'`{item}`' for item in languages)}"
+        )
     if top_dirs:
         lines.append(f"- Top-level directories: {', '.join(f'`{item}`' for item in top_dirs)}")
 
@@ -581,18 +663,52 @@ def upsert_registry_entry(entry: dict) -> None:
     save_json(REGISTRY_PATH, registry)
 
 
-def ingest_repo_snapshot(repo_url: str, note_text: str, owner: str, repo_name: str) -> dict:
+def build_repo_manifest(source_id: str, extra_metadata: dict) -> dict:
+    """Build a repo_manifest dict from an extra_metadata block."""
+    tracked = extra_metadata.get("tracked_file_count")
+    sampled = extra_metadata.get("sampled_file_count")
+    git_commit = extra_metadata.get("git_commit") or None
+    if git_commit == "unknown":
+        git_commit = None
+    branch = extra_metadata.get("branch") or extra_metadata.get("git_branch") or None
+    if tracked is not None and sampled is not None:
+        if sampled >= tracked:
+            coverage_completeness = "full"
+        else:
+            coverage_completeness = "partial"
+    else:
+        coverage_completeness = "unknown"
+    return {
+        "source_id": source_id,
+        "source_kind": "github-repo-snapshot",
+        "git_commit": git_commit,
+        "branch": branch,
+        "tracked_file_count": tracked,
+        "sampled_file_count": sampled,
+        "sampled_paths": extra_metadata.get("sampled_paths", []),
+        "omitted_paths_manifest": extra_metadata.get("omitted_paths_manifest", []),
+        "coverage_policy": extra_metadata.get("coverage_policy"),
+        "coverage_completeness": coverage_completeness,
+        "legacy_no_data": False,
+    }
+
+
+def ingest_repo_snapshot(
+    repo_url: str,
+    note_text: str,
+    owner: str,
+    repo_name: str,
+    extra_metadata: dict | None = None,
+) -> dict:
     canonical_repo_url = github_home_url(repo_url)
     source_id = f"src-{short_hash(canonical_repo_url)}"
     source_dir = RAW_DIR / source_id
     ensure_dir(source_dir)
 
     original_path = source_dir / "original.md"
-    normalized_path = source_dir / "normalized.md"
     metadata_path = source_dir / "metadata.json"
 
     original_path.write_text(note_text, encoding="utf-8")
-    normalized_path.write_text(note_text, encoding="utf-8")
 
     metadata = {
         "id": source_id,
@@ -601,12 +717,16 @@ def ingest_repo_snapshot(repo_url: str, note_text: str, owner: str, repo_name: s
         "kind": "github_repo_snapshot",
         "content_type": "text/markdown",
         "original_path": str(original_path.relative_to(ROOT)),
-        "normalized_path": str(normalized_path.relative_to(ROOT)),
         "title_guess": f"GitHub Repo {owner} {repo_name}",
         "content_hash": content_hash(note_text),
         "last_checked_at": now_stamp(),
     }
+    if extra_metadata:
+        metadata.update(extra_metadata)
     save_json(metadata_path, metadata)
+    if extra_metadata:
+        manifest = build_repo_manifest(source_id, extra_metadata)
+        save_json(source_dir / "repo_manifest.json", manifest)
     return metadata
 
 
@@ -633,7 +753,41 @@ def ingest_repo(repo_url: str, branch: str | None = None) -> dict:
             signals=signals,
             file_summaries=file_summaries,
         )
-        metadata = ingest_repo_snapshot(repo_url, note_text, owner, repo_name)
+        sampled_set = set(file_paths)
+        sampled_paths = [path.relative_to(clone_dir).as_posix() for path in file_paths]
+        omitted_paths = [
+            path.relative_to(clone_dir).as_posix()
+            for path in tracked_files
+            if path not in sampled_set
+        ]
+
+        coverage_policy = {
+            "max_evidence_files": MAX_EVIDENCE_FILES,
+            "max_architecture_files": MAX_ARCHITECTURE_FILES,
+            "max_concept_files": MAX_CONCEPT_FILES,
+            "allowed_suffixes": sorted(list(TEXT_SUFFIXES)),
+            "special_names": sorted(list(SPECIAL_TEXT_NAMES)),
+        }
+
+        evidence_strength = (
+            "primary-doc" if len(file_paths) == len(tracked_files) else "primary-doc-partial"
+        )
+
+        extra_metadata = {
+            "git_commit": commit,
+            "git_branch": detected_branch,
+            "branch": detected_branch,
+            "tracked_file_count": len(tracked_files),
+            "sampled_file_count": len(file_paths),
+            "sampled_paths": sampled_paths,
+            "omitted_paths_manifest": omitted_paths,
+            "coverage_policy": coverage_policy,
+            "evidence_strength": evidence_strength,
+        }
+
+        metadata = ingest_repo_snapshot(
+            repo_url, note_text, owner, repo_name, extra_metadata=extra_metadata
+        )
     finally:
         shutil.rmtree(clone_root, ignore_errors=True)
 
@@ -641,10 +795,18 @@ def ingest_repo(repo_url: str, branch: str | None = None) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Clone a GitHub repository, synthesize a markdown snapshot, and ingest it.")
+    parser = argparse.ArgumentParser(
+        description="Clone a GitHub repository, synthesize a markdown snapshot, and ingest it."
+    )
     parser.add_argument("--repo", required=True, help="GitHub repository URL")
-    parser.add_argument("--branch", help="Branch to clone. Defaults to the repository default branch.")
-    parser.add_argument("--keep-clone", action="store_true", help="Keep the temporary clone under /tmp for inspection.")
+    parser.add_argument(
+        "--branch", help="Branch to clone. Defaults to the repository default branch."
+    )
+    parser.add_argument(
+        "--keep-clone",
+        action="store_true",
+        help="Keep the temporary clone under /tmp for inspection.",
+    )
     args = parser.parse_args()
 
     if args.keep_clone:
@@ -669,7 +831,38 @@ def main() -> None:
                 signals=signals,
                 file_summaries=file_summaries,
             )
-            metadata = ingest_repo_snapshot(args.repo, note_text, owner, repo_name)
+            sampled_set = set(file_paths)
+            sampled_paths = [path.relative_to(clone_dir).as_posix() for path in file_paths]
+            omitted_paths = [
+                path.relative_to(clone_dir).as_posix()
+                for path in tracked_files
+                if path not in sampled_set
+            ]
+
+            coverage_policy = {
+                "max_evidence_files": MAX_EVIDENCE_FILES,
+                "max_architecture_files": MAX_ARCHITECTURE_FILES,
+                "max_concept_files": MAX_CONCEPT_FILES,
+                "allowed_suffixes": sorted(list(TEXT_SUFFIXES)),
+                "special_names": sorted(list(SPECIAL_TEXT_NAMES)),
+            }
+
+            evidence_strength = "primary-doc" if len(file_paths) == len(tracked_files) else "code"
+
+            extra_metadata = {
+                "git_commit": commit,
+                "git_branch": branch,
+                "tracked_file_count": len(tracked_files),
+                "sampled_file_count": len(file_paths),
+                "sampled_paths": sampled_paths,
+                "omitted_paths_manifest": omitted_paths,
+                "coverage_policy": coverage_policy,
+                "evidence_strength": evidence_strength,
+            }
+
+            metadata = ingest_repo_snapshot(
+                args.repo, note_text, owner, repo_name, extra_metadata=extra_metadata
+            )
         finally:
             print(f"Kept clone at {clone_root}")
     else:
@@ -678,7 +871,7 @@ def main() -> None:
     upsert_registry_entry(metadata)
 
     print(f"Ingested {args.repo} -> {metadata['id']}")
-    print(metadata["normalized_path"])
+    print(resolve_content_path(metadata))
 
 
 if __name__ == "__main__":

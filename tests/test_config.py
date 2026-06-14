@@ -1,4 +1,5 @@
 """Tests for config loading and validation."""
+
 from __future__ import annotations
 
 import os
@@ -6,10 +7,10 @@ import textwrap
 from pathlib import Path
 
 import pytest
-import yaml
 
 # Ensure the scripts/ directory is importable when running from the repo root.
 import sys
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 
@@ -22,6 +23,7 @@ def write_config(tmp_path: Path, content: str) -> Path:
 def reload_config(config_path: Path):
     """Clear lru_cache and reload config from the given path."""
     import utils
+
     utils.load_config.cache_clear()
     old = os.environ.get("KB_CONFIG_PATH")
     os.environ["KB_CONFIG_PATH"] = str(config_path)
@@ -68,11 +70,14 @@ def test_load_config_behavioral_defaults(tmp_path):
 
 
 def test_load_config_behavioral_explicit(tmp_path):
-    content = MINIMAL_CONFIG + """
+    content = (
+        MINIMAL_CONFIG
+        + """
     allow_web_fetch_during_qa: true
     file_answer_back_into_vault: false
     use_obsidian_wikilinks: false
     """
+    )
     cfg_path = write_config(tmp_path, content)
     config = reload_config(cfg_path)
     assert config.allow_web_fetch_during_qa is True

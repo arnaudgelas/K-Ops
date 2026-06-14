@@ -3,39 +3,56 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
+import subprocess
 from pathlib import Path
 
-from utils import CONFIG, ROOT, agent_run, build_prompt, build_runtime_prompt, now_stamp, parse_frontmatter, slugify, write_text
+from utils import (
+    CONFIG,
+    ROOT,
+    detect_agent_command,
+    ensure_dir,
+    now_stamp,
+    parse_frontmatter,
+    shell_join,
+    slugify,
+    write_text,
+)
 
 ANSWER_PLACEHOLDER = "__ANSWER_PENDING__"
 VAULT_UPDATES_RE = re.compile(r"## Vault Updates\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 
 
-def update_frontmatter_field(text: str, field: str, value: str) -> tuple[str, bool]:
-    if not text.startswith("---\n"):
-        return text, False
-    parts = text.split("\n---\n", 1)
-    if len(parts) != 2:
-        return text, False
-    frontmatter_lines = parts[0][4:].splitlines()
-    new_line = (
-        f"{field}: {json.dumps(value)}"
-        if field in {"title", "asked_at", "answer_quality"}
-        else f"{field}: {value}"
-    )
-    for index, line in enumerate(frontmatter_lines):
-        if line.startswith(f"{field}:"):
-            if line.strip() == new_line:
-                return text, False
-            frontmatter_lines[index] = new_line
-            return "---\n" + "\n".join(frontmatter_lines) + "\n---\n" + parts[1], True
-    insert_at = len(frontmatter_lines)
-    for index, line in enumerate(frontmatter_lines):
-        if line.startswith("type:"):
-            insert_at = index + 1
-            break
-    frontmatter_lines.insert(insert_at, new_line)
-    return "---\n" + "\n".join(frontmatter_lines) + "\n---\n" + parts[1], True
+def build_prompt(template_name: str, **kwargs: str) -> Path:
+    template = (ROOT / "templates" / template_name).read_text(encoding="utf-8")
+    rendered = template.format(**kwargs)
+    prompt_path = ROOT / ".tmp" / f"{template_name}.{now_stamp()}.md"
+    ensure_dir(prompt_path.parent)
+    write_text(prompt_path, rendered)
+    return prompt_path
+
+
+def build_runtime_prompt(name: str, text: str) -> Path:
+    prompt_path = ROOT / ".tmp" / f"{name}.{now_stamp()}.md"
+    ensure_dir(prompt_path.parent)
+    write_text(prompt_path, text.rstrip() + "\n")
+    return prompt_path
+
+
+def agent_run(agent: str, prompt_path: Path) -> None:
+    base_cmd = detect_agent_command(agent)
+    prompt_text = prompt_path.read_text(encoding="utf-8")
+
+    if agent == "codex":
+        cmd = base_cmd + ["exec", "--skip-git-repo-check", "--full-auto", prompt_text]
+    elif agent == "claude":
+        cmd = base_cmd + ["-p", str(prompt_path)]
+    elif agent == "gemini":
+        cmd = base_cmd + ["-p", prompt_text]
+    else:
+        raise ValueError(agent)
+
+    print(f"\nRunning: {shell_join(cmd)}\n")
+    subprocess.run(cmd, check=True, cwd=ROOT)
 
 
 def build_answer_scaffold(question: str, asked_at: str) -> str:
@@ -48,7 +65,10 @@ def build_answer_scaffold(question: str, asked_at: str) -> str:
             "type: answer",
             "answer_quality: memo-only",
             "scope: private",
+            "query_class: synthesis",
             "sources_consulted: []",
+            "retrieval_path: []",
+            "fetch_required: false",
             "tags:",
             "  - kb/answer",
             "---",
@@ -71,6 +91,34 @@ def build_answer_scaffold(question: str, asked_at: str) -> str:
     )
 
 
+def update_frontmatter_field(text: str, field: str, value: str) -> tuple[str, bool]:
+    if not text.startswith("---\n"):
+        return text, False
+    parts = text.split("\n---\n", 1)
+    if len(parts) != 2:
+        return text, False
+    frontmatter_lines = parts[0][4:].splitlines()
+    new_line = (
+        f"{field}: {json.dumps(value)}"
+        if field in {"title", "asked_at", "answer_quality"}
+        else f"{field}: {value}"
+    )
+    for index, line in enumerate(frontmatter_lines):
+        if line.startswith(f"{field}:"):
+            if line.strip() == new_line:
+                return text, False
+            frontmatter_lines[index] = new_line
+            return "---\n" + "\n".join(frontmatter_lines) + "\n---\n" + parts[1], True
+
+    insert_at = len(frontmatter_lines)
+    for index, line in enumerate(frontmatter_lines):
+        if line.startswith("type:"):
+            insert_at = index + 1
+            break
+    frontmatter_lines.insert(insert_at, new_line)
+    return "---\n" + "\n".join(frontmatter_lines) + "\n---\n" + parts[1], True
+
+
 def update_recent_answers(answer_path: Path) -> None:
     text = answer_path.read_text(encoding="utf-8")
     frontmatter, _ = parse_frontmatter(text)
@@ -85,7 +133,9 @@ def update_recent_answers(answer_path: Path) -> None:
     match = section_re.search(home_text)
     if not match:
         suffix = "\n" if not home_text.endswith("\n") else ""
-        CONFIG.home_note.write_text(home_text + suffix + "\n## Recent Answers\n\n" + new_bullet + "\n", encoding="utf-8")
+        CONFIG.home_note.write_text(
+            home_text + suffix + "\n## Recent Answers\n\n" + new_bullet + "\n", encoding="utf-8"
+        )
         return
 
     body = match.group(2).strip("\n")
@@ -102,10 +152,11 @@ def update_recent_answers(answer_path: Path) -> None:
 
 def normalize_answer_quality(answer_path: Path) -> str:
     text = answer_path.read_text(encoding="utf-8")
-    frontmatter, body = parse_frontmatter(text)
-    vault_updates = VAULT_UPDATES_RE.search(body)
+    vault_updates = VAULT_UPDATES_RE.search(parse_frontmatter(text)[1])
     updates_text = vault_updates.group(1).strip() if vault_updates else ""
-    has_durable_updates = bool(updates_text and updates_text != "- None." and updates_text != "None.")
+    has_durable_updates = bool(
+        updates_text and updates_text != "- None." and updates_text != "None."
+    )
     desired = "durable" if has_durable_updates else "memo-only"
     updated_text, changed = update_frontmatter_field(text, "answer_quality", desired)
     desired_scope = "shared" if desired == "durable" else "private"
@@ -116,104 +167,57 @@ def normalize_answer_quality(answer_path: Path) -> str:
     return desired
 
 
-def run_triage() -> tuple[Path, str]:
-    """Determine which sources need summaries, which are done, which are flagged.
-
-    Reads ``data/registry.json`` and scans ``notes/Sources/`` to classify each
-    source_id.  Writes ``.tmp/compile_plan.json`` and returns ``(plan_path,
-    human_readable_summary)`` for injection into the compile prompt.
-    """
-    if not CONFIG.registry_path.exists():
-        plan = {"to_summarize": [], "skip": [], "flag_for_review": []}
-        summary = "No registry found — nothing to compile."
-        return _write_triage_plan(plan), summary
-
-    registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
-    existing_summaries = {p.stem for p in CONFIG.summaries_dir.glob("src-*.md")} if CONFIG.summaries_dir.exists() else set()
-
-    to_summarize: list[str] = []
-    skip: list[str] = []
-    flag_for_review: list[str] = []
-
-    seen: set[str] = set()
-    for item in registry:
-        source_id = item.get("source_id") or ""
-        if not source_id or source_id in seen:
-            continue
-        seen.add(source_id)
-        raw_paths = list((ROOT / "data" / "raw").glob(f"{source_id}.*"))
-        raw_size = sum(p.stat().st_size for p in raw_paths if p.exists())
-        if source_id in existing_summaries:
-            skip.append(source_id)
-            continue
-        if raw_size < 200:
-            flag_for_review.append(source_id)
-            continue
-        # Detect imported model reports from registry metadata
-        source_kind = item.get("source_kind") or ""
-        if source_kind in {"imported_model_report", "imported_model_report_citation"}:
-            flag_for_review.append(source_id)
-        else:
-            to_summarize.append(source_id)
-
-    # Also check source notes for source_kind: imported_model_report not yet caught above
-    if CONFIG.summaries_dir.exists():
-        for p in CONFIG.summaries_dir.glob("src-*.md"):
-            if p.stem in seen:
-                continue
-            fm, _ = parse_frontmatter(p.read_text(encoding="utf-8"))
-            if fm.get("source_kind") in {"imported_model_report", "imported_model_report_citation"} and p.stem not in existing_summaries:
-                flag_for_review.append(p.stem)
-                seen.add(p.stem)
-
-    plan = {
-        "generated_at": dt.datetime.now().replace(microsecond=0).isoformat(),
-        "to_summarize": to_summarize,
-        "skip": skip,
-        "flag_for_review": flag_for_review,
-    }
-    plan_path = _write_triage_plan(plan)
-
-    lines = [
-        f"Triage complete ({plan_path.relative_to(ROOT)}):",
-        f"  to_summarize   : {len(to_summarize)} source(s)",
-        f"  skip (done)    : {len(skip)} source(s)",
-        f"  flag_for_review: {len(flag_for_review)} source(s) (empty raw or model-generated)",
-    ]
-    if to_summarize:
-        lines.append(f"  IDs to process : {', '.join(to_summarize[:10])}"
-                     + (" …" if len(to_summarize) > 10 else ""))
-    if flag_for_review:
-        lines.append(f"  Flagged IDs    : {', '.join(flag_for_review)}")
-    summary = "\n".join(lines)
-    print(summary)
-    return plan_path, summary
-
-
-def _write_triage_plan(plan: dict) -> Path:
+def _build_compile_plan_summary() -> str:
     plan_path = ROOT / ".tmp" / "compile_plan.json"
-    ensure_dir(plan_path.parent)
-    plan_path.write_text(json.dumps(plan, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return plan_path
+    if plan_path.exists():
+        try:
+            plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            to_summarize = plan.get("to_summarize", [])
+            skip = plan.get("skip", [])
+            flag = plan.get("flag_for_review", [])
+            return (
+                f"Loaded from `.tmp/compile_plan.json`: "
+                f"{len(to_summarize)} source(s) to summarize, "
+                f"{len(skip)} to skip, {len(flag)} flagged for review."
+            )
+        except Exception:
+            pass
+    try:
+        registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
+        all_ids = {item["id"] for item in registry}
+        existing_ids = {path.stem for path in CONFIG.summaries_dir.rglob("src-*.md")}
+        to_summarize = sorted(all_ids - existing_ids)
+    except Exception:
+        return "Full vault compile run."
+    if not to_summarize:
+        return (
+            "Full vault compile run — all registry sources already have summaries; "
+            "focus on concept page synthesis and backlink updates."
+        )
+    first_five = ", ".join(to_summarize[:5])
+    more = f", … and {len(to_summarize) - 5} more" if len(to_summarize) > 5 else ""
+    return (
+        f"Derived plan: {len(to_summarize)} source(s) need summaries "
+        f"(first 5: {first_five}{more}). "
+        f"Registry has {len(all_ids)} entries; {len(existing_ids)} already have notes."
+    )
 
 
-def cmd_compile(agent: str, dry_run: bool = False) -> None:
-    _plan_path, plan_summary = run_triage()
+def cmd_compile(agent: str, show_prompt: bool = False) -> None:
+    plan_summary = _build_compile_plan_summary()
     prompt = build_prompt("compile_prompt.md", plan_summary=plan_summary)
-    if dry_run:
-        print("--- compile prompt (dry-run, agent not invoked) ---")
+    if show_prompt:
         print(prompt.read_text(encoding="utf-8"))
         return
-    agent_run(agent, prompt, command="compile")
+    agent_run(agent, prompt)
 
 
-def cmd_heal(agent: str, dry_run: bool = False) -> None:
+def cmd_heal(agent: str, show_prompt: bool = False) -> None:
     prompt = build_prompt("heal_prompt.md")
-    if dry_run:
-        print("--- heal prompt (dry-run, agent not invoked) ---")
+    if show_prompt:
         print(prompt.read_text(encoding="utf-8"))
         return
-    agent_run(agent, prompt, command="heal")
+    agent_run(agent, prompt)
 
 
 def cmd_ask(agent: str, question: str) -> None:
@@ -221,26 +225,33 @@ def cmd_ask(agent: str, question: str) -> None:
     answer_path = CONFIG.answers_dir / f"{now_stamp()}_{slugify(question)}.md"
     if not answer_path.exists():
         write_text(answer_path, build_answer_scaffold(question, asked_at))
+    web_fetch_policy = "allowed" if CONFIG.allow_web_fetch_during_qa else "disabled"
     prompt = build_prompt(
         "ask_prompt.md",
         question=question,
         answer_path=str(answer_path.relative_to(ROOT)),
+        web_fetch_policy=web_fetch_policy,
     )
-    agent_run(agent, prompt, command="ask")
+    agent_run(agent, prompt)
     if not answer_path.exists():
         raise FileNotFoundError(f"Answer memo was not written: {answer_path}")
     answer_text = answer_path.read_text(encoding="utf-8")
     if ANSWER_PLACEHOLDER in answer_text:
         raise RuntimeError(f"Answer memo still contains scaffold placeholders: {answer_path}")
     answer_quality = normalize_answer_quality(answer_path)
-    update_recent_answers(answer_path)
+    if CONFIG.file_answer_back_into_vault:
+        update_recent_answers(answer_path)
+    else:
+        print("Vault backfilling is disabled; skipping Home/TODO updates.")
     print(f"Answer written to {answer_path.relative_to(ROOT)}")
     print(f"Answer quality: {answer_quality}")
-    print(f"Home updated with {answer_path.relative_to(CONFIG.vault_dir).with_suffix('').as_posix()}")
+    if CONFIG.file_answer_back_into_vault:
+        print(
+            f"Home updated with {answer_path.relative_to(CONFIG.vault_dir).with_suffix('').as_posix()}"
+        )
 
 
 def cmd_render(agent: str, fmt: str, prompt_text: str) -> None:
-    ensure_prompt = build_runtime_prompt  # keep the module's prompt helper available for callers
-    _ = ensure_prompt
+    ensure_dir(CONFIG.outputs_dir)
     prompt = build_prompt("render_prompt.md", format=fmt, prompt=prompt_text)
-    agent_run(agent, prompt, command=f"render-{fmt}")
+    agent_run(agent, prompt)

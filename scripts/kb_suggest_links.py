@@ -5,7 +5,6 @@ import math
 import re
 from collections import defaultdict, deque
 from itertools import combinations
-from pathlib import Path
 
 from utils import CONFIG, ROOT
 from vault_graph import (
@@ -17,6 +16,7 @@ from vault_graph import (
 )
 
 # ── shared helpers ────────────────────────────────────────────────────────────
+
 
 def _direct_concept_pairs(graph: dict) -> set[tuple[str, str]]:
     pairs: set[tuple[str, str]] = set()
@@ -71,6 +71,7 @@ def _bfs_distances(adj: dict[str, set[str]], source: str, max_depth: int = 3) ->
 
 # ── approach 1: co-citation ───────────────────────────────────────────────────
 
+
 def suggest_by_co_citation(graph: dict, min_score: int = 2, limit: int = 50) -> list[dict]:
     """
     Co-citation score(A, B) = # pages that link to both.
@@ -97,19 +98,22 @@ def suggest_by_co_citation(graph: dict, min_score: int = 2, limit: int = 50) -> 
             break
         if (a, b) in existing:
             continue
-        results.append({
-            "approach": "co-citation",
-            "concept_a": a,
-            "concept_b": b,
-            "score": score,
-            "reason": f"co-cited in {score} page(s)",
-        })
+        results.append(
+            {
+                "approach": "co-citation",
+                "concept_a": a,
+                "concept_b": b,
+                "score": score,
+                "reason": f"co-cited in {score} page(s)",
+            }
+        )
         if len(results) >= limit:
             break
     return results
 
 
 # ── approach 2: shared-source clustering ─────────────────────────────────────
+
 
 def suggest_by_shared_sources(graph: dict, min_shared: int = 2, limit: int = 50) -> list[dict]:
     """Pair score = # source summaries cited by both. Excludes already-linked pairs."""
@@ -125,7 +129,7 @@ def suggest_by_shared_sources(graph: dict, min_shared: int = 2, limit: int = 50)
     results = []
     stems = sorted(concept_sources)
     for i, a in enumerate(stems):
-        for b in stems[i + 1:]:
+        for b in stems[i + 1 :]:
             shared = concept_sources[a] & concept_sources[b]
             n = len(shared)
             if n < min_shared:
@@ -135,14 +139,16 @@ def suggest_by_shared_sources(graph: dict, min_shared: int = 2, limit: int = 50)
                 continue
             sample = sorted(shared)[:3]
             ellipsis = "..." if n > 3 else ""
-            results.append({
-                "approach": "shared-sources",
-                "concept_a": key[0],
-                "concept_b": key[1],
-                "score": n,
-                "shared_sources": sorted(shared),
-                "reason": f"share {n} source(s): {', '.join(sample)}{ellipsis}",
-            })
+            results.append(
+                {
+                    "approach": "shared-sources",
+                    "concept_a": key[0],
+                    "concept_b": key[1],
+                    "score": n,
+                    "shared_sources": sorted(shared),
+                    "reason": f"share {n} source(s): {', '.join(sample)}{ellipsis}",
+                }
+            )
 
     results.sort(key=lambda x: -x["score"])
     return results[:limit]
@@ -150,8 +156,11 @@ def suggest_by_shared_sources(graph: dict, min_shared: int = 2, limit: int = 50)
 
 # ── approach 3: vector similarity ────────────────────────────────────────────
 
+
 def _tfidf_vectors(docs: list[str]) -> tuple[list[list[float]], str]:
-    tokenize = lambda s: re.findall(r"[a-z]{3,}", s.lower())
+    def tokenize(s: str) -> list[str]:
+        return re.findall(r"[a-z]{3,}", s.lower())
+
     token_docs = [tokenize(d) for d in docs]
     N = len(docs)
     df: dict[str, int] = defaultdict(int)
@@ -181,6 +190,7 @@ def _tfidf_vectors(docs: list[str]) -> tuple[list[list[float]], str]:
 def _neural_vectors(texts: list[str]) -> tuple[list[list[float]], str] | None:
     try:
         from sentence_transformers import SentenceTransformer  # type: ignore
+
         model = SentenceTransformer("all-MiniLM-L6-v2")
         vecs = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
         return vecs.tolist(), "sentence-transformers/all-MiniLM-L6-v2"
@@ -214,13 +224,15 @@ def suggest_by_embedding(graph: dict, threshold: float = 0.75, limit: int = 50) 
             key = (min(stems[i], stems[j]), max(stems[i], stems[j]))
             if key in existing:
                 continue
-            candidates.append({
-                "approach": f"embedding({method})",
-                "concept_a": key[0],
-                "concept_b": key[1],
-                "score": round(sim, 4),
-                "reason": f"vector similarity {sim:.3f} via {method}",
-            })
+            candidates.append(
+                {
+                    "approach": f"embedding({method})",
+                    "concept_a": key[0],
+                    "concept_b": key[1],
+                    "score": round(sim, 4),
+                    "reason": f"vector similarity {sim:.3f} via {method}",
+                }
+            )
 
     candidates.sort(key=lambda x: -x["score"])
     return candidates[:limit]
@@ -228,7 +240,10 @@ def suggest_by_embedding(graph: dict, threshold: float = 0.75, limit: int = 50) 
 
 # ── approach 4: conceptual gravity ───────────────────────────────────────────
 
-def suggest_by_conceptual_gravity(graph: dict, min_score: float = 0.5, limit: int = 50) -> list[dict]:
+
+def suggest_by_conceptual_gravity(
+    graph: dict, min_score: float = 0.5, limit: int = 50
+) -> list[dict]:
     """
     Gravitational attraction between A and B = (deg_A × deg_B) / dist(A,B)².
     Only considers pairs at graph distance 2 or 3 (not already linked).
@@ -255,13 +270,15 @@ def suggest_by_conceptual_gravity(graph: dict, min_score: float = 0.5, limit: in
     for (a, b), score in sorted(candidates.items(), key=lambda x: -x[1]):
         if score < min_score:
             break
-        results.append({
-            "approach": "conceptual-gravity",
-            "concept_a": a,
-            "concept_b": b,
-            "score": round(score, 3),
-            "reason": f"gravity {score:.2f} (deg {degree[a]}×{degree[b]}, path ≥2)",
-        })
+        results.append(
+            {
+                "approach": "conceptual-gravity",
+                "concept_a": a,
+                "concept_b": b,
+                "score": round(score, 3),
+                "reason": f"gravity {score:.2f} (deg {degree[a]}×{degree[b]}, path ≥2)",
+            }
+        )
         if len(results) >= limit:
             break
     return results
@@ -269,7 +286,10 @@ def suggest_by_conceptual_gravity(graph: dict, min_score: float = 0.5, limit: in
 
 # ── approach 5: structural equivalence / analogical mapping ──────────────────
 
-def suggest_by_analogical_mapping(graph: dict, min_jaccard: float = 0.25, limit: int = 50) -> list[dict]:
+
+def suggest_by_analogical_mapping(
+    graph: dict, min_jaccard: float = 0.25, limit: int = 50
+) -> list[dict]:
     """
     Jaccard similarity of neighbor sets: nodes playing the same structural role
     in the graph are "analogues" of each other and are good link candidates.
@@ -284,7 +304,7 @@ def suggest_by_analogical_mapping(graph: dict, min_jaccard: float = 0.25, limit:
         na = adj[a]
         if not na:
             continue
-        for b in stems[i + 1:]:
+        for b in stems[i + 1 :]:
             nb = adj[b]
             if not nb:
                 continue
@@ -299,20 +319,23 @@ def suggest_by_analogical_mapping(graph: dict, min_jaccard: float = 0.25, limit:
             if j < min_jaccard:
                 continue
             shared_sample = sorted(na & nb)[:3]
-            results.append({
-                "approach": "analogical-mapping",
-                "concept_a": key[0],
-                "concept_b": key[1],
-                "score": round(j, 4),
-                "shared_neighbors": sorted(na & nb),
-                "reason": f"Jaccard neighbor overlap {j:.3f}; share neighbours: {', '.join(shared_sample)}{'...' if len(na & nb) > 3 else ''}",
-            })
+            results.append(
+                {
+                    "approach": "analogical-mapping",
+                    "concept_a": key[0],
+                    "concept_b": key[1],
+                    "score": round(j, 4),
+                    "shared_neighbors": sorted(na & nb),
+                    "reason": f"Jaccard neighbor overlap {j:.3f}; share neighbours: {', '.join(shared_sample)}{'...' if len(na & nb) > 3 else ''}",
+                }
+            )
 
     results.sort(key=lambda x: -x["score"])
     return results[:limit]
 
 
 # ── approach 6: triadic closure ───────────────────────────────────────────────
+
 
 def suggest_by_triadic_closure(graph: dict, min_common: int = 2, limit: int = 50) -> list[dict]:
     """
@@ -337,14 +360,16 @@ def suggest_by_triadic_closure(graph: dict, min_common: int = 2, limit: int = 50
         if n < min_common:
             break
         sample = sorted(bridges)[:3]
-        results.append({
-            "approach": "triadic-closure",
-            "concept_a": a,
-            "concept_b": b,
-            "score": n,
-            "bridge_nodes": sorted(bridges),
-            "reason": f"{n} common neighbour(s): {', '.join(sample)}{'...' if n > 3 else ''}",
-        })
+        results.append(
+            {
+                "approach": "triadic-closure",
+                "concept_a": a,
+                "concept_b": b,
+                "score": n,
+                "bridge_nodes": sorted(bridges),
+                "reason": f"{n} common neighbour(s): {', '.join(sample)}{'...' if n > 3 else ''}",
+            }
+        )
         if len(results) >= limit:
             break
     return results
@@ -352,7 +377,10 @@ def suggest_by_triadic_closure(graph: dict, min_common: int = 2, limit: int = 50
 
 # ── approach 7: eigenvector centrality ───────────────────────────────────────
 
-def _eigenvector_centrality(adj: dict[str, set[str]], max_iter: int = 200, tol: float = 1e-6) -> dict[str, float]:
+
+def _eigenvector_centrality(
+    adj: dict[str, set[str]], max_iter: int = 200, tol: float = 1e-6
+) -> dict[str, float]:
     nodes = list(adj.keys())
     n = len(nodes)
     if n == 0:
@@ -369,7 +397,9 @@ def _eigenvector_centrality(adj: dict[str, set[str]], max_iter: int = 200, tol: 
     return vec
 
 
-def suggest_by_eigenvector_centrality(graph: dict, top_frac: float = 0.33, limit: int = 50) -> list[dict]:
+def suggest_by_eigenvector_centrality(
+    graph: dict, top_frac: float = 0.33, limit: int = 50
+) -> list[dict]:
     """
     Compute eigenvector centrality over the concept related_to graph.
     High-centrality nodes that are NOT directly linked represent structural gaps
@@ -388,19 +418,21 @@ def suggest_by_eigenvector_centrality(graph: dict, top_frac: float = 0.33, limit
 
     results = []
     for i, a in enumerate(hubs):
-        for b in hubs[i + 1:]:
+        for b in hubs[i + 1 :]:
             key = (min(a, b), max(a, b))
             if key in existing:
                 continue
             score = ev[a] * ev[b]
-            results.append({
-                "approach": "eigenvector-centrality",
-                "concept_a": key[0],
-                "concept_b": key[1],
-                "score": round(score, 6),
-                "centralities": {key[0]: round(ev[key[0]], 4), key[1]: round(ev[key[1]], 4)},
-                "reason": f"both high-centrality hubs (eig {ev[a]:.3f}×{ev[b]:.3f}={score:.4f})",
-            })
+            results.append(
+                {
+                    "approach": "eigenvector-centrality",
+                    "concept_a": key[0],
+                    "concept_b": key[1],
+                    "score": round(score, 6),
+                    "centralities": {key[0]: round(ev[key[0]], 4), key[1]: round(ev[key[1]], 4)},
+                    "reason": f"both high-centrality hubs (eig {ev[a]:.3f}×{ev[b]:.3f}={score:.4f})",
+                }
+            )
 
     results.sort(key=lambda x: -x["score"])
     return results[:limit]
@@ -413,6 +445,7 @@ _CONTRAST_RE = re.compile(
     r"but (?:not|unlike|instead)|differs? from|as opposed to|instead of)\b",
     re.IGNORECASE,
 )
+
 
 def suggest_by_friction(graph: dict, min_friction: float = 0.15, limit: int = 50) -> list[dict]:
     """
@@ -466,15 +499,17 @@ def suggest_by_friction(graph: dict, min_friction: float = 0.15, limit: int = 50
             if total < min_friction:
                 continue
             detail = "contrast language detected; " if key in contrast_pairs else ""
-            results.append({
-                "approach": "friction",
-                "concept_a": key[0],
-                "concept_b": key[1],
-                "score": round(total, 4),
-                "tfidf_sim": round(sim, 4),
-                "source_jaccard": round(src_jaccard, 4),
-                "reason": f"{detail}friction {total:.3f} (sim {sim:.3f}, src overlap {src_jaccard:.3f})",
-            })
+            results.append(
+                {
+                    "approach": "friction",
+                    "concept_a": key[0],
+                    "concept_b": key[1],
+                    "score": round(total, 4),
+                    "tfidf_sim": round(sim, 4),
+                    "source_jaccard": round(src_jaccard, 4),
+                    "reason": f"{detail}friction {total:.3f} (sim {sim:.3f}, src overlap {src_jaccard:.3f})",
+                }
+            )
 
     results.sort(key=lambda x: -x["score"])
     return results[:limit]
@@ -521,7 +556,7 @@ def suggest_by_contradiction_mapping(graph: dict, limit: int = 50) -> list[dict]
     ctr_concepts = sorted(ctr_by_concept.keys())
     for i, a in enumerate(ctr_concepts):
         sources_a = {sid for rec in ctr_by_concept[a] for sid in rec.get("source_ids", [])}
-        for b in ctr_concepts[i + 1:]:
+        for b in ctr_concepts[i + 1 :]:
             sources_b = {sid for rec in ctr_by_concept[b] for sid in rec.get("source_ids", [])}
             shared = sources_a & sources_b
             if not shared:
@@ -530,15 +565,17 @@ def suggest_by_contradiction_mapping(graph: dict, limit: int = 50) -> list[dict]
             if key in existing or key in seen:
                 continue
             seen.add(key)
-            results.append({
-                "approach": "contradiction-mapping",
-                "concept_a": key[0],
-                "concept_b": key[1],
-                "score": len(shared),
-                "shared_contradiction_sources": sorted(shared)[:5],
-                "reason": f"both have conflicting claims citing {len(shared)} shared source(s)",
-                "link_type": "tension",
-            })
+            results.append(
+                {
+                    "approach": "contradiction-mapping",
+                    "concept_a": key[0],
+                    "concept_b": key[1],
+                    "score": len(shared),
+                    "shared_contradiction_sources": sorted(shared)[:5],
+                    "reason": f"both have conflicting claims citing {len(shared)} shared source(s)",
+                    "link_type": "tension",
+                }
+            )
 
     # Signal 2: Open Questions cross-references
     for path in sorted(CONFIG.concepts_dir.glob("*.md")):
@@ -554,14 +591,16 @@ def suggest_by_contradiction_mapping(graph: dict, limit: int = 50) -> list[dict]
             if key in existing or key in seen:
                 continue
             seen.add(key)
-            results.append({
-                "approach": "contradiction-mapping",
-                "concept_a": key[0],
-                "concept_b": key[1],
-                "score": 1,
-                "reason": f"{path.stem} cites {linked} in Open Questions (unresolved tension)",
-                "link_type": "tension",
-            })
+            results.append(
+                {
+                    "approach": "contradiction-mapping",
+                    "concept_a": key[0],
+                    "concept_b": key[1],
+                    "score": 1,
+                    "reason": f"{path.stem} cites {linked} in Open Questions (unresolved tension)",
+                    "link_type": "tension",
+                }
+            )
 
     results.sort(key=lambda x: -x["score"])
     return results[:limit]
@@ -628,18 +667,22 @@ def run_suggest_links(
         merged[key].append(r)
 
     candidates = []
-    for (a, b), signals in sorted(merged.items(), key=lambda x: (-len(x[1]), -max(s["score"] for s in x[1]))):
+    for (a, b), signals in sorted(
+        merged.items(), key=lambda x: (-len(x[1]), -max(s["score"] for s in x[1]))
+    ):
         link_types = list({s.get("link_type", "related") for s in signals})
-        candidates.append({
-            "concept_a": a,
-            "concept_b": b,
-            "signals": len(signals),
-            "link_types": link_types,
-            "approaches": [s["approach"] for s in signals],
-            "scores": {s["approach"]: s["score"] for s in signals},
-            "reasons": [s["reason"] for s in signals],
-            "wikilink_in_a": f"[[Concepts/{b}|{_wikilink_label(b)}]]",
-            "wikilink_in_b": f"[[Concepts/{a}|{_wikilink_label(a)}]]",
-        })
+        candidates.append(
+            {
+                "concept_a": a,
+                "concept_b": b,
+                "signals": len(signals),
+                "link_types": link_types,
+                "approaches": [s["approach"] for s in signals],
+                "scores": {s["approach"]: s["score"] for s in signals},
+                "reasons": [s["reason"] for s in signals],
+                "wikilink_in_a": f"[[Concepts/{b}|{_wikilink_label(b)}]]",
+                "wikilink_in_b": f"[[Concepts/{a}|{_wikilink_label(a)}]]",
+            }
+        )
 
     return {"total_candidates": len(candidates), "candidates": candidates[:limit]}

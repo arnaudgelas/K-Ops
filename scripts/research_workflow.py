@@ -1,38 +1,30 @@
-"""Research workflow helpers extracted from kb.py.
-
-All research-phase logic lives here: path helpers, document renderers, status
-management, import handling, and the ``cmd_research_*`` command functions.
-``kb.py`` imports this module and delegates all ``research-*`` sub-commands to
-the functions defined below.
-"""
-
 from __future__ import annotations
 
 import datetime as dt
-import json
-import re
 import shutil
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
 
-import research_artifacts as _ra
+from kb_runtime import agent_run, build_prompt
+from research_artifacts import (
+    copy_imported_report,
+    render_research_brief,
+    render_research_findings,
+    render_research_manifest,
+    render_research_progress,
+    render_research_report,
+    render_research_review,
+    render_research_status,
+    research_source_note_path,
+)
 from utils import (
     CONFIG,
     ROOT,
-    agent_run,
-    build_prompt,
     dump_frontmatter,
     ensure_dir,
-    now_stamp,
     parse_frontmatter,
-    short_hash,
     slugify,
     write_text,
 )
-
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
 RESEARCH_ROOT = CONFIG.research_dir
 RESEARCH_BRIEFS = RESEARCH_ROOT / "briefs"
@@ -41,7 +33,6 @@ RESEARCH_NOTES = RESEARCH_ROOT / "notes"
 RESEARCH_REPORTS = RESEARCH_ROOT / "reports"
 RESEARCH_IMPORTS = RESEARCH_ROOT / "imports"
 RESEARCH_ARCHIVE = RESEARCH_ROOT / "archive"
-
 RESEARCH_PHASES = {
     "briefing",
     "source-collection",
@@ -52,22 +43,10 @@ RESEARCH_PHASES = {
     "blocked",
 }
 RESEARCH_TIERS = {"fast", "standard", "deep"}
-RESEARCH_IMPORTED_KIND = "imported_model_report"
-RESEARCH_IMPORTED_CITATION_KIND = "imported_model_report_citation"
-REPORT_URL_RE = re.compile(
-    r"\((https?://[^)\s]+)\)|(?<!\]\()(?<!\]\[)(https?://[^\s<>\]]+)",
-    re.IGNORECASE,
-)
-
-
-# ---------------------------------------------------------------------------
-# Path helpers
-# ---------------------------------------------------------------------------
 
 
 def research_slug(text: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", text.strip().lower())
-    slug = re.sub(r"-+", "-", slug).strip("-")
+    slug = slugify(text.strip())
     return slug or "research-topic"
 
 
@@ -126,156 +105,6 @@ def research_archive_dir(slug: str) -> Path:
 
 def parse_research_file(path: Path) -> tuple[dict, str]:
     return parse_frontmatter(path.read_text(encoding="utf-8"))
-
-
-def write_markdown(path: Path, data: dict, body: str) -> None:
-    write_text(path, dump_frontmatter(data) + body.rstrip() + "\n")
-
-
-def render_imported_report_source_note(
-    source_id: str,
-    title: str,
-    slug: str,
-    imported_path: Path,
-    canonical_origin: str,
-    created_at: str,
-) -> str:
-    return dump_frontmatter(
-        {
-            "title": title,
-            "type": "source-summary",
-            "source_id": source_id,
-            "source_kind": RESEARCH_IMPORTED_KIND,
-            "evidence_strength": "secondary",
-            "imported_from": str(imported_path.relative_to(ROOT)),
-            "canonical_origin": canonical_origin,
-            "topic_slug": slug,
-            "authority": "lead_only",
-            "verification_state": "needs_primary_sources",
-            "created_at": created_at,
-        }
-    ) + "\n".join(
-        [
-            f"# {title}",
-            "",
-            "## Summary",
-            "",
-            "This imported report is a lead generator, not final authority.",
-            "",
-            "## Key Claims",
-            "",
-            "- Pending extraction from the imported report.",
-            "",
-            "## Evidence Notes",
-            "",
-            "- Verify the claims against primary sources before promoting them into concept pages.",
-            "",
-            "## Related Concepts",
-            "",
-            "- Pending.",
-            "",
-            "## Backlinks",
-            "",
-            "- Imported report sources must remain traceable to their raw input.",
-            "",
-        ]
-    )
-
-
-def render_imported_citation_source_note(
-    source_id: str,
-    title: str,
-    topic_slug: str,
-    url: str,
-    report_source_id: str,
-    provider: str,
-    created_at: str,
-) -> str:
-    return dump_frontmatter(
-        {
-            "title": title,
-            "type": "source-summary",
-            "source_id": source_id,
-            "source_kind": RESEARCH_IMPORTED_CITATION_KIND,
-            "evidence_strength": "stub",
-            "canonical_url": url,
-            "topic_slug": topic_slug,
-            "parent_source_id": report_source_id,
-            "provider": provider,
-            "authority": "lead_only",
-            "verification_state": "needs_fetch",
-            "created_at": created_at,
-        }
-    ) + "\n".join(
-        [
-            f"# {title}",
-            "",
-            "## Summary",
-            "",
-            "This is a citation extracted from an imported model-generated report and should be treated as a lead.",
-            "",
-            "## Key Claims",
-            "",
-            "- Pending verification.",
-            "",
-            "## Evidence Notes",
-            "",
-            f"- Canonical URL: {url}",
-            f"- Parent imported report: [[Sources/{report_source_id}|source-{report_source_id}]]",
-            "",
-            "## Related Concepts",
-            "",
-            "- Pending.",
-            "",
-            "## Backlinks",
-            "",
-            "- Imported citation stub.",
-            "",
-        ]
-    )
-
-
-def render_import_manifest(
-    topic: str,
-    slug: str,
-    provider: str,
-    canonical_origin: str,
-    imported_path: Path,
-    report_note_path: Path,
-    bundle_path: Path,
-    citations: list[dict[str, str]],
-) -> str:
-    data = {
-        "title": f"Imported report manifest: {topic.strip() or slug}",
-        "type": "research-import-manifest",
-        "topic_slug": slug,
-        "provider": provider,
-        "canonical_origin": canonical_origin,
-        "imported_report_path": str(imported_path.relative_to(ROOT)),
-        "report_note_path": str(report_note_path.relative_to(ROOT)),
-        "bundle_path": str(bundle_path.relative_to(ROOT)),
-        "citation_count": len(citations),
-        "created_at": research_timestamp(),
-    }
-    body_lines = [
-        "# Imported Report Manifest",
-        "",
-        "## Citations",
-        "",
-        "| URL | Label | Source ID | Status |",
-        "|---|---|---|---|",
-    ]
-    for item in citations:
-        body_lines.append(f"| {item['url']} | {item['label']} | {item['source_id']} | {item['status']} |")
-    if not citations:
-        body_lines.extend(["", "- No citations were detected in the imported report."])
-    body_lines.extend(["", "## Notes", "", "- Imported reports are leads, not authority.", ""])
-    return dump_frontmatter(data) + "\n".join(body_lines)
-
-
-# ---------------------------------------------------------------------------
-# State management
-# ---------------------------------------------------------------------------
 
 
 def load_research_status(slug: str) -> tuple[dict, str, Path] | None:
@@ -338,13 +167,7 @@ def append_research_progress(slug: str, message: str) -> None:
     write_text(path, dump_frontmatter(frontmatter) + "\n".join(lines).lstrip("\n"))
 
 
-def research_run_title(topic: str | None, slug: str) -> str:
-    return topic.strip() if topic and topic.strip() else slug
-
-
-def ensure_research_scaffold(
-    topic: str, tier: str
-) -> tuple[str, Path, Path, Path, Path, Path]:
+def ensure_research_scaffold(topic: str, tier: str) -> tuple[str, Path, Path, Path, Path, Path]:
     ensure_research_dirs()
     slug = research_slug(topic)
     created_at = research_date()
@@ -358,13 +181,16 @@ def ensure_research_scaffold(
     ensure_dir(imports_dir)
 
     if not brief_path.exists():
-        write_text(brief_path, _ra.render_research_brief(topic, slug, tier, created_at, brief_path, status_path))
+        write_text(
+            brief_path,
+            render_research_brief(topic, slug, tier, created_at, brief_path, status_path),
+        )
     if not progress_path.exists():
-        write_text(progress_path, _ra.render_research_progress(topic, slug, tier, created_at))
+        write_text(progress_path, render_research_progress(topic, slug, tier, created_at))
     if not status_path.exists():
         write_text(
             status_path,
-            _ra.render_research_status(
+            render_research_status(
                 topic,
                 slug,
                 tier,
@@ -380,131 +206,6 @@ def ensure_research_scaffold(
             ),
         )
     return slug, brief_path, status_path, progress_path, findings_path, report_path
-
-
-# ---------------------------------------------------------------------------
-# Import handling helpers
-# ---------------------------------------------------------------------------
-
-
-def research_source_note_path(source_id: str) -> Path:
-    return CONFIG.summaries_dir / f"{source_id}.md"
-
-
-def get_source_note_frontmatter(source_id: str) -> dict | None:
-    note_path = research_source_note_path(source_id)
-    if not note_path.exists():
-        return None
-    frontmatter, _ = parse_frontmatter(note_path.read_text(encoding="utf-8"))
-    return frontmatter
-
-
-def build_research_source_note_path(topic_slug: str, title: str, imported_path: Path) -> Path:
-    stem = slugify(title, max_len=40)
-    return research_import_dir(topic_slug) / f"{stem}{imported_path.suffix or '.md'}"
-
-
-def imported_report_source_id(canonical_origin: str, content: str) -> str:
-    return f"src-{short_hash(canonical_origin + '|' + content)}"
-
-
-def imported_report_bundle_dir(topic_slug: str, provider: str, imported_stamp: str) -> Path:
-    return research_import_dir(topic_slug) / f"{provider}-{imported_stamp}"
-
-
-def normalize_url(url: str) -> str:
-    url = url.strip().rstrip(".,;:)]}>'\"")
-    parsed = urlsplit(url)
-    if parsed.scheme not in {"http", "https"}:
-        return url
-    normalized = parsed._replace(fragment="")
-    return urlunsplit(normalized)
-
-
-def extract_report_citations(text: str) -> list[dict[str, str]]:
-    citations: dict[str, dict[str, str]] = {}
-    for match in REPORT_URL_RE.finditer(text):
-        url = normalize_url(match.group(1) or match.group(2) or "")
-        if not url:
-            continue
-        label = "link" if match.group(1) else (urlsplit(url).netloc or url)
-        citations.setdefault(url, {"url": url, "label": label})
-    return list(citations.values())
-
-
-def citation_source_id(url: str) -> str:
-    return f"src-{short_hash(url)}"
-
-
-def copy_imported_report(
-    imported_path: Path, topic_slug: str, provider: str, canonical_origin: str
-) -> tuple[Path, str, str, list[dict[str, str]], Path]:
-    if not imported_path.exists():
-        raise FileNotFoundError(imported_path)
-    ensure_research_dirs()
-    imported_stamp = now_stamp()
-    bundle_dir = imported_report_bundle_dir(topic_slug, provider, imported_stamp)
-    ensure_dir(bundle_dir)
-    content = imported_path.read_text(encoding="utf-8")
-    source_id = imported_report_source_id(canonical_origin, content)
-    title = f"Imported report: {provider} {imported_path.stem}"
-    target_path = bundle_dir / imported_path.name
-    write_text(target_path, content)
-    citations = extract_report_citations(content)
-    note_path = research_source_note_path(source_id)
-    if not note_path.exists():
-        write_text(
-            note_path,
-            render_imported_report_source_note(
-                source_id=source_id,
-                title=title,
-                slug=topic_slug,
-                imported_path=target_path,
-                canonical_origin=canonical_origin,
-                created_at=research_timestamp(),
-            ),
-        )
-    citation_items: list[dict[str, str]] = []
-    for citation in citations:
-        citation_id = citation_source_id(citation["url"])
-        citation_title = citation["label"] if citation["label"] else citation["url"]
-        citation_note = research_source_note_path(citation_id)
-        if not citation_note.exists():
-            write_text(
-                citation_note,
-                render_imported_citation_source_note(
-                    source_id=citation_id,
-                    title=f"Imported citation: {citation_title}",
-                    topic_slug=topic_slug,
-                    url=citation["url"],
-                    report_source_id=source_id,
-                    provider=provider,
-                    created_at=research_timestamp(),
-                ),
-            )
-        citation_items.append(
-            {
-                "url": citation["url"],
-                "label": citation_title,
-                "source_id": citation_id,
-                "status": "stub-created" if citation_note.exists() else "created",
-            }
-        )
-    manifest_path = bundle_dir / "manifest.md"
-    write_text(
-        manifest_path,
-        render_import_manifest(
-            topic=title,
-            slug=topic_slug,
-            provider=provider,
-            canonical_origin=canonical_origin,
-            imported_path=target_path,
-            report_note_path=note_path,
-            bundle_path=bundle_dir,
-            citations=citation_items,
-        ),
-    )
-    return target_path, source_id, title, citation_items, manifest_path
 
 
 def move_path_to_archive(source: Path, archive_root: Path, moved: list[str]) -> None:
@@ -534,15 +235,12 @@ def topic_from_status_or_arg(arg: str | None) -> tuple[str, str]:
     return slug, arg.strip()
 
 
-# ---------------------------------------------------------------------------
-# Command functions (called from kb.py dispatch)
-# ---------------------------------------------------------------------------
-
-
 def cmd_research_start(topic: str, tier: str = "standard") -> None:
     if tier not in RESEARCH_TIERS:
         raise ValueError(f"Unsupported quality tier: {tier}")
-    slug, brief_path, status_path, progress_path, findings_path, report_path = ensure_research_scaffold(topic, tier)
+    slug, brief_path, status_path, progress_path, findings_path, report_path = (
+        ensure_research_scaffold(topic, tier)
+    )
     print(f"Research scaffold ready: {slug}")
     print(f"- brief: {brief_path.relative_to(ROOT)}")
     print(f"- status: {status_path.relative_to(ROOT)}")
@@ -562,9 +260,15 @@ def cmd_research_status(target: str = "all") -> None:
         slug = str(frontmatter.get("topic_slug") or research_slug(topic))
         tier = str(frontmatter.get("quality_tier") or "unknown")
         phase = str(frontmatter.get("phase") or "unknown")
-        brief_path = ROOT / str(frontmatter["brief_path"]) if frontmatter.get("brief_path") else None
-        findings_path = ROOT / str(frontmatter["findings_path"]) if frontmatter.get("findings_path") else None
-        report_path = ROOT / str(frontmatter["report_path"]) if frontmatter.get("report_path") else None
+        brief_path = (
+            ROOT / str(frontmatter["brief_path"]) if frontmatter.get("brief_path") else None
+        )
+        findings_path = (
+            ROOT / str(frontmatter["findings_path"]) if frontmatter.get("findings_path") else None
+        )
+        report_path = (
+            ROOT / str(frontmatter["report_path"]) if frontmatter.get("report_path") else None
+        )
         review_path = research_review_path(slug)
         brief_exists = "yes" if brief_path and brief_path.exists() else "no"
         findings_exists = "yes" if findings_path and findings_path.exists() else "no"
@@ -600,7 +304,9 @@ def cmd_research_status(target: str = "all") -> None:
 
 
 def cmd_research_collect(agent: str, topic: str, tier: str = "standard") -> None:
-    slug, brief_path, status_path, progress_path, findings_path, report_path = ensure_research_scaffold(topic, tier)
+    slug, brief_path, status_path, progress_path, findings_path, report_path = (
+        ensure_research_scaffold(topic, tier)
+    )
     set_research_status_phase(
         slug,
         topic=topic,
@@ -612,18 +318,18 @@ def cmd_research_collect(agent: str, topic: str, tier: str = "standard") -> None
         report_path=report_path,
     )
     if not findings_path.exists():
-        write_text(findings_path, _ra.render_research_findings(topic, slug, tier, research_timestamp(), status_path))
+        write_text(
+            findings_path,
+            render_research_findings(topic, slug, tier, research_timestamp(), status_path),
+        )
     prompt = build_prompt(
         "research_collect_prompt.md",
-        slug=slug,
-        topic=topic,
-        tier=tier,
         brief_path=str(brief_path.relative_to(ROOT)),
         status_path=str(status_path.relative_to(ROOT)),
         progress_path=str(progress_path.relative_to(ROOT)),
         findings_path=str(findings_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt, command="research-collect")
+    agent_run(agent, prompt)
     if not findings_path.exists():
         raise FileNotFoundError(f"Expected findings file was not written: {findings_path}")
     append_research_progress(slug, "Completed source collection and initial findings distillation.")
@@ -641,12 +347,17 @@ def cmd_research_collect(agent: str, topic: str, tier: str = "standard") -> None
 
 
 def cmd_research_review(agent: str, topic: str, tier: str = "standard") -> None:
-    slug, brief_path, status_path, progress_path, findings_path, report_path = ensure_research_scaffold(topic, tier)
+    slug, brief_path, status_path, progress_path, findings_path, report_path = (
+        ensure_research_scaffold(topic, tier)
+    )
     review_path = research_review_path(slug)
     if not findings_path.exists():
         raise FileNotFoundError(f"Cannot review `{slug}` before findings exist: {findings_path}")
     if not review_path.exists():
-        write_text(review_path, _ra.render_research_review(topic, slug, tier, research_timestamp(), status_path))
+        write_text(
+            review_path,
+            render_research_review(topic, slug, tier, research_timestamp(), status_path),
+        )
     set_research_status_phase(
         slug,
         topic=topic,
@@ -660,14 +371,11 @@ def cmd_research_review(agent: str, topic: str, tier: str = "standard") -> None:
     )
     prompt = build_prompt(
         "research_review_prompt.md",
-        slug=slug,
-        topic=topic,
-        tier=tier,
         brief_path=str(brief_path.relative_to(ROOT)),
         findings_path=str(findings_path.relative_to(ROOT)),
         review_path=str(review_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt, command="research-review")
+    agent_run(agent, prompt)
     if not review_path.exists():
         raise FileNotFoundError(f"Expected contrarian review was not written: {review_path}")
     append_research_progress(slug, "Completed contrarian review.")
@@ -677,7 +385,9 @@ def cmd_research_review(agent: str, topic: str, tier: str = "standard") -> None:
 def cmd_research_report(
     agent: str, topic: str, tier: str = "standard", require_review: bool = True
 ) -> None:
-    slug, brief_path, status_path, progress_path, findings_path, report_path = ensure_research_scaffold(topic, tier)
+    slug, brief_path, status_path, progress_path, findings_path, report_path = (
+        ensure_research_scaffold(topic, tier)
+    )
     review_path = research_review_path(slug)
     if not findings_path.exists():
         raise FileNotFoundError(f"Cannot draft report without findings: {findings_path}")
@@ -686,7 +396,9 @@ def cmd_research_report(
     if not report_path.exists():
         write_text(
             report_path,
-            _ra.render_research_report(topic, slug, tier, research_timestamp(), status_path, review_path),
+            render_research_report(
+                topic, slug, tier, research_timestamp(), status_path, review_path
+            ),
         )
     set_research_status_phase(
         slug,
@@ -701,15 +413,12 @@ def cmd_research_report(
     )
     prompt = build_prompt(
         "research_report_prompt.md",
-        slug=slug,
-        topic=topic,
-        tier=tier,
         brief_path=str(brief_path.relative_to(ROOT)),
         findings_path=str(findings_path.relative_to(ROOT)),
         review_path=str(review_path.relative_to(ROOT)),
         report_path=str(report_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt, command="research-report")
+    agent_run(agent, prompt)
     if not report_path.exists():
         raise FileNotFoundError(f"Expected report was not written: {report_path}")
     append_research_progress(slug, "Completed final report drafting.")
@@ -734,10 +443,14 @@ def cmd_research_import(
     canonical_origin: str | None = None,
     tier: str = "standard",
 ) -> None:
-    slug, brief_path, status_path, progress_path, findings_path, report_path = ensure_research_scaffold(topic, tier)
+    slug, brief_path, status_path, progress_path, findings_path, report_path = (
+        ensure_research_scaffold(topic, tier)
+    )
     source_path = Path(imported_path).expanduser()
     origin = canonical_origin or source_path.as_posix()
-    copied_path, source_id, title, citations, manifest_path = copy_imported_report(source_path, slug, provider, origin)
+    copied_path, source_id, title, citations, manifest_path = copy_imported_report(
+        source_path, slug, provider, origin
+    )
     append_research_progress(
         slug,
         f"Imported model-generated report `{source_path}` as lead note `{source_id}` with {len(citations)} extracted citation(s).",
@@ -801,6 +514,8 @@ def cmd_research_archive(topic: str) -> None:
         shutil.move(str(path), str(destination))
         moved.append(str(destination.relative_to(ROOT)))
     manifest_path = archive_root / "MANIFEST.md"
-    write_text(manifest_path, _ra.render_research_manifest(topic_title, slug, tier, archive_date, phase, moved))
+    write_text(
+        manifest_path, render_research_manifest(topic_title, slug, tier, archive_date, phase, moved)
+    )
     print(f"Archived run written to {archive_root.relative_to(ROOT)}")
     print(f"Manifest: {manifest_path.relative_to(ROOT)}")

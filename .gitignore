@@ -13,6 +13,8 @@ ENV/
 .obsidian/workspace-mobile.json
 research/*
 !research/.gitkeep
+!research/benchmarks/
+!research/benchmarks/**
 outputs/*
 !outputs/.gitkeep
 node_modules/
@@ -21,3 +23,8 @@ build/
 .uv/
 *.swp
 data/graph/
+
+scripts/__pycache__/
+.pytest_cache/
+.tmp/
+outputs/*.zip

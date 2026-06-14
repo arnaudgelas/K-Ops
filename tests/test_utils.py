@@ -48,13 +48,13 @@ class UtilsTests(unittest.TestCase):
                     encoding="utf-8",
                 )
                 utils.CONFIG_PATH = config_path
-                utils.load_config.cache_clear()
+                utils.get_config.cache_clear()
                 loaded = utils.load_config()
                 self.assertEqual(loaded.project_name, "temp")
                 self.assertEqual(loaded.research_dir.name, "research")
         finally:
             utils.CONFIG_PATH = original_config_path
-            utils.load_config.cache_clear()
+            utils.get_config.cache_clear()
 
 
 if __name__ == "__main__":

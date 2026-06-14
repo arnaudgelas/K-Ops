@@ -5,7 +5,7 @@ a stable content-addressable ID, the originating concept, the sources cited in
 that concept's Evidence section, and the current claim quality.
 
 The registry is written to ``data/claims.json`` and is intentionally derived
-from the vault (never hand-edited).  Run ``extract-claims`` to rebuild it.
+from the vault (never hand-edited). Run ``extract-claims`` to rebuild it.
 """
 
 from __future__ import annotations
@@ -14,43 +14,176 @@ import datetime as dt
 import hashlib
 import json
 import re
-from pathlib import Path
 
 from utils import CONFIG, ROOT, ensure_dir, parse_frontmatter
 
 CLAIMS_PATH = ROOT / "data" / "claims.json"
 
 _CLAIMS_SECTION_RE = re.compile(r"## Key Claims\s+(.*?)(?:\n## |\Z)", re.DOTALL)
-_EVIDENCE_SOURCE_RE = re.compile(r"\[\[Sources/(src-[0-9a-f]{10})\|")
+_SOURCE_ID_PATTERN = r"src-[0-9a-f]{10}"
+_SOURCE_REF_RE = re.compile(
+    rf"(?:\[\[Sources/(?:[^/\]#|]+/)?(?P<wiki>{_SOURCE_ID_PATTERN})"
+    rf"(?P<wiki_anchor>#[^\]|)]+)?(?:\|[^\]]*)?\]\]|"
+    rf"(?P<plain>{_SOURCE_ID_PATTERN})(?P<plain_anchor>#[\w./=&:%+-]+)?)"
+)
+_EVIDENCE_SOURCE_RE = re.compile(
+    r"\[\[Sources/(?:[^/|\]#]+/)?(src-[0-9a-f]{10})(?:#[^\]|)]+)?(?:\|[^\]]*)?\]\]"
+)
 _EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 _BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S.*?)\s*$")
+_SOURCE_CITATION_RE = re.compile(
+    rf"\s*\(?(?:\[\[Sources/(?:[^/\]#|]+/)?{_SOURCE_ID_PATTERN}"
+    rf"(?:#[^\]|)]+)?(?:\|[^\]]*)?\]\]|{_SOURCE_ID_PATTERN}"
+    rf"(?:#[\w./=&:%+-]+)?)\)?"
+)
+
+_VALID_PREDICATES = frozenset(
+    (
+        "conforms_to",
+        "extends",
+        "derived_from",
+        "contrasts_with",
+        "supersedes",
+        "superseded_by",
+        "part_of",
+    )
+)
+_TYPED_EDGE_RE = re.compile(
+    r"^\s*-\s+`("
+    + "|".join(_VALID_PREDICATES)
+    + r")::`\s+\[\[Concepts/([^/|\]]+?)(?:\|[^\]]+)?\]\]",
+    re.MULTILINE,
+)
 
 
 def claim_stable_id(concept_stem: str, claim_text: str) -> str:
-    """Return a stable, content-addressable ID for one claim."""
     key = f"{concept_stem}:{claim_text.strip()}"
     digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:10]
     return f"clm-{digest}"
 
 
+def normalize_claim_text(claim_text: str) -> str:
+    text = _SOURCE_CITATION_RE.sub("", claim_text).strip()
+    text = re.sub(r"\s+", " ", text)
+    return re.sub(r"\s+([,.;:!?])", r"\1", text)
+
+
 def _extract_bullets(text: str) -> list[str]:
     bullets: list[str] = []
     for line in text.splitlines():
-        m = _BULLET_RE.match(line)
-        if m:
-            bullets.append(" ".join(m.group(1).split()))
+        match = _BULLET_RE.match(line)
+        if match:
+            bullets.append(" ".join(match.group(1).split()))
     return bullets
 
 
+def _parse_source_anchor(source_id: str, anchor: str | None) -> dict:
+    raw_anchor = (anchor or "").lstrip("#").rstrip(".,;)")
+    parsed: dict = {
+        "source_id": source_id,
+        "anchor": raw_anchor or None,
+        "page": None,
+        "section": None,
+        "paragraph": None,
+        "quote": None,
+        "path": None,
+        "line_start": None,
+        "line_end": None,
+        "commit": None,
+        "extraction_confidence": None,
+        "segment_id": None,
+    }
+    if not raw_anchor:
+        return parsed
+
+    for part in raw_anchor.split("&"):
+        if "=" not in part:
+            if part.startswith("L") and part[1:].isdigit():
+                parsed["line_start"] = int(part[1:])
+            elif part.startswith("seg-"):
+                parsed["segment_id"] = part
+            continue
+        key, value = part.split("=", 1)
+        value = value.rstrip(".,;)")
+        if key == "page" and value.isdigit():
+            parsed["page"] = int(value)
+        elif key == "paragraph" and value.isdigit():
+            parsed["paragraph"] = int(value)
+        elif key in {"line_start", "L"} and value.isdigit():
+            parsed["line_start"] = int(value)
+        elif key == "line_end" and value.isdigit():
+            parsed["line_end"] = int(value)
+        elif key in {"section", "quote", "path", "commit", "segment", "segment_id"}:
+            if key in ("segment", "segment_id"):
+                parsed["segment_id"] = value
+            else:
+                parsed[key] = value
+        elif key == "extraction_confidence":
+            try:
+                parsed[key] = float(value)
+            except ValueError:
+                parsed[key] = None
+        elif key.startswith("L") and key[1:].isdigit():
+            parsed["line_start"] = int(key[1:])
+            if value.startswith("L") and value[1:].isdigit():
+                parsed["line_end"] = int(value[1:])
+    return parsed
+
+
+def extract_source_refs(text: str) -> list[dict]:
+    refs: list[dict] = []
+    seen: set[tuple[str, str | None]] = set()
+    for match in _SOURCE_REF_RE.finditer(text):
+        source_id = match.group("wiki") or match.group("plain")
+        anchor = match.group("wiki_anchor") or match.group("plain_anchor")
+        if not source_id:
+            continue
+        key = (source_id, anchor)
+        if key in seen:
+            continue
+        seen.add(key)
+        refs.append(_parse_source_anchor(source_id, anchor))
+    return refs
+
+
+def _extract_typed_edges(body: str) -> dict[str, list[str]]:
+    edges: dict[str, list[str]] = {}
+    for predicate, target in _TYPED_EDGE_RE.findall(body):
+        edges.setdefault(predicate, []).append(target)
+    return edges
+
+
 def _extract_evidence_source_ids(body: str) -> list[str]:
-    m = _EVIDENCE_SECTION_RE.search(body)
-    if not m:
+    match = _EVIDENCE_SECTION_RE.search(body)
+    if not match:
         return []
-    return sorted(set(_EVIDENCE_SOURCE_RE.findall(m.group(1))))
+    return sorted(set(_EVIDENCE_SOURCE_RE.findall(match.group(1))))
 
 
-def extract_claims_from_concept(path: Path) -> list[dict]:
-    """Parse one concept page and return its atomic claim records."""
+def _status_from_quality(claim_quality: str) -> str:
+    if claim_quality == "supported":
+        return "active"
+    if claim_quality == "conflicting":
+        return "contested"
+    return "provisional"
+
+
+def _confidence_from_quality(claim_quality: str, source_resolution: str) -> float:
+    base = {
+        "supported": 0.8,
+        "provisional": 0.55,
+        "weak": 0.4,
+        "conflicting": 0.45,
+        "stale": 0.35,
+    }.get(claim_quality, 0.4)
+    if source_resolution == "inline":
+        return base
+    if source_resolution == "page-inherited":
+        return max(0.0, base - 0.15)
+    return max(0.0, base - 0.35)
+
+
+def extract_claims_from_concept(path) -> list[dict]:
     text = path.read_text(encoding="utf-8")
     frontmatter, body = parse_frontmatter(text)
 
@@ -59,43 +192,106 @@ def extract_claims_from_concept(path: Path) -> list[dict]:
         return []
 
     source_ids = _extract_evidence_source_ids(body)
+    page_edges = _extract_typed_edges(body)
     bullets = _extract_bullets(claims_match.group(1))
-
     concept_stem = path.stem
     claim_quality = str(frontmatter.get("claim_quality") or "")
     last_updated = str(frontmatter.get("updated") or frontmatter.get("created") or "")
 
-    return [
-        {
-            "id": claim_stable_id(concept_stem, bullet),
-            "text": bullet,
-            "concept": concept_stem,
-            "concept_path": path.relative_to(ROOT).as_posix(),
-            "claim_quality": claim_quality,
-            "source_ids": source_ids,
-            "claim_index": idx,
-            "last_updated": last_updated,
-        }
-        for idx, bullet in enumerate(bullets, start=1)
-    ]
+    claims: list[dict] = []
+    for idx, bullet in enumerate(bullets, start=1):
+        inline_anchors = extract_source_refs(bullet)
+        inline_source_ids = sorted({anchor["source_id"] for anchor in inline_anchors})
+        if inline_source_ids:
+            source_resolution = "inline"
+        elif source_ids:
+            source_resolution = "page-inherited"
+        else:
+            source_resolution = "missing"
+        evidence_status = {
+            "inline": "direct",
+            "page-inherited": "inherited",
+            "missing": "unsupported",
+        }[source_resolution]
+        effective_source_ids = inline_source_ids or source_ids
+        clean_claim = normalize_claim_text(bullet)
+        claim_id = claim_stable_id(concept_stem, clean_claim)
+        claims.append(
+            {
+                "id": claim_id,
+                "claim_id": claim_id,
+                "text": bullet,
+                "claim_text": clean_claim,
+                "concept": concept_stem,
+                "concept_path": path.relative_to(ROOT).as_posix(),
+                "claim_quality": claim_quality,
+                "source_ids": effective_source_ids,
+                "inline_source_ids": inline_source_ids,
+                "page_source_ids": source_ids,
+                "source_resolution": source_resolution,
+                "evidence_status": evidence_status,
+                "source_anchors": inline_anchors,
+                "span_status": "anchored"
+                if any(anchor["anchor"] for anchor in inline_anchors)
+                else "missing",
+                "quote_or_anchor": inline_anchors[0]["anchor"] if inline_anchors else None,
+                "entities": [],
+                "relations": [],
+                "confidence": _confidence_from_quality(claim_quality, source_resolution),
+                "status": _status_from_quality(claim_quality),
+                "extraction_method": "deterministic-key-claims",
+                "last_verified": last_updated,
+                "last_updated": last_updated,
+                "conflicts_with": [],
+                "page_edges": page_edges,
+                "claim_index": idx,
+            }
+        )
+    return claims
+
+
+def _load_contradiction_conflicts() -> dict[str, set[str]]:
+    """Build a claim_id -> set(other claim_ids) index from data/contradictions.json."""
+    contradictions_path = ROOT / "data" / "contradictions.json"
+    if not contradictions_path.exists():
+        return {}
+    payload = json.loads(contradictions_path.read_text(encoding="utf-8"))
+    conflicts: dict[str, set[str]] = {}
+    for entry in payload.get("contradictions", []):
+        claim_ids = entry.get("claim_ids") or []
+        if len(claim_ids) < 2:
+            continue
+        id_set = set(claim_ids)
+        for cid in claim_ids:
+            conflicts.setdefault(cid, set()).update(id_set - {cid})
+    return conflicts
 
 
 def extract_all_claims() -> list[dict]:
-    """Extract claims from every concept page in the vault."""
     all_claims: list[dict] = []
     for path in sorted(CONFIG.concepts_dir.glob("*.md")):
         all_claims.extend(extract_claims_from_concept(path))
+
+    # Wire conflicts_with from contradictions.json (additive — preserves any
+    # manually set entries that may already exist).
+    conflicts = _load_contradiction_conflicts()
+    if conflicts:
+        for claim in all_claims:
+            cid = claim["claim_id"]
+            if cid in conflicts:
+                existing = set(claim.get("conflicts_with") or [])
+                claim["conflicts_with"] = sorted(existing | conflicts[cid])
+
     return all_claims
 
 
 def search_claims(claims: list[dict], query: str, limit: int = 20) -> list[dict]:
-    """Case-insensitive full-text search over claim records."""
     terms = [t for t in query.lower().split() if t]
     if not terms:
         return claims[:limit]
     scored: list[tuple[int, dict]] = []
     for claim in claims:
-        haystack = f"{claim['text']} {claim['concept']}".lower()
+        haystack = f"{claim.get('claim_text') or claim['text']} {claim['concept']}".lower()
         score = sum(haystack.count(t) for t in terms)
         if score > 0:
             scored.append((score, claim))
@@ -104,28 +300,60 @@ def search_claims(claims: list[dict], query: str, limit: int = 20) -> list[dict]
 
 
 def load_claims() -> list[dict]:
-    """Load the current claims registry; rebuild from vault if file is absent."""
     if not CLAIMS_PATH.exists():
         return extract_all_claims()
     payload = json.loads(CLAIMS_PATH.read_text(encoding="utf-8"))
     return payload.get("claims", [])
 
 
-def run() -> list[dict]:
-    """Extract claims from all concepts and write ``data/claims.json``.
-
-    Returns the full claim list.
-    """
+def run(check: bool = False, dry_run: bool = False) -> list[dict]:
     ensure_dir(CLAIMS_PATH.parent)
     claims = extract_all_claims()
-    payload = {
-        "generated_at": dt.datetime.now().replace(microsecond=0).isoformat(),
-        "count": len(claims),
-        "claims": claims,
-    }
-    content = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-    changed = not CLAIMS_PATH.exists() or CLAIMS_PATH.read_text(encoding="utf-8") != content
-    if changed:
-        CLAIMS_PATH.write_text(content, encoding="utf-8")
-    print(f"Claims registry {'updated' if changed else 'unchanged'}: data/claims.json ({len(claims)} claim(s))")
+
+    out_of_sync = True
+    if CLAIMS_PATH.exists():
+        try:
+            existing = json.loads(CLAIMS_PATH.read_text(encoding="utf-8"))
+            if existing.get("claims") == claims:
+                out_of_sync = False
+        except Exception:
+            pass
+
+    if out_of_sync:
+        if check:
+            print("Claims registry is out of sync!")
+            import sys
+
+            sys.exit(1)
+        elif dry_run:
+            print(
+                f"[DRY-RUN] Claims registry would be updated: data/claims.json ({len(claims)} claim(s))"
+            )
+        else:
+            payload = {
+                "generated_at": dt.datetime.now().replace(microsecond=0).isoformat(),
+                "count": len(claims),
+                "claims": claims,
+            }
+            content = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+            CLAIMS_PATH.write_text(content, encoding="utf-8")
+            print(f"Claims registry updated: data/claims.json ({len(claims)} claim(s))")
+    else:
+        print(f"Claims registry unchanged: data/claims.json ({len(claims)} claim(s))")
     return claims
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Extract atomic claims from concept pages.")
+    parser.add_argument(
+        "--check", action="store_true", help="Fail if data/claims.json is out of sync."
+    )
+    parser.add_argument("--dry-run", action="store_true", help="Run without mutating files.")
+    args = parser.parse_args()
+    run(check=args.check, dry_run=args.dry_run)
+
+
+if __name__ == "__main__":
+    main()

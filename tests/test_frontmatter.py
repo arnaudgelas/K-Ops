@@ -1,10 +1,10 @@
 """Tests for parse_frontmatter and dump_frontmatter."""
+
 from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -14,6 +14,7 @@ from utils import dump_frontmatter, parse_frontmatter  # noqa: E402
 # ---------------------------------------------------------------------------
 # parse_frontmatter
 # ---------------------------------------------------------------------------
+
 
 def test_parse_simple():
     text = "---\ntitle: Hello\ntype: note\n---\n# Body\n"
@@ -59,6 +60,7 @@ def test_parse_dashes_in_body():
 # ---------------------------------------------------------------------------
 # dump_frontmatter
 # ---------------------------------------------------------------------------
+
 
 def test_dump_round_trip():
     original = {"title": "Test", "type": "note", "tags": ["kb/test"]}

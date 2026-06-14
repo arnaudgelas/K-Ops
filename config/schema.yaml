@@ -7,12 +7,59 @@ source_note:
     - source_id        # canonical src-[0-9a-f]{10}
     - title            # human-readable title
     - source_url       # original URL or file path
-    - source_kind      # web-page | github-repo | pdf | imported_model_report | imported_model_report_citation | other
+    - source_kind      # arxiv-paper | paper-pdf | github-repo-snapshot | github-file | official-doc | spec | blog | news | local-file | imported-model-report | citation-stub
     - evidence_strength # primary-doc | official-spec | strong | code | maintainer-commentary | changelog | pr-issue | secondary | model-generated | stub | citation-only | image-only
+    - source_status    # active | deprecated | revoked
     - ingested_at      # ISO-8601 date
   recommended:
     - content_hash     # SHA-256 of raw content for staleness detection
     - tags             # kb/source + topic tags
+
+source_kinds:
+  arxiv-paper:
+    required:
+      - title
+      - authors
+      - arxiv_id
+      - published_date
+      - abstract
+  paper-pdf:
+    required:
+      - title
+      - page_count
+  github-repo-snapshot:
+    required:
+      - git_commit
+      - branch
+      - tracked_file_count
+      - sampled_file_count
+  github-file:
+    required:
+      - github_url
+      - git_commit
+  official-doc:
+    required:
+      - organization
+  spec:
+    required:
+      - organization
+      - version
+      - status
+  blog:
+    required: []
+  news:
+    required: []
+  local-file:
+    required: []
+  imported-model-report:
+    required:
+      - authority
+      - verification_state
+  citation-stub:
+    required:
+      - canonical_url
+      - authority
+      - verification_state
 
 concept_page:
   required:
@@ -20,10 +67,10 @@ concept_page:
     - type             # concept | redirect
     - claim_quality    # supported | provisional | weak | conflicting | stale
     - tags             # must include kb/concept
+    - evidence_status  # seed | synthesized | verified | contested (machine-derived; set by compile-wiki)
   recommended:
     - created          # ISO-8601 date
     - updated          # ISO-8601 date
-    - evidence_status  # seed | synthesized | verified | contested (machine-derived; set by compile-wiki)
 
 answer_memo:
   required:
@@ -33,5 +80,8 @@ answer_memo:
     - answer_quality   # memo-only | durable
     - scope            # private | shared
     - sources_consulted # YAML list (may be empty)
+    - query_class      # lookup | synthesis | contradiction | freshness | code | audit | research
+    - retrieval_path   # list of executed steps
+    - fetch_required   # boolean
   recommended:
     - created

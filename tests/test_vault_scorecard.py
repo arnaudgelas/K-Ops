@@ -1,11 +1,10 @@
 """Tests for vault_scorecard.py."""
+
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -26,37 +25,48 @@ def _make_dirs(tmp_path: Path) -> dict[str, Path]:
 
 def _write_concept(dirs: dict, stem: str, claim_quality: str = "supported", body: str = "") -> None:
     text = (
-        f"---\ntitle: \"{stem}\"\ntype: concept\nclaim_quality: {claim_quality}\ntags:\n  - kb/concept\n---\n"
+        f'---\ntitle: "{stem}"\ntype: concept\nclaim_quality: {claim_quality}\ntags:\n  - kb/concept\n---\n'
         + (body or "## What It Is\n\nSomething.\n")
     )
     (dirs["concepts"] / f"{stem}.md").write_text(text, encoding="utf-8")
 
 
-def _write_source(dirs: dict, source_id: str, strength: str = "secondary", kind: str = "web-page") -> None:
+def _write_source(
+    dirs: dict, source_id: str, strength: str = "secondary", kind: str = "web-page"
+) -> None:
     text = (
-        f"---\ntitle: \"Source\"\ntype: source\nsource_id: {source_id}\n"
+        f'---\ntitle: "Source"\ntype: source\nsource_id: {source_id}\n'
         f"evidence_strength: {strength}\nsource_kind: {kind}\ntags:\n  - kb/source\n---\n\n## Summary\n\nContent.\n"
     )
     (dirs["sources"] / f"{source_id}.md").write_text(text, encoding="utf-8")
 
 
-def _write_answer(dirs: dict, stem: str, quality: str = "memo-only", sources_consulted: list | None = None) -> None:
+def _write_answer(
+    dirs: dict, stem: str, quality: str = "memo-only", sources_consulted: list | None = None
+) -> None:
     sc_line = f"sources_consulted: {json.dumps(sources_consulted or [])}\n"
     text = (
-        f"---\ntitle: \"Q\"\ntype: answer\nasked_at: \"2026-01-01T00:00:00\"\n"
+        f'---\ntitle: "Q"\ntype: answer\nasked_at: "2026-01-01T00:00:00"\n'
         f"answer_quality: {quality}\nscope: private\n{sc_line}tags:\n  - kb/answer\n---\n\n# Question\n\nQ.\n\n---\n\n# Answer\n\nA.\n\n## Vault Updates\n\n- None.\n"
     )
     (dirs["answers"] / f"{stem}.md").write_text(text, encoding="utf-8")
 
 
 def _patch_vs(vs_mod, dirs: dict) -> None:
-    vs_mod.CONFIG = type("C", (), {
-        "project_name": "Test",
-        "concepts_dir": dirs["concepts"],
-        "summaries_dir": dirs["sources"],
-        "answers_dir": dirs["answers"],
-        "research_dir": dirs["root"] / "research",
-    })()
+    indexes_dir = dirs["root"] / "notes" / "Indexes"
+    indexes_dir.mkdir(parents=True, exist_ok=True)
+    vs_mod.CONFIG = type(
+        "C",
+        (),
+        {
+            "project_name": "Test",
+            "concepts_dir": dirs["concepts"],
+            "summaries_dir": dirs["sources"],
+            "answers_dir": dirs["answers"],
+            "indexes_dir": indexes_dir,
+            "research_dir": dirs["root"] / "research",
+        },
+    )()
     vs_mod.ROOT = dirs["root"]
     vs_mod._CLAIMS_PATH = dirs["root"] / "data" / "claims.json"
     vs_mod._CONTRADICTIONS_PATH = dirs["root"] / "data" / "contradictions.json"
@@ -71,6 +81,7 @@ def _patch_vs(vs_mod, dirs: dict) -> None:
 
 def test_empty_vault_returns_zeros(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     sc = vs.compute_scorecard()
@@ -83,22 +94,32 @@ def test_empty_vault_returns_zeros(tmp_path):
 
 def test_scorecard_includes_contradictions_domain(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     # Write a contradictions.json with one documented record
     contradictions_path = dirs["root"] / "data" / "contradictions.json"
     contradictions_path.parent.mkdir(parents=True, exist_ok=True)
     contradictions_path.write_text(
-        json.dumps({
-            "generated_at": "2026-01-01T00:00:00",
-            "count": 1,
-            "documented": 1,
-            "undocumented": 0,
-            "contradictions": [
-                {"id": "ctr-abc1234567", "concept": "Foo", "open_question": "A vs B",
-                 "documented": True, "claim_ids": [], "source_ids": [], "created_at": ""}
-            ],
-        }),
+        json.dumps(
+            {
+                "generated_at": "2026-01-01T00:00:00",
+                "count": 1,
+                "documented": 1,
+                "undocumented": 0,
+                "contradictions": [
+                    {
+                        "id": "ctr-abc1234567",
+                        "concept": "Foo",
+                        "open_question": "A vs B",
+                        "documented": True,
+                        "claim_ids": [],
+                        "source_ids": [],
+                        "created_at": "",
+                    }
+                ],
+            }
+        ),
         encoding="utf-8",
     )
     sc = vs.compute_scorecard()
@@ -110,21 +131,31 @@ def test_scorecard_includes_contradictions_domain(tmp_path):
 
 def test_undocumented_contradiction_triggers_health_signal(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     contradictions_path = dirs["root"] / "data" / "contradictions.json"
     contradictions_path.parent.mkdir(parents=True, exist_ok=True)
     contradictions_path.write_text(
-        json.dumps({
-            "generated_at": "2026-01-01T00:00:00",
-            "count": 1,
-            "documented": 0,
-            "undocumented": 1,
-            "contradictions": [
-                {"id": "ctr-xyz9876543", "concept": "Bar", "open_question": None,
-                 "documented": False, "claim_ids": [], "source_ids": [], "created_at": ""}
-            ],
-        }),
+        json.dumps(
+            {
+                "generated_at": "2026-01-01T00:00:00",
+                "count": 1,
+                "documented": 0,
+                "undocumented": 1,
+                "contradictions": [
+                    {
+                        "id": "ctr-xyz9876543",
+                        "concept": "Bar",
+                        "open_question": None,
+                        "documented": False,
+                        "claim_ids": [],
+                        "source_ids": [],
+                        "created_at": "",
+                    }
+                ],
+            }
+        ),
         encoding="utf-8",
     )
     sc = vs.compute_scorecard()
@@ -134,6 +165,7 @@ def test_undocumented_contradiction_triggers_health_signal(tmp_path):
 
 def test_concept_quality_counts(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     _write_concept(dirs, "A", "supported")
@@ -147,6 +179,7 @@ def test_concept_quality_counts(tmp_path):
 
 def test_unsupported_concept_detected(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     _write_concept(dirs, "NoSources", "supported", body="## Key Claims\n\n- A claim.\n")
@@ -156,6 +189,7 @@ def test_unsupported_concept_detected(tmp_path):
 
 def test_supported_concept_with_evidence(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     body = (
@@ -170,6 +204,7 @@ def test_supported_concept_with_evidence(tmp_path):
 
 def test_source_strength_distribution(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     _write_source(dirs, "src-0000000001", "primary-doc")
@@ -184,6 +219,7 @@ def test_source_strength_distribution(tmp_path):
 
 def test_stub_fraction_computed(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     _write_source(dirs, "src-0000000001", "stub")
@@ -195,6 +231,7 @@ def test_stub_fraction_computed(tmp_path):
 
 def test_answer_provenance_counted(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     _write_answer(dirs, "ans1", sources_consulted=["src-abc123def0"])
@@ -206,6 +243,7 @@ def test_answer_provenance_counted(tmp_path):
 
 def test_inline_citation_rate(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     body = (
@@ -220,8 +258,54 @@ def test_inline_citation_rate(tmp_path):
     assert sc["concepts"]["inline_citation_rate"] == 0.5
 
 
+def test_claim_direct_citation_metrics(tmp_path):
+    import vault_scorecard as vs
+
+    dirs = _make_dirs(tmp_path)
+    _patch_vs(vs, dirs)
+    claims_path = dirs["root"] / "data" / "claims.json"
+    claims_path.parent.mkdir(parents=True, exist_ok=True)
+    claims_path.write_text(
+        json.dumps(
+            {
+                "claims": [
+                    {
+                        "id": "clm-1",
+                        "claim_quality": "supported",
+                        "source_ids": ["src-1111111111"],
+                        "evidence_status": "direct",
+                    },
+                    {
+                        "id": "clm-2",
+                        "claim_quality": "supported",
+                        "source_ids": ["src-2222222222"],
+                        "evidence_status": "inherited",
+                    },
+                    {
+                        "id": "clm-3",
+                        "claim_quality": "provisional",
+                        "source_ids": [],
+                        "evidence_status": "unsupported",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    sc = vs.compute_scorecard()
+    assert sc["claims"]["direct"] == 1
+    assert sc["claims"]["inherited"] == 1
+    assert sc["claims"]["unsupported"] == 1
+    assert sc["claims"]["direct_citation_rate"] == 0.333
+    assert sc["claims"]["direct_citation_rate_by_quality"]["supported"] == 0.5
+    codes = {s["code"] for s in sc["health_signals"]}
+    assert "inherited-claim-evidence" in codes
+    assert "unsupported-claims" in codes
+
+
 def test_conflicting_no_oq_detected(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     _write_concept(dirs, "Conflict", "conflicting", body="## Key Claims\n\n- A claim.\n")
@@ -231,6 +315,7 @@ def test_conflicting_no_oq_detected(tmp_path):
 
 def test_conflicting_with_oq_not_flagged(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     body = "## Key Claims\n\n- A claim.\n\n## Open Questions\n\n- Source A vs B disagrees.\n"
@@ -241,6 +326,7 @@ def test_conflicting_with_oq_not_flagged(tmp_path):
 
 def test_health_signal_high_stub_fraction(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     for i in range(4):
@@ -253,6 +339,7 @@ def test_health_signal_high_stub_fraction(tmp_path):
 
 def test_run_writes_scorecard_json(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     vs.SCORECARD_PATH = dirs["root"] / "data" / "scorecard.json"
@@ -265,6 +352,7 @@ def test_run_writes_scorecard_json(tmp_path):
 
 def test_run_is_idempotent(tmp_path):
     import vault_scorecard as vs
+
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
     vs.SCORECARD_PATH = dirs["root"] / "data" / "scorecard.json"

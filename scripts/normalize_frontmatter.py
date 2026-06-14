@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from utils import CONFIG, ROOT, parse_frontmatter
+from utils import ROOT
 
 FRONT_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 TAG_RE = re.compile(r"^tags:\s*\n((?:  -[^\n]*\n?)+)", re.MULTILINE)
@@ -61,19 +61,19 @@ def normalize_file(path: Path, dry_run: bool = False) -> bool:
         return False
 
     fm_block = fm_match.group(1)
-    body = text[fm_match.end():]
+    body = text[fm_match.end() :]
     changed = False
 
     # Parse type
     type_m = re.search(r"^type:\s*(\S+)", fm_block, re.MULTILINE)
-    page_type = type_m.group(1).strip('"\'') if type_m else ""
+    page_type = type_m.group(1).strip("\"'") if type_m else ""
 
     # Normalize claim_quality
     cq_m = re.search(r"^claim_quality:\s*(.+)$", fm_block, re.MULTILINE)
     if cq_m:
-        cq_raw = cq_m.group(1).strip().strip('"\'')
+        cq_raw = cq_m.group(1).strip().strip("\"'")
         if cq_raw in VALID_CLAIM_QUALITIES and cq_raw != cq_m.group(1).strip():
-            fm_block = fm_block[:cq_m.start(1)] + cq_raw + fm_block[cq_m.end(1):]
+            fm_block = fm_block[: cq_m.start(1)] + cq_raw + fm_block[cq_m.end(1) :]
             changed = True
 
     # Normalize tags
@@ -83,7 +83,7 @@ def normalize_file(path: Path, dry_run: bool = False) -> bool:
         normalized = _normalize_tags(raw_tags, page_type)
         new_tag_block = "tags:\n" + "".join(f"  - {t}\n" for t in normalized)
         if new_tag_block != "tags:\n" + tag_m.group(1):
-            fm_block = fm_block[:tag_m.start()] + new_tag_block + fm_block[tag_m.end():]
+            fm_block = fm_block[: tag_m.start()] + new_tag_block + fm_block[tag_m.end() :]
             changed = True
 
     # Add updated timestamp for concept/answer pages
@@ -93,7 +93,7 @@ def normalize_file(path: Path, dry_run: bool = False) -> bool:
         for anchor in ("ingested_at:", "created:", "title:"):
             am = re.search(rf"^{re.escape(anchor)}[^\n]*\n", fm_block, re.MULTILINE)
             if am:
-                fm_block = fm_block[:am.end()] + f"updated: {dt}\n" + fm_block[am.end():]
+                fm_block = fm_block[: am.end()] + f"updated: {dt}\n" + fm_block[am.end() :]
                 changed = True
                 break
 

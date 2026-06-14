@@ -17,6 +17,7 @@ Output: ranked table printed to stdout and written to data/graph/link_candidates
 Usage (from repo root):
     uv run python scripts/graph_link_candidates.py [--top N] [--min-count M]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -42,6 +43,7 @@ ANNOTATION_RE = re.compile(r"\s*\*\(.*?\)\*\s*$")
 
 # ── graph loading ─────────────────────────────────────────────────────────────
 
+
 def load_graph() -> dict:
     if GRAPH_PATH.exists():
         return json.loads(GRAPH_PATH.read_text(encoding="utf-8"))
@@ -50,6 +52,7 @@ def load_graph() -> dict:
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def concept_nodes(graph: dict) -> dict[str, dict]:
     return {n["id"]: n for n in graph["nodes"] if n["kind"] == "concept"}
@@ -63,7 +66,7 @@ def existing_concept_edges(graph: dict) -> set[tuple[str, str]]:
             s, t = edge["source"], edge["target"]
             if s.startswith("concept:") and t.startswith("concept:"):
                 existing.add((s, t))
-                existing.add((t, s))   # treat as undirected
+                existing.add((t, s))  # treat as undirected
     return existing
 
 
@@ -88,6 +91,7 @@ def concept_to_sources(s2c: dict[str, set[str]]) -> dict[str, set[str]]:
 
 # ── Theory 1 & 2: Hebbian co-citation + PMI ──────────────────────────────────
 
+
 def hebbian_and_pmi(
     concepts: dict[str, dict],
     s2c: dict[str, set[str]],
@@ -109,7 +113,7 @@ def hebbian_and_pmi(
         sa = c2s.get(ca, set())
         if not sa:
             continue
-        for cb in concept_ids[i + 1:]:
+        for cb in concept_ids[i + 1 :]:
             pair = frozenset({ca, cb})
             if pair in seen:
                 continue
@@ -142,6 +146,7 @@ def hebbian_and_pmi(
 
 # ── Theory 3: Jaccard similarity on the concept graph ────────────────────────
 
+
 def jaccard_similarity(
     concepts: dict[str, dict],
     existing: set[tuple[str, str]],
@@ -169,7 +174,7 @@ def jaccard_similarity(
         na = neighbours.get(ca, set())
         if not na:
             continue
-        for cb in concept_ids[i + 1:]:
+        for cb in concept_ids[i + 1 :]:
             pair = frozenset({ca, cb})
             if pair in seen:
                 continue
@@ -201,6 +206,7 @@ def jaccard_similarity(
 
 
 # ── Theory 4: Spreading activation (random-walk proximity) ───────────────────
+
 
 def spreading_activation(
     concepts: dict[str, dict],
@@ -274,6 +280,7 @@ def spreading_activation(
 
 # ── Merge and rank all candidates ────────────────────────────────────────────
 
+
 def merge_candidates(
     hebbian: list[dict],
     jaccard: list[dict],
@@ -297,11 +304,17 @@ def merge_candidates(
         if r["co_citation"] < min_co or r["pmi"] < min_pmi:
             continue
         k = key(r["a"], r["b"])
-        entry = scores.setdefault(k, {
-            "a": r["a"], "b": r["b"],
-            "a_title": r["a_title"], "b_title": r["b_title"],
-            "signals": [], "score": 0.0,
-        })
+        entry = scores.setdefault(
+            k,
+            {
+                "a": r["a"],
+                "b": r["b"],
+                "a_title": r["a_title"],
+                "b_title": r["b_title"],
+                "signals": [],
+                "score": 0.0,
+            },
+        )
         entry["co_citation"] = r["co_citation"]
         entry["pmi"] = r["pmi"]
         entry["signals"].append(f"hebbian({r['co_citation']})")
@@ -312,11 +325,17 @@ def merge_candidates(
         if r["jaccard"] < min_jaccard:
             continue
         k = key(r["a"], r["b"])
-        entry = scores.setdefault(k, {
-            "a": r["a"], "b": r["b"],
-            "a_title": r["a_title"], "b_title": r["b_title"],
-            "signals": [], "score": 0.0,
-        })
+        entry = scores.setdefault(
+            k,
+            {
+                "a": r["a"],
+                "b": r["b"],
+                "a_title": r["a_title"],
+                "b_title": r["b_title"],
+                "signals": [],
+                "score": 0.0,
+            },
+        )
         entry["jaccard"] = r["jaccard"]
         entry["shared_neighbours"] = r["shared_neighbours"]
         entry["signals"].append(f"jaccard({r['jaccard']:.3f})")
@@ -327,11 +346,17 @@ def merge_candidates(
         if r["activation"] < min_activation:
             continue
         k = key(r["a"], r["b"])
-        entry = scores.setdefault(k, {
-            "a": r["a"], "b": r["b"],
-            "a_title": r["a_title"], "b_title": r["b_title"],
-            "signals": [], "score": 0.0,
-        })
+        entry = scores.setdefault(
+            k,
+            {
+                "a": r["a"],
+                "b": r["b"],
+                "a_title": r["a_title"],
+                "b_title": r["b_title"],
+                "signals": [],
+                "score": 0.0,
+            },
+        )
         entry["activation"] = r["activation"]
         entry["signals"].append(f"activation({r['activation']:.4f})")
         entry["score"] += r["activation"] * 2.0
@@ -344,15 +369,28 @@ def merge_candidates(
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Propose missing concept links via graph learning theories.")
+    parser = argparse.ArgumentParser(
+        description="Propose missing concept links via graph learning theories."
+    )
     parser.add_argument("--top", type=int, default=40, help="Max candidates to display")
-    parser.add_argument("--min-co", type=int, default=2, help="Minimum co-citation count (Hebbian threshold)")
+    parser.add_argument(
+        "--min-co", type=int, default=2, help="Minimum co-citation count (Hebbian threshold)"
+    )
     parser.add_argument("--min-pmi", type=float, default=0.5, help="Minimum PMI score")
-    parser.add_argument("--min-jaccard", type=float, default=0.15, help="Minimum Jaccard similarity")
-    parser.add_argument("--min-activation", type=float, default=0.05, help="Minimum spreading activation score")
-    parser.add_argument("--multi-only", action="store_true", default=True,
-                        help="Only show candidates confirmed by ≥2 independent signals (default: on)")
+    parser.add_argument(
+        "--min-jaccard", type=float, default=0.15, help="Minimum Jaccard similarity"
+    )
+    parser.add_argument(
+        "--min-activation", type=float, default=0.05, help="Minimum spreading activation score"
+    )
+    parser.add_argument(
+        "--multi-only",
+        action="store_true",
+        default=True,
+        help="Only show candidates confirmed by ≥2 independent signals (default: on)",
+    )
     args = parser.parse_args()
 
     print("Loading graph …", file=sys.stderr)
@@ -362,8 +400,11 @@ def main() -> None:
     s2c = source_to_concepts(graph)
     c2s = concept_to_sources(s2c)
 
-    print(f"  {len(concepts)} concept nodes, {len(existing)//2} existing concept edges, "
-          f"{len(s2c)} source→concept mappings", file=sys.stderr)
+    print(
+        f"  {len(concepts)} concept nodes, {len(existing) // 2} existing concept edges, "
+        f"{len(s2c)} source→concept mappings",
+        file=sys.stderr,
+    )
 
     print("Running Hebbian co-citation + PMI …", file=sys.stderr)
     heb = hebbian_and_pmi(concepts, s2c, c2s, existing)
@@ -379,20 +420,24 @@ def main() -> None:
 
     print("Merging signals …", file=sys.stderr)
     candidates = merge_candidates(
-        heb, jac, act,
+        heb,
+        jac,
+        act,
         min_co=args.min_co,
         min_pmi=args.min_pmi,
         min_jaccard=args.min_jaccard,
         min_activation=args.min_activation,
     )
 
-    top = candidates[:args.top]
+    top = candidates[: args.top]
     print(f"\n{'Rank':<5} {'Score':>6}  {'Signals':<40}  A  ↔  B")
     print("-" * 100)
     for i, c in enumerate(top, 1):
         sigs = " | ".join(c["signals"])
-        print(f"{i:<5} {c['score']:>6.2f}  {sigs:<40}  "
-              f"{c['a_title'][:35]:<35}  ↔  {c['b_title'][:35]}")
+        print(
+            f"{i:<5} {c['score']:>6.2f}  {sigs:<40}  "
+            f"{c['a_title'][:35]:<35}  ↔  {c['b_title'][:35]}"
+        )
         if "shared_neighbours" in c:
             nbrs = [n.replace("concept:", "") for n in c["shared_neighbours"][:4]]
             print(f"       shared neighbours: {', '.join(nbrs)}")
@@ -414,7 +459,8 @@ def main() -> None:
             },
             indent=2,
             ensure_ascii=False,
-        ) + "\n",
+        )
+        + "\n",
         encoding="utf-8",
     )
     print(f"\nFull results saved → {CANDIDATES_PATH.relative_to(ROOT)}", file=sys.stderr)

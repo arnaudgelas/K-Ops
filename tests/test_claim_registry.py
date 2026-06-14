@@ -1,12 +1,10 @@
 """Tests for claim_registry.py."""
+
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
-
-import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
@@ -17,7 +15,7 @@ def _make_concept(tmp_path: Path, stem: str, body: str, claim_quality: str = "su
     concepts.mkdir(parents=True, exist_ok=True)
     path = concepts / f"{stem}.md"
     text = (
-        f"---\ntitle: \"{stem}\"\ntype: concept\nclaim_quality: {claim_quality}\ntags:\n  - kb/concept\n---\n"
+        f'---\ntitle: "{stem}"\ntype: concept\nclaim_quality: {claim_quality}\ntags:\n  - kb/concept\n---\n'
         + body
     )
     path.write_text(text, encoding="utf-8")
@@ -26,13 +24,13 @@ def _make_concept(tmp_path: Path, stem: str, body: str, claim_quality: str = "su
 
 def _patch_cr(cr_mod, tmp_path: Path) -> None:
     """Point claim_registry at the tmp vault."""
-    import utils
     cr_mod.CONFIG = type("C", (), {"concepts_dir": tmp_path / "notes" / "Concepts"})()
     cr_mod.ROOT = tmp_path
 
 
 def test_no_claims_section_returns_empty(tmp_path):
     import claim_registry as cr
+
     path = _make_concept(tmp_path, "Empty", "## What It Is\n\nNothing yet.\n")
     _patch_cr(cr, tmp_path)
     claims = cr.extract_claims_from_concept(path)
@@ -41,6 +39,7 @@ def test_no_claims_section_returns_empty(tmp_path):
 
 def test_extracts_bullets_from_key_claims(tmp_path):
     import claim_registry as cr
+
     body = (
         "## Key Claims\n\n"
         "- First claim about X.\n"
@@ -60,6 +59,7 @@ def test_extracts_bullets_from_key_claims(tmp_path):
 
 def test_claim_ids_are_stable(tmp_path):
     import claim_registry as cr
+
     body = "## Key Claims\n\n- Stable claim.\n"
     path = _make_concept(tmp_path, "Stable", body)
     _patch_cr(cr, tmp_path)
@@ -71,6 +71,7 @@ def test_claim_ids_are_stable(tmp_path):
 
 def test_claim_ids_differ_for_different_text(tmp_path):
     import claim_registry as cr
+
     id_a = cr.claim_stable_id("Concept", "Claim A.")
     id_b = cr.claim_stable_id("Concept", "Claim B.")
     assert id_a != id_b
@@ -78,6 +79,7 @@ def test_claim_ids_differ_for_different_text(tmp_path):
 
 def test_claim_ids_differ_for_same_text_different_concept(tmp_path):
     import claim_registry as cr
+
     id_a = cr.claim_stable_id("Concept_A", "Same text.")
     id_b = cr.claim_stable_id("Concept_B", "Same text.")
     assert id_a != id_b
@@ -85,6 +87,7 @@ def test_claim_ids_differ_for_same_text_different_concept(tmp_path):
 
 def test_extracts_source_ids_from_evidence_section(tmp_path):
     import claim_registry as cr
+
     body = (
         "## Key Claims\n\n- A claim.\n\n"
         "## Evidence / Source Basis\n\n"
@@ -98,11 +101,80 @@ def test_extracts_source_ids_from_evidence_section(tmp_path):
     assert sorted(claims[0]["source_ids"]) == ["src-1122334455", "src-aabbccdd11"]
 
 
+def test_distinguishes_inline_and_page_inherited_sources(tmp_path):
+    import claim_registry as cr
+
+    body = (
+        "## Key Claims\n\n"
+        "- Direct claim ([[Sources/src-1122334455|source]]).\n"
+        "- Inherited claim.\n\n"
+        "## Evidence / Source Basis\n\n"
+        "- [[Sources/src-aabbccdd11|source-aabbccdd11]]: Page source.\n"
+    )
+    path = _make_concept(tmp_path, "Evidence_Cards", body)
+    _patch_cr(cr, tmp_path)
+    claims = cr.extract_claims_from_concept(path)
+    assert claims[0]["inline_source_ids"] == ["src-1122334455"]
+    assert claims[0]["page_source_ids"] == ["src-aabbccdd11"]
+    assert claims[0]["source_resolution"] == "inline"
+    assert claims[0]["evidence_status"] == "direct"
+    assert claims[1]["inline_source_ids"] == []
+    assert claims[1]["page_source_ids"] == ["src-aabbccdd11"]
+    assert claims[1]["source_resolution"] == "page-inherited"
+    assert claims[1]["evidence_status"] == "inherited"
+    assert claims[1]["span_status"] == "missing"
+
+
+def test_source_anchor_fields_are_parsed(tmp_path):
+    import claim_registry as cr
+
+    body = "## Key Claims\n\n- Code claim src-1122334455#path=src/app.py&L10=L20&commit=abc123.\n"
+    path = _make_concept(tmp_path, "Anchors", body)
+    _patch_cr(cr, tmp_path)
+    claim = cr.extract_claims_from_concept(path)[0]
+    anchor = claim["source_anchors"][0]
+    assert anchor["source_id"] == "src-1122334455"
+    assert anchor["path"] == "src/app.py"
+    assert anchor["line_start"] == 10
+    assert anchor["line_end"] == 20
+    assert anchor["commit"] == "abc123"
+    assert claim["quote_or_anchor"] == "path=src/app.py&L10=L20&commit=abc123"
+    assert claim["span_status"] == "anchored"
+
+
+def test_claim_id_ignores_added_citation(tmp_path):
+    import claim_registry as cr
+
+    id_without_cite = cr.claim_stable_id("Concept", cr.normalize_claim_text("Same claim."))
+    id_with_cite = cr.claim_stable_id(
+        "Concept",
+        cr.normalize_claim_text("Same claim. ([[Sources/src-1122334455|source]])"),
+    )
+    assert id_without_cite == id_with_cite
+
+
 def test_search_claims_finds_match(tmp_path):
     import claim_registry as cr
+
     claims = [
-        {"id": "clm-001", "text": "Rust is memory safe.", "concept": "Rust", "claim_quality": "supported", "source_ids": [], "claim_index": 1, "last_updated": ""},
-        {"id": "clm-002", "text": "Python is dynamically typed.", "concept": "Python", "claim_quality": "supported", "source_ids": [], "claim_index": 1, "last_updated": ""},
+        {
+            "id": "clm-001",
+            "text": "Rust is memory safe.",
+            "concept": "Rust",
+            "claim_quality": "supported",
+            "source_ids": [],
+            "claim_index": 1,
+            "last_updated": "",
+        },
+        {
+            "id": "clm-002",
+            "text": "Python is dynamically typed.",
+            "concept": "Python",
+            "claim_quality": "supported",
+            "source_ids": [],
+            "claim_index": 1,
+            "last_updated": "",
+        },
     ]
     results = cr.search_claims(claims, "rust memory")
     assert len(results) == 1
@@ -111,8 +183,17 @@ def test_search_claims_finds_match(tmp_path):
 
 def test_search_claims_no_match_returns_empty(tmp_path):
     import claim_registry as cr
+
     claims = [
-        {"id": "clm-001", "text": "Rust is memory safe.", "concept": "Rust", "claim_quality": "supported", "source_ids": [], "claim_index": 1, "last_updated": ""},
+        {
+            "id": "clm-001",
+            "text": "Rust is memory safe.",
+            "concept": "Rust",
+            "claim_quality": "supported",
+            "source_ids": [],
+            "claim_index": 1,
+            "last_updated": "",
+        },
     ]
     results = cr.search_claims(claims, "javascript")
     assert results == []
@@ -120,13 +201,26 @@ def test_search_claims_no_match_returns_empty(tmp_path):
 
 def test_search_claims_empty_query_returns_all(tmp_path):
     import claim_registry as cr
-    claims = [{"id": f"clm-{i:03d}", "text": f"Claim {i}.", "concept": "C", "claim_quality": "supported", "source_ids": [], "claim_index": i, "last_updated": ""} for i in range(5)]
+
+    claims = [
+        {
+            "id": f"clm-{i:03d}",
+            "text": f"Claim {i}.",
+            "concept": "C",
+            "claim_quality": "supported",
+            "source_ids": [],
+            "claim_index": i,
+            "last_updated": "",
+        }
+        for i in range(5)
+    ]
     results = cr.search_claims(claims, "")
     assert len(results) == 5
 
 
 def test_extract_all_claims_multiple_concepts(tmp_path):
     import claim_registry as cr
+
     body_a = "## Key Claims\n\n- A1.\n- A2.\n"
     body_b = "## Key Claims\n\n- B1.\n"
     _make_concept(tmp_path, "Concept_A", body_a)
@@ -142,6 +236,7 @@ def test_extract_all_claims_multiple_concepts(tmp_path):
 
 def test_run_writes_claims_json(tmp_path):
     import claim_registry as cr
+
     body = "## Key Claims\n\n- Written claim.\n"
     _make_concept(tmp_path, "Written", body)
     _patch_cr(cr, tmp_path)
@@ -155,6 +250,7 @@ def test_run_writes_claims_json(tmp_path):
 
 def test_run_is_idempotent(tmp_path):
     import claim_registry as cr
+
     body = "## Key Claims\n\n- Idempotent claim.\n"
     _make_concept(tmp_path, "Idem", body)
     _patch_cr(cr, tmp_path)

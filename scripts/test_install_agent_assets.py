@@ -22,7 +22,9 @@ def main() -> None:
         (project_root / "CLAUDE.md").write_text("# CLAUDE\n", encoding="utf-8")
         notes_dir = project_root / "notes" / "Runbooks"
         notes_dir.mkdir(parents=True, exist_ok=True)
-        (notes_dir / "Agent_Workflow_Quick_Reference.md").write_text("# Runbook\n", encoding="utf-8")
+        (notes_dir / "Agent_Workflow_Quick_Reference.md").write_text(
+            "# Runbook\n", encoding="utf-8"
+        )
 
         created = install_agent_assets(
             agent="all",
@@ -52,27 +54,43 @@ def main() -> None:
 
         gemini_text = (home_root / ".gemini" / "GEMINI.md").read_text(encoding="utf-8")
         if "OPERATING_RULES.md" not in gemini_text:
-            raise AssertionError(f"GEMINI.md did not preserve the shared operating contract:\n{gemini_text}")
+            raise AssertionError(
+                f"GEMINI.md did not preserve the shared operating contract:\n{gemini_text}"
+            )
 
         codex_text = (home_root / ".codex" / "AGENTS.md").read_text(encoding="utf-8")
         if "Codex-Specific Notes" not in codex_text:
-            raise AssertionError(f"AGENTS.md did not preserve the Codex startup contract:\n{codex_text}")
+            raise AssertionError(
+                f"AGENTS.md did not preserve the Codex startup contract:\n{codex_text}"
+            )
 
         ask_command = (project_root / ".claude" / "commands" / "ask.md").read_text(encoding="utf-8")
         if "$ARGUMENTS" not in ask_command:
-            raise AssertionError(f"Claude ask command did not include argument substitution:\n{ask_command}")
+            raise AssertionError(
+                f"Claude ask command did not include argument substitution:\n{ask_command}"
+            )
 
-        render_command = (project_root / ".gemini" / "commands" / "render.toml").read_text(encoding="utf-8")
+        render_command = (project_root / ".gemini" / "commands" / "render.toml").read_text(
+            encoding="utf-8"
+        )
         if "the requested output format" not in render_command:
-            raise AssertionError(f"Gemini render command did not adapt the render prompt:\n{render_command}")
+            raise AssertionError(
+                f"Gemini render command did not adapt the render prompt:\n{render_command}"
+            )
 
         codex_prompt = (project_root / ".codex" / "commands" / "ask.md").read_text(encoding="utf-8")
         if "notes/Answers/" not in codex_prompt:
-            raise AssertionError(f"Codex prompt did not preserve the answer memo workflow:\n{codex_prompt}")
+            raise AssertionError(
+                f"Codex prompt did not preserve the answer memo workflow:\n{codex_prompt}"
+            )
 
-        compile_skill = (project_root / ".claude" / "skills" / "compile-wiki" / "SKILL.md").read_text(encoding="utf-8")
+        compile_skill = (
+            project_root / ".claude" / "skills" / "compile-wiki" / "SKILL.md"
+        ).read_text(encoding="utf-8")
         if "Runtime Prompt" not in compile_skill:
-            raise AssertionError(f"Skill bundle did not get the runtime prompt note:\n{compile_skill}")
+            raise AssertionError(
+                f"Skill bundle did not get the runtime prompt note:\n{compile_skill}"
+            )
 
         if not created:
             raise AssertionError("Installer reported no created assets")

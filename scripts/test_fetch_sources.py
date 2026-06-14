@@ -13,7 +13,9 @@ def main() -> None:
     from fetch_sources import extract_html_text, strip_tracking_parameters  # noqa: WPS433
 
     html = FIXTURE_PATH.read_text(encoding="utf-8")
-    extracted = extract_html_text(html, "https://medium.com/example/story?utm_source=newsletter&fbclid=abc123")
+    extracted = extract_html_text(
+        html, "https://medium.com/example/story?utm_source=newsletter&fbclid=abc123"
+    )
 
     expected_lines = [
         "Real article title",
@@ -22,13 +24,19 @@ def main() -> None:
     ]
     for line in expected_lines:
         if line not in extracted:
-            raise AssertionError(f"Missing expected article content: {line!r}\nExtracted:\n{extracted}")
+            raise AssertionError(
+                f"Missing expected article content: {line!r}\nExtracted:\n{extracted}"
+            )
 
     for banned in ("Subscribe", "Sign in", "Share", "Read more from the author"):
         if banned in extracted:
-            raise AssertionError(f"Unexpected boilerplate in extraction: {banned!r}\nExtracted:\n{extracted}")
+            raise AssertionError(
+                f"Unexpected boilerplate in extraction: {banned!r}\nExtracted:\n{extracted}"
+            )
 
-    canonical = strip_tracking_parameters("https://medium.com/example/story?utm_source=newsletter&fbclid=abc123")
+    canonical = strip_tracking_parameters(
+        "https://medium.com/example/story?utm_source=newsletter&fbclid=abc123"
+    )
     expected_canonical = "https://medium.com/example/story"
     if canonical != expected_canonical:
         raise AssertionError(f"Canonical URL mismatch: {canonical!r} != {expected_canonical!r}")

@@ -5,14 +5,12 @@ import csv
 import json
 from pathlib import Path
 
-import yaml
-
 from utils import CONFIG, ROOT, ensure_dir, now_stamp, parse_frontmatter
-
 
 
 def collect_notes() -> dict[str, list[dict]]:
     concept_rows: list[dict] = []
+    index_rows: list[dict] = []
     source_rows: list[dict] = []
     answer_rows: list[dict] = []
 
@@ -30,7 +28,21 @@ def collect_notes() -> dict[str, list[dict]]:
             }
         )
 
-    for path in sorted(CONFIG.summaries_dir.glob("src-*.md")):
+    for path in sorted(CONFIG.indexes_dir.glob("*.md")):
+        text = path.read_text(encoding="utf-8")
+        frontmatter, body = parse_frontmatter(text)
+        index_rows.append(
+            {
+                "kind": "index",
+                "path": path.relative_to(ROOT).as_posix(),
+                "title": frontmatter.get("title") or path.stem,
+                "note_type": frontmatter.get("type") or "index",
+                "tags": frontmatter.get("tags", []),
+                "heading_count": sum(1 for line in body.splitlines() if line.startswith("## ")),
+            }
+        )
+
+    for path in sorted(CONFIG.summaries_dir.rglob("src-*.md")):
         text = path.read_text(encoding="utf-8")
         frontmatter, body = parse_frontmatter(text)
         source_rows.append(
@@ -55,23 +67,40 @@ def collect_notes() -> dict[str, list[dict]]:
                 "title": frontmatter.get("title") or path.stem,
                 "asked_at": frontmatter.get("asked_at"),
                 "answer_quality": frontmatter.get("answer_quality"),
+                "sources_consulted": frontmatter.get("sources_consulted", []),
                 "tags": frontmatter.get("tags", []),
                 "vault_update_present": "## Vault Updates" in body,
             }
         )
 
-    return {"concepts": concept_rows, "sources": source_rows, "answers": answer_rows}
+    return {
+        "concepts": concept_rows,
+        "indexes": index_rows,
+        "sources": source_rows,
+        "answers": answer_rows,
+    }
 
 
 def write_json_index(output_path: Path, payload: dict) -> None:
     ensure_dir(output_path.parent)
-    output_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def json_serial(obj):
+        import datetime
+
+        if isinstance(obj, (datetime.datetime, datetime.date)):
+            return obj.isoformat()
+        raise TypeError(f"Type {type(obj)} not serializable")
+
+    output_path.write_text(
+        json.dumps(payload, default=json_serial, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
 
 
 def write_csv_index(output_path: Path, payload: dict) -> None:
     ensure_dir(output_path.parent)
     rows = []
-    for section in ("concepts", "sources", "answers"):
+    for section in ("concepts", "indexes", "sources", "answers"):
         for item in payload[section]:
             row = {"kind": section[:-1], **item}
             rows.append(row)
@@ -82,33 +111,40 @@ def write_csv_index(output_path: Path, payload: dict) -> None:
         writer.writerows(rows)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Export a structured manifest of the vault.")
-    parser.add_argument("--output", help="Output file path. Defaults to outputs/<repo>-vault-index-<timestamp>.json")
-    parser.add_argument("--format", choices=["json", "csv"], default="json")
-    args = parser.parse_args()
-
-    output = (
-        Path(args.output).resolve()
-        if args.output
-        else (CONFIG.outputs_dir / f"{ROOT.name}-vault-index-{now_stamp()}.{args.format}").resolve()
+def export_vault_index(output: str | None = None, fmt: str = "json") -> Path:
+    output_path = (
+        Path(output).resolve()
+        if output
+        else (CONFIG.outputs_dir / f"{ROOT.name}-vault-index-{now_stamp()}.{fmt}").resolve()
     )
     payload = {
         "generated_at": now_stamp(),
         "project": CONFIG.project_name,
         "counts": {
             "concepts": len(list(CONFIG.concepts_dir.glob("*.md"))),
-            "sources": len(list(CONFIG.summaries_dir.glob("src-*.md"))),
+            "indexes": len(list(CONFIG.indexes_dir.glob("*.md"))),
+            "sources": len(list(CONFIG.summaries_dir.rglob("src-*.md"))),
             "answers": len(list(CONFIG.answers_dir.glob("*.md"))),
         },
         **collect_notes(),
     }
 
-    if args.format == "json":
-        write_json_index(output, payload)
+    if fmt == "json":
+        write_json_index(output_path, payload)
     else:
-        write_csv_index(output, payload)
-    print(output)
+        write_csv_index(output_path, payload)
+    print(output_path)
+    return output_path
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Export a structured manifest of the vault.")
+    parser.add_argument(
+        "--output", help="Output file path. Defaults to outputs/<repo>-vault-index-<timestamp>.json"
+    )
+    parser.add_argument("--format", choices=["json", "csv"], default="json")
+    args = parser.parse_args()
+    export_vault_index(output=args.output, fmt=args.format)
 
 
 if __name__ == "__main__":

@@ -1,360 +1,589 @@
 from __future__ import annotations
 
-import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
 
-import kb as _kb
-import research_workflow as _rw
-import render_manifest as _rm
-from utils import ROOT
+from backfill_answer_quality import backfill_answer_quality
+from backfill_concept_quality import backfill_concept_quality
+from backfill_source_metadata import backfill_source_metadata
+from backfill_source_notes import backfill_source_notes
+from bootstrap_kb import bootstrap
+from export_obsidian_vault import export_vault
+from export_vault_index import export_vault_index
+from ingest_github_repo import ingest_repo, upsert_registry_entry
+from normalize_frontmatter import run_normalize_frontmatter
+from normalize_github_sources import normalize_github_sources
+from render_manifest import build_manifest
+from utils import CONFIG, ROOT, ensure_dir, now_stamp, resolve_content_path
+from vault_graph import (
+    RETENTION_REPORT_PATH,
+    load_graph,
+    search_graph,
+    traverse_graph,
+    write_retention_report,
+)
+from kb_quality import (
+    run_claim_search as run_claim_search,
+    run_clear_stale_flags as run_clear_stale_flags,
+    run_contradiction_search as run_contradiction_search,
+    run_extract_claims as run_extract_claims,
+    run_extract_contradictions as run_extract_contradictions,
+    run_lint as run_lint,
+    run_scorecard as run_scorecard,
+    run_stale_impact as run_stale_impact,
+    run_validate_config as run_validate_config,
+)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Living research vault workflow")
-    sub = parser.add_subparsers(dest="command", required=True)
+def run_fetch(input_path: str, branch: str | None = None, fail_fast: bool = False) -> None:
+    from ingest_sources import ingest_sources
 
-    p_ingest = sub.add_parser("ingest")
-    p_ingest.add_argument("--input", required=True)
-    p_ingest.add_argument("--branch", help="Optional branch override for GitHub repository URLs in the input list.")
-    p_ingest.add_argument("--fail-fast", action="store_true")
+    ingest_sources(input_path, fail_fast=fail_fast, branch=branch, refresh=False)
 
-    p_ingest_github = sub.add_parser("ingest-github")
-    p_ingest_github.add_argument("--repo", required=True)
-    p_ingest_github.add_argument("--branch")
-    p_ingest_github.add_argument("--compile-agent", choices=["codex", "claude", "gemini"])
 
-    p_compile = sub.add_parser("compile")
-    p_compile.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_compile.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the prompt that would be sent without invoking the agent.",
+def run_refresh_sources(branch: str | None = None, fail_fast: bool = False) -> Path:
+    from ingest_sources import ingest_sources
+
+    registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
+    refresh_list = ROOT / ".tmp" / f"refresh-sources-{now_stamp()}.txt"
+    ensure_dir(refresh_list.parent)
+    seen: set[str] = set()
+    sources: list[str] = []
+    for item in registry:
+        source = item.get("source")
+        if not source or source in seen:
+            continue
+        seen.add(source)
+        sources.append(source)
+    refresh_list.write_text("\n".join(sources) + "\n", encoding="utf-8")
+    ingest_sources(str(refresh_list), fail_fast=fail_fast, branch=branch, refresh=True)
+    return refresh_list
+
+
+def run_ingest_github(repo: str, branch: str | None = None) -> None:
+    metadata = ingest_repo(repo, branch)
+    upsert_registry_entry(metadata)
+    print(f"Ingested {repo} -> {metadata['id']}")
+    print(resolve_content_path(metadata))
+
+
+def run_export_vault(output: str | None = None) -> None:
+    created = export_vault(
+        Path(output).resolve()
+        if output
+        else (CONFIG.outputs_dir / f"{ROOT.name}-obsidian-vault-{now_stamp()}.zip").resolve()
     )
+    print(created)
 
-    p_refresh = sub.add_parser("refresh")
-    p_refresh.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_refresh.add_argument("--branch", help="Optional branch override for GitHub repository URLs during refresh.")
-    p_refresh.add_argument("--fail-fast", action="store_true")
-    p_refresh.add_argument(
-        "--force-compile",
-        action="store_true",
-        help="Run compile even if no source content changed.",
-    )
 
-    p_heal = sub.add_parser("heal")
-    p_heal.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_heal.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print the prompt that would be sent without invoking the agent.",
-    )
+def run_migrate_source_fields(dry_run: bool = False) -> None:
+    """Batch-derive source_kind and ingested_at for source notes missing them, using data/registry.json."""
+    from kb_schema import normalize_source_kind
+    import re
 
-    p_ask = sub.add_parser("ask")
-    p_ask.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_ask.add_argument("--question", required=True)
+    registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
+    reg_by_id = {item["id"]: item for item in registry}
 
-    p_render = sub.add_parser("render")
-    p_render.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_render.add_argument("--format", required=True, choices=["memo", "slides", "outline", "report"])
-    p_render.add_argument("--prompt", required=True)
+    FRONT_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
-    p_install_assets = sub.add_parser("install-agent-assets")
-    p_install_assets.add_argument("--agent", choices=["all", "claude", "gemini", "codex"], default="all")
-    p_install_assets.add_argument("--scope", choices=["project", "home", "both"], default="both")
-    p_install_assets.add_argument("--dry-run", action="store_true")
-    p_install_assets.add_argument("--force", action="store_true")
+    fixed = 0
+    skipped = 0
+    for path in sorted(CONFIG.summaries_dir.rglob("src-*.md")):
+        text = path.read_text(encoding="utf-8")
+        fm_match = FRONT_RE.match(text)
+        if not fm_match:
+            continue
+        fm_block = fm_match.group(1)
+        body = text[fm_match.end() :]
 
-    p_research_start = sub.add_parser("research-start")
-    p_research_start.add_argument("--topic", required=True)
-    p_research_start.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
+        # Extract source_id from frontmatter
+        sid_m = re.search(r"^source_id:\s*(\S+)", fm_block, re.MULTILINE)
+        if not sid_m:
+            continue
+        sid = sid_m.group(1).strip("\"'")
+        reg = reg_by_id.get(sid)
+        if not reg:
+            continue
 
-    p_research_status = sub.add_parser("research-status")
-    p_research_status.add_argument("topic", nargs="?", default=None)
-    p_research_status.add_argument("--topic", dest="topic_opt")
+        changed = False
+        # source_kind
+        if not re.search(r"^source_kind:", fm_block, re.MULTILINE):
+            raw_kind = reg.get("kind", "")
+            norm_kind = normalize_source_kind(raw_kind)
+            fm_block += f"\nsource_kind: {norm_kind}"
+            changed = True
+        # ingested_at
+        if not re.search(r"^ingested_at:", fm_block, re.MULTILINE):
+            ingested_at = reg.get("ingested_at", "")
+            if ingested_at:
+                fm_block += f'\ningested_at: "{ingested_at}"'
+                changed = True
+        # source_url (use registry source even for non-HTTP paths; also fill empty values)
+        existing_url_m = re.search(r'^source_url:\s*"?([^"\n]*)"?', fm_block, re.MULTILINE)
+        has_nonempty_url = existing_url_m and existing_url_m.group(1).strip()
+        if not has_nonempty_url:
+            source_url = reg.get("source", "")
+            if source_url:
+                if existing_url_m:
+                    fm_block = (
+                        fm_block[: existing_url_m.start()]
+                        + f'source_url: "{source_url}"'
+                        + fm_block[existing_url_m.end() :]
+                    )
+                else:
+                    fm_block += f'\nsource_url: "{source_url}"'
+                changed = True
+        # title (derive from title_guess if missing)
+        if not re.search(r"^title:", fm_block, re.MULTILINE):
+            title_guess = reg.get("title_guess", "")
+            if title_guess:
+                fm_block += f'\ntitle: "{title_guess}"'
+                changed = True
 
-    p_research_collect = sub.add_parser("research-collect")
-    p_research_collect.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_research_collect.add_argument("--topic", required=True)
-    p_research_collect.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
+        # Extract current source_kind and keys
+        fm_lines = fm_block.splitlines()
+        fm_keys = set()
+        for line in fm_lines:
+            m = re.match(r"^([a-zA-Z0-9_-]+):", line)
+            if m:
+                fm_keys.add(m.group(1))
 
-    p_research_review = sub.add_parser("research-review")
-    p_research_review.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_research_review.add_argument("--topic", required=True)
-    p_research_review.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
+        sk_match = re.search(r"^source_kind:\s*(\S+)", fm_block, re.MULTILINE)
+        source_kind = sk_match.group(1).strip("\"'") if sk_match else "local-file"
 
-    p_research_report = sub.add_parser("research-report")
-    p_research_report.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
-    p_research_report.add_argument("--topic", required=True)
-    p_research_report.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
-    p_research_report.add_argument("--allow-missing-review", action="store_true")
+        # Add kind-specific required fields if missing
+        if source_kind == "github-repo-snapshot":
+            if "git_commit" not in fm_keys:
+                git_commit = reg.get("git_commit") or reg.get("commit") or "unknown"
+                fm_block += f"\ngit_commit: {git_commit}"
+                changed = True
+            if "branch" not in fm_keys:
+                branch = reg.get("git_branch") or reg.get("branch") or "main"
+                fm_block += f"\nbranch: {branch}"
+                changed = True
+            if "tracked_file_count" not in fm_keys:
+                tracked_file_count = reg.get("tracked_file_count", 0)
+                fm_block += f"\ntracked_file_count: {tracked_file_count}"
+                changed = True
+            if "sampled_file_count" not in fm_keys:
+                sampled_file_count = reg.get("sampled_file_count", 0)
+                fm_block += f"\nsampled_file_count: {sampled_file_count}"
+                changed = True
+        elif source_kind == "paper-pdf":
+            if "page_count" not in fm_keys:
+                fm_block += "\npage_count: 0"
+                changed = True
+        elif source_kind == "arxiv-paper":
+            if "arxiv_id" not in fm_keys:
+                source_url = reg.get("source", "")
+                arxiv_m = re.search(r"(?:abs|pdf)/(\\d+\\.\\d+)", source_url)
+                arxiv_id = arxiv_m.group(1) if arxiv_m else "unknown"
+                fm_block += f"\narxiv_id: {arxiv_id}"
+                changed = True
+            if "authors" not in fm_keys:
+                fm_block += "\nauthors: unknown"
+                changed = True
+            if "published_date" not in fm_keys:
+                pub_date = reg.get("published", reg.get("date", "unknown"))
+                fm_block += f"\npublished_date: {pub_date}"
+                changed = True
+            if "abstract" not in fm_keys:
+                fm_block += "\nabstract: unknown"
+                changed = True
+        elif source_kind == "github-file":
+            if "github_url" not in fm_keys:
+                source_url = reg.get("source", "unknown")
+                fm_block += f'\ngithub_url: "{source_url}"'
+                changed = True
+            if "git_commit" not in fm_keys:
+                git_commit = reg.get("commit", "unknown")
+                fm_block += f"\ngit_commit: {git_commit}"
+                changed = True
+        elif source_kind == "official-doc":
+            if "organization" not in fm_keys:
+                fm_block += "\norganization: unknown"
+                changed = True
+        elif source_kind == "spec":
+            if "organization" not in fm_keys:
+                fm_block += "\norganization: unknown"
+                changed = True
+            if "version" not in fm_keys:
+                fm_block += "\nversion: unknown"
+                changed = True
+            if "status" not in fm_keys:
+                fm_block += "\nstatus: unknown"
+                changed = True
 
-    p_research_import = sub.add_parser("research-import")
-    p_research_import.add_argument("--topic", required=True)
-    p_research_import.add_argument("--path", required=True)
-    p_research_import.add_argument(
-        "--provider",
-        choices=["gemini", "openai", "claude", "perplexity", "other"],
-        default="other",
-    )
-    p_research_import.add_argument("--origin")
-    p_research_import.add_argument("--tier", choices=sorted(_rw.RESEARCH_TIERS), default="standard")
-
-    p_research_archive = sub.add_parser("research-archive")
-    p_research_archive.add_argument("--topic", required=True)
-
-    p_export = sub.add_parser("export-vault")
-    p_export.add_argument("--output")
-
-    p_export_index = sub.add_parser("export-index")
-    p_export_index.add_argument("--output")
-    p_export_index.add_argument("--format", choices=["json", "csv"], default="json")
-
-    p_build_graph = sub.add_parser("build-graph")
-    p_build_graph.add_argument("--output")
-    p_build_graph.add_argument("--report-output")
-    p_build_graph.add_argument("--csv-output")
-
-    p_search = sub.add_parser("search")
-    p_search.add_argument("--query", required=True)
-    p_search.add_argument("--limit", type=int, default=10)
-    p_search.add_argument("--scope", choices=["all", "shared"], default="all")
-    p_search.add_argument("--format", choices=["json", "text"], default="json")
-
-    p_traverse = sub.add_parser("graph-traverse")
-    p_traverse.add_argument("--start", required=True)
-    p_traverse.add_argument("--depth", type=int, default=2)
-    p_traverse.add_argument("--relation", action="append")
-    p_traverse.add_argument("--scope", choices=["all", "shared"], default="all")
-    p_traverse.add_argument("--format", choices=["json", "text"], default="json")
-
-    p_retention = sub.add_parser("retention-report")
-    p_retention.add_argument("--output")
-    p_retention.add_argument("--limit", type=int, default=50)
-
-    p_normalize_github = sub.add_parser("normalize-github-sources")
-    p_normalize_github.add_argument("--dry-run", action="store_true")
-
-    p_validate = sub.add_parser("validate", help="Print the loaded config and verify all required paths.")
-    p_validate.add_argument("--strict", action="store_true", help="Also run schema validation via kb_schema.py.")
-
-    p_bootstrap = sub.add_parser("bootstrap")
-    p_bootstrap.add_argument("--target", required=True, help="Directory for the new blank starter vault.")
-    p_bootstrap.add_argument("--project-name", help="Optional project name to write into the generated config.")
-    p_bootstrap.add_argument("--with-examples", action="store_true", help="Add a tiny examples folder with starter input files.")
-    p_bootstrap.add_argument("--force", action="store_true", help="Overwrite the starter scaffold even if the target already exists.")
-
-    p_backfill_metadata = sub.add_parser("backfill-source-metadata")
-    p_backfill_metadata.add_argument("--dry-run", action="store_true")
-
-    p_backfill_concept_quality = sub.add_parser("backfill-concept-quality")
-    p_backfill_concept_quality.add_argument("--dry-run", action="store_true")
-
-    p_backfill_answer_quality = sub.add_parser("backfill-answer-quality")
-    p_backfill_answer_quality.add_argument("--dry-run", action="store_true")
-
-    p_backfill_notes = sub.add_parser("backfill-source-notes")
-    p_backfill_notes.add_argument("--dry-run", action="store_true")
-
-    p_maintain = sub.add_parser("maintenance")
-    p_maintain.add_argument(
-        "--agent",
-        choices=["codex", "claude", "gemini"],
-        help="Optional agent to refresh and compile before the mechanical maintenance pass.",
-    )
-    p_maintain.add_argument("--clean-tmp", action="store_true", help="Delete rendered prompt snapshots in .tmp/ older than 7 days.")
-
-    sub.add_parser("extract-claims", help="Extract atomic claims from concept pages and write data/claims.json.")
-
-    p_claim_search = sub.add_parser("claim-search", help="Search the claims registry by keyword.")
-    p_claim_search.add_argument("--query", required=True)
-    p_claim_search.add_argument("--limit", type=int, default=20)
-    p_claim_search.add_argument("--format", choices=["text", "json"], default="text")
-
-    p_stale_impact = sub.add_parser("stale-impact", help="Report concept pages flagged for revalidation after source changes.")
-    p_stale_impact.add_argument("--format", choices=["text", "json"], default="text")
-
-    p_clear_stale = sub.add_parser("clear-stale-flags", help="Remove revalidation_required flags from all concept pages and answers.")
-    p_clear_stale.add_argument("--dry-run", action="store_true")
-
-    p_scorecard = sub.add_parser("scorecard", help="Compute vault health scorecard and write data/scorecard.json.")
-    p_scorecard.add_argument("--output", help="Override output path.")
-    p_scorecard.add_argument("--format", choices=["text", "json"], default="text")
-
-    sub.add_parser("eval-setup", help="Create the golden Q&A evaluation scaffold at tests/qa_golden.yaml.")
-    sub.add_parser("eval-check", help="Validate the golden Q&A file at tests/qa_golden.yaml.")
-    sub.add_parser("extract-contradictions", help="Extract contradiction records from conflicting concepts and write data/contradictions.json.")
-
-    p_contradiction_search = sub.add_parser("contradiction-search", help="Search the contradiction registry by keyword.")
-    p_contradiction_search.add_argument("--query", required=True)
-    p_contradiction_search.add_argument("--limit", type=int, default=20)
-    p_contradiction_search.add_argument("--format", choices=["text", "json"], default="text")
-
-    p_lint = sub.add_parser("lint")
-    p_lint.add_argument("--strict", action="store_true")
-    p_lint.add_argument("--fix-backlinks", action="store_true")
-
-    sub.add_parser("render-manifest", help="Print a JSON manifest of the registry and vault files.")
-
-    # --- New commands from agkb ---
-    p_claim_map = sub.add_parser("claim-map", help="Generate a Mermaid argument map for a concept from claims.json.")
-    p_claim_map.add_argument("--concept", required=True, help="Concept stem (e.g. My_Concept)")
-    p_claim_map.add_argument("--output", choices=["stdout", "file"], default="stdout")
-
-    p_suggest = sub.add_parser("suggest-links", help="Suggest new wikilinks using graph- and text-analysis techniques.")
-    p_suggest.add_argument(
-        "--approach",
-        choices=["all", "co-citation", "shared-sources", "embedding",
-                 "conceptual-gravity", "analogical-mapping", "triadic-closure",
-                 "eigenvector-centrality", "friction", "contradiction-mapping"],
-        default="all",
-    )
-    p_suggest.add_argument("--min-co-cite", type=int, default=2)
-    p_suggest.add_argument("--min-shared", type=int, default=2)
-    p_suggest.add_argument("--emb-threshold", type=float, default=0.75)
-    p_suggest.add_argument("--min-gravity", type=float, default=0.5)
-    p_suggest.add_argument("--min-jaccard", type=float, default=0.25)
-    p_suggest.add_argument("--min-triadic", type=int, default=2)
-    p_suggest.add_argument("--ev-top-frac", type=float, default=0.33)
-    p_suggest.add_argument("--min-friction", type=float, default=0.15)
-    p_suggest.add_argument("--limit", type=int, default=50)
-    p_suggest.add_argument("--format", choices=["json", "text"], default="json")
-    p_suggest.add_argument("--output", help="Write JSON output to this path.")
-
-    p_migrate_fields = sub.add_parser("migrate-source-fields", help="Batch-derive source_kind/ingested_at/source_url for source notes from registry.json.")
-    p_migrate_fields.add_argument("--dry-run", action="store_true")
-
-    p_normalize_fm = sub.add_parser("normalize-frontmatter", help="Normalize frontmatter: kb/ tag namespace, bare enum values, updated timestamps.")
-    p_normalize_fm.add_argument("--dry-run", action="store_true")
-
-    p_fetch_queue = sub.add_parser("fetch-queue", help="List blocked URLs in data/fetch_queue.json.")
-    p_fetch_queue.add_argument("--format", choices=["text", "json"], default="text")
-
-    p_source_registry = sub.add_parser("generate-source-registry", help="Generate notes/Indexes/Source_Registry.md from registry.json.")
-    p_source_registry.add_argument("--output", help="Override output path.")
-
-    args = parser.parse_args()
-
-    if args.command == "ingest":
-        _kb.run_fetch(args.input, branch=args.branch, fail_fast=args.fail_fast)
-    elif args.command == "ingest-github":
-        _kb.run_ingest_github(args.repo, args.branch)
-        if args.compile_agent:
-            _kb._kr.cmd_compile(args.compile_agent)
-    elif args.command == "compile":
-        _kb._kr.cmd_compile(args.agent, dry_run=args.dry_run)
-    elif args.command == "refresh":
-        _refresh_list, changed = _kb.run_refresh_sources(branch=args.branch, fail_fast=args.fail_fast)
-        if changed or args.force_compile:
-            if changed:
-                print(f"{len(changed)} source(s) changed content — running compile.")
-                affected = _kb.propagate_stale_flags(changed)
-                if affected:
-                    print(f"Flagged {len(affected)} concept(s) for revalidation (run 'stale-impact' to review):")
-                    for p in affected:
-                        print(f"  - {p.relative_to(ROOT)}")
-            else:
-                print("--force-compile set — running compile despite no content changes.")
-            _kb._kr.cmd_compile(args.agent)
+        if changed:
+            new_text = f"---\n{fm_block}\n---\n{body}"
+            if not dry_run:
+                path.write_text(new_text, encoding="utf-8")
+            fixed += 1
         else:
-            print("All sources unchanged — skipping compile.")
-    elif args.command == "heal":
-        _kb._kr.cmd_heal(args.agent, dry_run=args.dry_run)
-    elif args.command == "ask":
-        _kb._kr.cmd_ask(args.agent, args.question)
-    elif args.command == "render":
-        _kb._kr.cmd_render(args.agent, args.format, args.prompt)
-    elif args.command == "install-agent-assets":
-        _kb.run_install_agent_assets(agent=args.agent, scope=args.scope, dry_run=args.dry_run, force=args.force)
-    elif args.command == "research-start":
-        _rw.cmd_research_start(args.topic, tier=args.tier)
-    elif args.command == "research-status":
-        _rw.cmd_research_status(args.topic_opt or args.topic or "all")
-    elif args.command == "research-collect":
-        _rw.cmd_research_collect(args.agent, args.topic, tier=args.tier)
-    elif args.command == "research-review":
-        _rw.cmd_research_review(args.agent, args.topic, tier=args.tier)
-    elif args.command == "research-report":
-        _rw.cmd_research_report(args.agent, args.topic, tier=args.tier, require_review=not args.allow_missing_review)
-    elif args.command == "research-import":
-        _rw.cmd_research_import(args.topic, args.path, args.provider, canonical_origin=args.origin, tier=args.tier)
-    elif args.command == "research-archive":
-        _rw.cmd_research_archive(args.topic)
-    elif args.command == "export-vault":
-        _kb.run_export_vault(args.output)
-    elif args.command == "export-index":
-        _kb.run_export_index(output=args.output, fmt=args.format)
-    elif args.command == "build-graph":
-        _kb.run_build_graph(output=args.output, report_output=args.report_output, csv_output=args.csv_output)
-    elif args.command == "search":
-        _kb.run_search_graph(args.query, limit=args.limit, scope=args.scope, fmt=args.format)
-    elif args.command == "graph-traverse":
-        _kb.run_traverse_graph(args.start, depth=args.depth, relations=args.relation, scope=args.scope, fmt=args.format)
-    elif args.command == "retention-report":
-        _kb.run_retention_report(output=args.output, limit=args.limit)
-    elif args.command == "normalize-github-sources":
-        _kb.run_normalize_github_sources(dry_run=args.dry_run)
-    elif args.command == "bootstrap":
-        _kb.run_bootstrap(
-            target=args.target,
-            project_name=args.project_name,
-            with_examples=args.with_examples,
-            force=args.force,
+            skipped += 1
+
+    label = "would fix" if dry_run else "fixed"
+    print(f"migrate-source-fields: {label} {fixed} source note(s), {skipped} already complete")
+
+
+def run_normalize_frontmatter_cmd(dry_run: bool = False) -> None:
+    run_normalize_frontmatter(dry_run=dry_run)
+
+
+def run_normalize_github_sources(dry_run: bool = False) -> None:
+    normalize_github_sources(dry_run=dry_run)
+
+
+def run_bootstrap(
+    target: str, project_name: str | None = None, with_examples: bool = False, force: bool = False
+) -> None:
+    bootstrap(
+        Path(target).expanduser().resolve(),
+        project_name=project_name,
+        with_examples=with_examples,
+        force=force,
+    )
+
+
+def run_backfill_source_notes(dry_run: bool = False) -> None:
+    backfill_source_notes(all_missing=True, dry_run=dry_run)
+    from backfill_source_notes import sync_source_note_frontmatter
+
+    sync_source_note_frontmatter(dry_run=dry_run)
+
+
+def run_backfill_source_metadata(dry_run: bool = False) -> None:
+    backfill_source_metadata(all_items=True, dry_run=dry_run)
+
+
+def run_backfill_concept_quality(dry_run: bool = False) -> None:
+    backfill_concept_quality(all_pages=True, dry_run=dry_run)
+
+
+def run_backfill_answer_quality(dry_run: bool = False) -> None:
+    backfill_answer_quality(all_pages=True, dry_run=dry_run)
+
+
+def run_export_index(output: str | None = None, fmt: str = "json") -> None:
+    export_vault_index(output=output, fmt=fmt)
+
+
+def run_fetch_queue(fmt: str = "text") -> None:
+    queue_path = ROOT / "data" / "fetch_queue.json"
+    if not queue_path.exists():
+        print("data/fetch_queue.json not found. Run: touch data/fetch_queue.json")
+        return
+    data = json.loads(queue_path.read_text(encoding="utf-8"))
+    blocked = data.get("blocked", [])
+    if fmt == "json":
+        print(json.dumps(blocked, indent=2, ensure_ascii=False))
+        return
+    print(f"Fetch queue: {len(blocked)} blocked URL(s)")
+    for item in blocked:
+        priority = item.get("priority", "?")
+        lb = " [LOAD-BEARING]" if item.get("load_bearing") else ""
+        print(
+            f"  [{priority}]{lb} {item.get('source_id', '?')} — {item.get('failure_mode', '?')} — {item.get('workaround', '?')}"
         )
-    elif args.command == "backfill-source-notes":
-        _kb.run_backfill_source_notes(dry_run=args.dry_run)
-    elif args.command == "backfill-source-metadata":
-        _kb.run_backfill_source_metadata(dry_run=args.dry_run)
-    elif args.command == "backfill-concept-quality":
-        _kb.run_backfill_concept_quality(dry_run=args.dry_run)
-    elif args.command == "backfill-answer-quality":
-        _kb.run_backfill_answer_quality(dry_run=args.dry_run)
-    elif args.command == "maintenance":
-        _kb.run_maintenance(agent=args.agent, clean_tmp=args.clean_tmp)
-    elif args.command == "extract-claims":
-        _kb.run_extract_claims()
-    elif args.command == "claim-search":
-        _kb.run_claim_search(args.query, limit=args.limit, fmt=args.format)
-    elif args.command == "stale-impact":
-        _kb.run_stale_impact(fmt=args.format)
-    elif args.command == "clear-stale-flags":
-        _kb.run_clear_stale_flags(dry_run=args.dry_run)
-    elif args.command == "scorecard":
-        _kb.run_scorecard(output=args.output, fmt=args.format)
-    elif args.command == "eval-setup":
-        _kb.run_eval_setup()
-    elif args.command == "eval-check":
-        _kb.run_eval_check()
-    elif args.command == "extract-contradictions":
-        _kb.run_extract_contradictions()
-    elif args.command == "contradiction-search":
-        _kb.run_contradiction_search(args.query, limit=args.limit, fmt=args.format)
-    elif args.command == "lint":
-        _kb.run_lint(strict=args.strict, fix_backlinks=args.fix_backlinks)
-    elif args.command == "render-manifest":
-        _rm.main()
-    elif args.command == "validate":
-        _kb.run_validate_config(strict=args.strict)
-    elif args.command == "claim-map":
-        _kb.cmd_claim_map(args.concept, output=args.output)
-    elif args.command == "suggest-links":
-        _kb.run_suggest_links(
-            approach=args.approach,
-            min_co_cite=args.min_co_cite,
-            min_shared=args.min_shared,
-            emb_threshold=args.emb_threshold,
-            min_gravity=args.min_gravity,
-            min_jaccard=args.min_jaccard,
-            min_triadic=args.min_triadic,
-            ev_top_frac=args.ev_top_frac,
-            min_friction=args.min_friction,
-            limit=args.limit,
-            fmt=args.format,
-            output=args.output,
+        if item.get("notes"):
+            print(f"          {item['notes']}")
+
+
+def run_generate_source_registry(output: str | None = None) -> None:
+    import re
+
+    registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
+    TITLE_RE = re.compile(r'^title:\s*["\'](.+?)["\']', re.MULTILINE)
+    rows = []
+    for item in registry:
+        sid = item.get("id", "")
+        source = item.get("source", "")
+        kind = item.get("kind", "")
+        notes_path = item.get("notes_path", "")
+        title = item.get("title_guess", sid)
+        if notes_path:
+            npath = ROOT / notes_path
+            if npath.exists():
+                m = TITLE_RE.search(npath.read_text(encoding="utf-8"))
+                if m:
+                    title = m.group(1)
+        rows.append((sid, kind, title, source, notes_path))
+    rows.sort(key=lambda x: x[0])
+    lines = [
+        "---",
+        'title: "Source Registry"',
+        "type: index",
+        "tags:",
+        "  - kb/index",
+        "---",
+        "# Source Registry",
+        "",
+        f"Flat lookup: source_id -> title, kind, origin. {len(rows)} sources.",
+        "",
+        "| source_id | kind | title | origin |",
+        "|-----------|------|-------|--------|",
+    ]
+    for sid, kind, title, source, notes_path in rows:
+        short_title = (title[:55] + "...") if len(title) > 55 else title
+        short_source = (source[:55] + "...") if len(source) > 55 else source
+        short_title = short_title.replace("|", "-")
+        short_source = short_source.replace("|", "-")
+        if notes_path:
+            rel = notes_path.replace("notes/Sources/", "").replace(".md", "")
+            sid_link = f"[[Sources/{rel}|{sid}]]"
+        else:
+            sid_link = sid
+        lines.append(f"| {sid_link} | {kind} | {short_title} | {short_source} |")
+    content = "\n".join(lines) + "\n"
+    out_path = (
+        Path(output).resolve() if output else ROOT / "notes" / "Indexes" / "Source_Registry.md"
+    )
+    ensure_dir(out_path.parent)
+    out_path.write_text(content, encoding="utf-8")
+    print(f"Wrote {len(rows)} sources to {out_path.relative_to(ROOT)}")
+
+
+def run_render_manifest(output: str | None = None) -> None:
+    manifest = build_manifest()
+    rendered = json.dumps(manifest, indent=2, ensure_ascii=False) + "\n"
+    if output:
+        output_path = Path(output).resolve()
+        ensure_dir(output_path.parent)
+        output_path.write_text(rendered, encoding="utf-8")
+        print(output_path)
+    else:
+        print(rendered, end="")
+
+
+def run_suggest_links(
+    approach: str = "all",
+    min_co_cite: int = 2,
+    min_shared: int = 2,
+    emb_threshold: float = 0.75,
+    min_gravity: float = 0.5,
+    min_jaccard: float = 0.25,
+    min_triadic: int = 2,
+    ev_top_frac: float = 0.33,
+    min_friction: float = 0.15,
+    limit: int = 50,
+    fmt: str = "json",
+    output: str | None = None,
+) -> None:
+    from kb_suggest_links import run_suggest_links as _suggest
+
+    data = _suggest(
+        approach=approach,
+        min_co_cite=min_co_cite,
+        min_shared=min_shared,
+        emb_threshold=emb_threshold,
+        min_gravity=min_gravity,
+        min_jaccard=min_jaccard,
+        min_triadic=min_triadic,
+        ev_top_frac=ev_top_frac,
+        min_friction=min_friction,
+        limit=limit,
+    )
+
+    if output:
+        out_path = Path(output).resolve()
+        ensure_dir(out_path.parent)
+        out_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"Suggestions written to {out_path} ({data['total_candidates']} candidates)")
+        return
+
+    if fmt == "json":
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+        return
+
+    if not data["candidates"]:
+        print("No new link candidates found.")
+        return
+    for c in data["candidates"]:
+        stars = "*" * c["signals"]
+        print(f"{stars} {c['concept_a']}  <->  {c['concept_b']}")
+        for reason in c["reasons"]:
+            print(f"    {reason}")
+        print(f"    Add to {c['concept_a']}: {c['wikilink_in_a']}")
+        print(f"    Add to {c['concept_b']}: {c['wikilink_in_b']}")
+
+
+def run_build_graph(
+    output: str | None = None,
+    report_output: str | None = None,
+    csv_output: str | None = None,
+    *,
+    check: bool = False,
+    dry_run: bool = False,
+) -> None:
+    from vault_graph import run as run_vault_graph
+
+    run_vault_graph(
+        output=output,
+        report_output=report_output,
+        csv_output=csv_output,
+        check=check,
+        dry_run=dry_run,
+    )
+
+
+def run_search_graph(query: str, limit: int = 10, scope: str = "all", fmt: str = "json") -> None:
+    results = search_graph(load_graph(), query, limit=limit, scope=scope)
+    if fmt == "json":
+        print(
+            json.dumps(
+                {"query": query, "scope": scope, "results": results}, indent=2, ensure_ascii=False
+            )
         )
-    elif args.command == "migrate-source-fields":
-        _kb.run_migrate_source_fields(dry_run=args.dry_run)
-    elif args.command == "normalize-frontmatter":
-        _kb.run_normalize_frontmatter_cmd(dry_run=args.dry_run)
-    elif args.command == "fetch-queue":
-        _kb.run_fetch_queue(fmt=args.format)
-    elif args.command == "generate-source-registry":
-        _kb.run_generate_source_registry(output=args.output)
+        return
+    if not results:
+        print("No matches.")
+        return
+    for item in results:
+        print(f"- {item['kind']}: {item['title']} ({item['path']}) score={item['score']}")
+
+
+def run_traverse_graph(
+    start: str,
+    depth: int = 2,
+    relations: list[str] | None = None,
+    scope: str = "all",
+    fmt: str = "json",
+) -> None:
+    graph = load_graph()
+    rel_filter = set(relations) if relations else None
+    results = traverse_graph(graph, start, depth=depth, relations=rel_filter, scope=scope)
+    if fmt == "json":
+        print(
+            json.dumps(
+                {
+                    "start": start,
+                    "depth": depth,
+                    "scope": scope,
+                    "relations": relations or [],
+                    "results": results,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return
+    if not results:
+        print("No traversal results.")
+        return
+    for item in results:
+        node = item["node"]
+        print(f"- depth {item['depth']}: {node['kind']} {node['title']} via {item['via']}")
+
+
+def run_retention_report(output: str | None = None, limit: int = 50) -> None:
+    graph = load_graph()
+    report_path = Path(output).resolve() if output else RETENTION_REPORT_PATH
+    changed = write_retention_report(graph, path=report_path, limit=limit)
+    print(
+        f"Retention report {'updated' if changed else 'unchanged'}: {report_path.relative_to(ROOT) if report_path.is_relative_to(ROOT) else report_path}"
+    )
+
+
+def run_install_agent_assets(
+    agent: str = "all", scope: str = "both", dry_run: bool = False, force: bool = False
+) -> None:
+    cmd = [
+        sys.executable,
+        str(ROOT / "scripts" / "install_agent_assets.py"),
+        "--agent",
+        agent,
+        "--scope",
+        scope,
+    ]
+    if dry_run:
+        cmd.append("--dry-run")
+    if force:
+        cmd.append("--force")
+    subprocess.run(cmd, check=True, cwd=ROOT)
+
+
+def cmd_claim_map(concept: str, output: str = "stdout") -> None:
+    """Generate a Mermaid argument-map diagram for a concept from claims.json."""
+    import re
+    import textwrap
+
+    claims_path = ROOT / "data" / "claims.json"
+    if not claims_path.exists():
+        print(f"claims.json not found at {claims_path}")
+        return
+
+    payload = json.loads(claims_path.read_text(encoding="utf-8"))
+    all_claims = payload.get("claims", [])
+    concept_claims = [c for c in all_claims if c.get("concept") == concept]
+
+    def safe_id(text: str) -> str:
+        return re.sub(r"[^a-zA-Z0-9_]", "_", text)
+
+    def trunc(text: str, n: int = 55) -> str:
+        return textwrap.shorten(text, width=n, placeholder="…")
+
+    lines: list[str] = ["graph TD"]
+    concept_node = safe_id(concept)
+    lines.append(f'    {concept_node}["{concept}"]')
+    lines.append("")
+
+    source_ids: set[str] = set()
+    for claim in concept_claims:
+        cid = safe_id(claim["id"])
+        label = trunc(claim.get("text", ""))
+        lines.append(f'    {cid}["{label}"]')
+        lines.append(f"    {concept_node} --> {cid}")
+        for sid in claim.get("source_ids", []):
+            source_ids.add(sid)
+            src_node = safe_id(sid)
+            lines.append(f"    {cid} --> {src_node}")
+    lines.append("")
+
+    for sid in sorted(source_ids):
+        src_node = safe_id(sid)
+        lines.append(f'    {src_node}(["{sid}"])')
+
+    diagram = "\n".join(lines)
+
+    if output == "stdout":
+        print(diagram)
+    else:
+        out_path = ROOT / "outputs" / f"{concept}_argument_map.mermaid"
+        ensure_dir(out_path.parent)
+        out_path.write_text(diagram + "\n", encoding="utf-8")
+        print(f"Argument map written to {out_path.relative_to(ROOT)}")
+
+
+def run_generate_probes() -> None:
+    """Generate diagnostic probes using generate_diagnostic_questions.py."""
+    import subprocess
+
+    cmd = [sys.executable, str(ROOT / "scripts" / "generate_diagnostic_questions.py")]
+    subprocess.run(cmd, check=True)
+
+
+def run_evaluate(
+    limit: int | None = None,
+    probe_id: str | None = None,
+    workers: int = 5,
+    verbose: bool = False,
+) -> None:
+    """Evaluate compilation and run the feedback loop."""
+    import subprocess
+
+    cmd = [sys.executable, str(ROOT / "scripts" / "evaluate_compilation.py")]
+    if limit is not None:
+        cmd.extend(["--limit", str(limit)])
+    if probe_id is not None:
+        cmd.extend(["--probe-id", probe_id])
+    cmd.extend(["--workers", str(workers)])
+    if verbose:
+        cmd.append("--verbose")
+
+    subprocess.run(cmd, check=True)
+
+    print("\nRunning feedback loop...")
+    feedback_cmd = [sys.executable, str(ROOT / "scripts" / "feedback_loop.py")]
+    subprocess.run(feedback_cmd, check=True)
