@@ -1,8 +1,8 @@
-# agkb
+# K-Ops
 
 **Your research should not live in a graveyard of browser tabs.**
 
-`agkb` is a local, agent-first research pipeline for turning links, PDFs, notes, and files into a durable Markdown knowledge vault for Obsidian.
+`K-Ops` is a local, agent-first research pipeline for turning links, PDFs, notes, and files into a durable Markdown knowledge vault for Obsidian.
 
 It is built on K-Ops and keeps the Karpathy-style LLM wiki idea in view, but pushes it further: sources are normalized, claims are tracked, contradictions are surfaced, and the vault stays honest about what it knows and what it does not.
 
@@ -12,9 +12,9 @@ It is built on K-Ops and keeps the Karpathy-style LLM wiki idea in view, but pus
 
 There is a useful idea here, popularized by Andrej Karpathy's LLM Wiki concept: let a language model edit and maintain a personal wiki, drop notes in, ask the model to update them, repeat.
 
-`agkb` keeps that spirit and adds the missing machinery:
+`K-Ops` keeps that spirit and adds the missing machinery:
 
-| | Karpathy-style LLM Wiki | K-Ops / agkb |
+| | Karpathy-style LLM Wiki | K-Ops |
 |---|---|---|
 | **How knowledge is built** | LLM edits a flat document in place | Structured pipeline: raw source -> summary -> concept page |
 | **Provenance** | Easy to lose | Every claim stays tied to source summaries and citations |
@@ -26,7 +26,7 @@ There is a useful idea here, popularized by Andrej Karpathy's LLM Wiki concept: 
 | **Schema enforcement** | None | `config/schema.yaml` validation at lint time |
 | **Research runs** | Ad hoc | Resumable: brief -> collect -> review -> report -> archive |
 
-The short version: a Karpathy-style wiki is a great scratchpad. `agkb` is the system you use when you need to trust the knowledge, not just store it.
+The short version: a Karpathy-style wiki is a great scratchpad. `K-Ops` is the system you use when you need to trust the knowledge, not just store it.
 
 ---
 
@@ -334,7 +334,7 @@ uv run python scripts/kb.py refresh --agent codex
 ## Repository Layout
 
 ```text
-agkb/
+K-Ops/
 ├── data/
 │   ├── claims.json
 │   ├── contradictions.json

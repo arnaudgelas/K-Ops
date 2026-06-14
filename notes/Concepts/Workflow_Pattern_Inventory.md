@@ -2,6 +2,7 @@
 title: "Workflow Pattern Inventory"
 type: concept
 claim_quality: supported
+evidence_status: verified
 tags:
   - kb/concept
   - kb/workflow
@@ -16,6 +17,12 @@ A structured inventory of the recurring agent workflow patterns used in K-Ops to
 ## Why It Matters
 
 K-Ops uses multiple agents (Claude, Codex, Gemini) each capable of running different workflow patterns. Understanding which pattern to apply and in what order prevents wasted agent runs and ensures vault quality.
+
+## Key Claims
+
+- The baseline workflow for a new batch of sources is `ingest → compile → lint`, with ingest writing raw evidence, compile writing source summaries and concept pages, and lint checking structural consistency ([[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]]).
+- The maintenance cycle is `refresh → compile → normalize → backfill → graph → lint`, which is intended for periodic repair or export preparation ([[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]]).
+- The research workflow is explicitly multi-phase, with collect, review, report, and archive steps ([[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]]).
 
 ## Key Patterns
 
@@ -93,8 +100,7 @@ render --agent <name> --format <memo|outline|slides|report> --prompt "<text>"
 
 ## Evidence / Source Basis
 
-- Derived from `scripts/kb.py` command inventory and the `notes/Runbooks/Agent_Workflow_Quick_Reference.md` runbook.
-- Confirmed by agent prompt templates in `templates/`.
+- [[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]] — source summary for the workflow quick reference and `scripts/kb.py` command inventory that underpins this page.
 
 ## Related Concepts
 

@@ -1,5 +1,150 @@
 {
-  "generated_at": "2026-04-21T07:21:46",
-  "count": 0,
-  "claims": []
+  "generated_at": "2026-06-14T17:53:22",
+  "count": 3,
+  "claims": [
+    {
+      "id": "clm-9548f97746",
+      "claim_id": "clm-9548f97746",
+      "text": "The baseline workflow for a new batch of sources is `ingest → compile → lint`, with ingest writing raw evidence, compile writing source summaries and concept pages, and lint checking structural consistency ([[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]]).",
+      "claim_text": "The baseline workflow for a new batch of sources is `ingest → compile → lint`, with ingest writing raw evidence, compile writing source summaries and concept pages, and lint checking structural consistency.",
+      "concept": "Workflow_Pattern_Inventory",
+      "concept_path": "notes/Concepts/Workflow_Pattern_Inventory.md",
+      "claim_quality": "supported",
+      "source_ids": [
+        "src-1f2a3b4c5d"
+      ],
+      "inline_source_ids": [
+        "src-1f2a3b4c5d"
+      ],
+      "page_source_ids": [
+        "src-1f2a3b4c5d"
+      ],
+      "source_resolution": "inline",
+      "evidence_status": "direct",
+      "source_anchors": [
+        {
+          "source_id": "src-1f2a3b4c5d",
+          "anchor": null,
+          "page": null,
+          "section": null,
+          "paragraph": null,
+          "quote": null,
+          "path": null,
+          "line_start": null,
+          "line_end": null,
+          "commit": null,
+          "extraction_confidence": null,
+          "segment_id": null
+        }
+      ],
+      "span_status": "missing",
+      "quote_or_anchor": null,
+      "entities": [],
+      "relations": [],
+      "confidence": 0.8,
+      "status": "active",
+      "extraction_method": "deterministic-key-claims",
+      "last_verified": "",
+      "last_updated": "",
+      "conflicts_with": [],
+      "page_edges": {},
+      "claim_index": 1
+    },
+    {
+      "id": "clm-bd1fa70794",
+      "claim_id": "clm-bd1fa70794",
+      "text": "The maintenance cycle is `refresh → compile → normalize → backfill → graph → lint`, which is intended for periodic repair or export preparation ([[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]]).",
+      "claim_text": "The maintenance cycle is `refresh → compile → normalize → backfill → graph → lint`, which is intended for periodic repair or export preparation.",
+      "concept": "Workflow_Pattern_Inventory",
+      "concept_path": "notes/Concepts/Workflow_Pattern_Inventory.md",
+      "claim_quality": "supported",
+      "source_ids": [
+        "src-1f2a3b4c5d"
+      ],
+      "inline_source_ids": [
+        "src-1f2a3b4c5d"
+      ],
+      "page_source_ids": [
+        "src-1f2a3b4c5d"
+      ],
+      "source_resolution": "inline",
+      "evidence_status": "direct",
+      "source_anchors": [
+        {
+          "source_id": "src-1f2a3b4c5d",
+          "anchor": null,
+          "page": null,
+          "section": null,
+          "paragraph": null,
+          "quote": null,
+          "path": null,
+          "line_start": null,
+          "line_end": null,
+          "commit": null,
+          "extraction_confidence": null,
+          "segment_id": null
+        }
+      ],
+      "span_status": "missing",
+      "quote_or_anchor": null,
+      "entities": [],
+      "relations": [],
+      "confidence": 0.8,
+      "status": "active",
+      "extraction_method": "deterministic-key-claims",
+      "last_verified": "",
+      "last_updated": "",
+      "conflicts_with": [],
+      "page_edges": {},
+      "claim_index": 2
+    },
+    {
+      "id": "clm-934feff62c",
+      "claim_id": "clm-934feff62c",
+      "text": "The research workflow is explicitly multi-phase, with collect, review, report, and archive steps ([[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]]).",
+      "claim_text": "The research workflow is explicitly multi-phase, with collect, review, report, and archive steps.",
+      "concept": "Workflow_Pattern_Inventory",
+      "concept_path": "notes/Concepts/Workflow_Pattern_Inventory.md",
+      "claim_quality": "supported",
+      "source_ids": [
+        "src-1f2a3b4c5d"
+      ],
+      "inline_source_ids": [
+        "src-1f2a3b4c5d"
+      ],
+      "page_source_ids": [
+        "src-1f2a3b4c5d"
+      ],
+      "source_resolution": "inline",
+      "evidence_status": "direct",
+      "source_anchors": [
+        {
+          "source_id": "src-1f2a3b4c5d",
+          "anchor": null,
+          "page": null,
+          "section": null,
+          "paragraph": null,
+          "quote": null,
+          "path": null,
+          "line_start": null,
+          "line_end": null,
+          "commit": null,
+          "extraction_confidence": null,
+          "segment_id": null
+        }
+      ],
+      "span_status": "missing",
+      "quote_or_anchor": null,
+      "entities": [],
+      "relations": [],
+      "confidence": 0.8,
+      "status": "active",
+      "extraction_method": "deterministic-key-claims",
+      "last_verified": "",
+      "last_updated": "",
+      "conflicts_with": [],
+      "page_edges": {},
+      "claim_index": 3
+    }
+  ]
 }

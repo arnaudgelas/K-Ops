@@ -1,39 +1,99 @@
 {
-  "generated_at": "2026-04-21T07:49:24",
   "project": "K-Ops",
+  "generated_at": "2026-06-14T17:53:28",
+  "eval_pass_rate": null,
+  "catastrophic_failure_count": 0,
   "concepts": {
     "total": 1,
     "by_claim_quality": {
       "supported": 1
     },
-    "unsupported": 1,
+    "by_evidence_status": {
+      "verified": 1
+    },
+    "unsupported": 0,
     "revalidation_required": 0,
     "conflicting_without_open_questions": 0,
-    "claim_bullets_total": 0,
-    "claim_bullets_with_inline_citation": 0,
-    "inline_citation_rate": null
+    "claim_bullets_total": 3,
+    "claim_bullets_with_inline_citation": 3,
+    "inline_citation_rate": 1.0,
+    "partial_source_dependencies": 0
+  },
+  "indexes": {
+    "total": 1,
+    "by_type": {
+      "index": 1
+    }
   },
   "sources": {
-    "total": 0,
-    "by_evidence_strength": {},
-    "by_source_kind": {},
+    "total": 1,
+    "by_evidence_strength": {
+      "strong": 1
+    },
+    "by_source_kind": {
+      "local-file": 1
+    },
+    "by_source_status": {
+      "active": 1
+    },
     "stub_count": 0,
-    "primary_count": 0,
+    "primary_count": 1,
     "model_generated_count": 0,
-    "stub_fraction": null,
-    "primary_fraction": null
+    "revoked_count": 0,
+    "stub_fraction": 0.0,
+    "primary_fraction": 1.0,
+    "partial_source_count": 0,
+    "model_generated_in_supported_concepts": 0
   },
   "claims": {
-    "total": 0,
-    "by_quality": {},
-    "with_sources": 0,
-    "without_sources": 0
+    "total": 3,
+    "by_quality": {
+      "supported": 3
+    },
+    "with_sources": 3,
+    "without_sources": 0,
+    "by_evidence_status": {
+      "direct": 3
+    },
+    "direct": 3,
+    "inherited": 0,
+    "unsupported": 0,
+    "direct_citation_rate": 1.0,
+    "direct_citation_rate_by_quality": {
+      "supported": 1.0
+    },
+    "span_status_distribution": {
+      "missing": 3
+    },
+    "anchor_coverage_by_source_kind": {
+      "unknown": 0.0
+    }
   },
   "answers": {
     "total": 0,
     "by_quality": {},
     "with_provenance": 0,
     "revalidation_required": 0
+  },
+  "probes": {
+    "total": 1,
+    "by_review_status": {
+      "unreviewed": 1
+    },
+    "by_status": {
+      "unreviewed": 1
+    },
+    "approved": 0,
+    "concepts_with_approved": 0,
+    "concepts_without_approved": [
+      "Workflow_Pattern_Inventory"
+    ],
+    "coverage": {
+      "supported_with_probe": 1,
+      "supported_total": 1,
+      "provisional_with_probe": 0,
+      "provisional_total": 0
+    }
   },
   "research": {
     "active": 0,
@@ -46,11 +106,25 @@
     "undocumented": 0,
     "concepts_affected": 0
   },
+  "schema_compliance": {
+    "error_count": 0,
+    "missing_fields": {}
+  },
+  "eval": {
+    "latest_run": null,
+    "catastrophic_failure_rate": null,
+    "pass_rate_by_mode": {}
+  },
   "health_signals": [
     {
-      "code": "unsupported-concepts",
-      "severity": "info",
-      "message": "1/1 concept(s) have no cited sources in their Evidence section"
+      "code": "unreviewed-probes",
+      "severity": "warning",
+      "message": "1 probe(s) are unreviewed — run the Probe Review checklist before counting toward probe_coverage_by_concept_quality"
+    },
+    {
+      "code": "concepts-without-approved-probes",
+      "severity": "warning",
+      "message": "1 concept(s) have no approved probes: Workflow_Pattern_Inventory"
     }
   ]
 }
