@@ -4,29 +4,48 @@
 
 `K-Ops` is a local, agent-first research pipeline for turning links, PDFs, notes, and files into a durable Markdown knowledge vault for Obsidian.
 
-It is built on K-Ops and keeps the Karpathy-style LLM wiki idea in view, but pushes it further: sources are normalized, claims are tracked, contradictions are surfaced, and the vault stays honest about what it knows and what it does not.
+It keeps the Karpathy-style LLM wiki idea in view, but pushes it further: sources are normalized, claims are tracked, contradictions are surfaced, and the vault stays honest about what it knows and what it does not.
 
 ---
 
 ## Why K-Ops, and not just asking an LLM?
 
-There is a useful idea here, popularized by Andrej Karpathy's LLM Wiki concept: let a language model edit and maintain a personal wiki, drop notes in, ask the model to update them, repeat.
+In April 2026, Andrej Karpathy published an LLM wiki gist — a three-folder pattern (raw sources, compiled wiki pages, a schema file) where an LLM maintains a personal knowledge base without a vector database. The post reached 16 million views and generated a wave of community implementations.
 
-`K-Ops` keeps that spirit and adds the missing machinery:
+`K-Ops` was built before the gist was published, and shares the same core conviction. Where it goes further:
 
-| | Karpathy-style LLM Wiki | K-Ops |
-|---|---|---|
-| **How knowledge is built** | LLM edits a flat document in place | Structured pipeline: raw source -> summary -> concept page |
-| **Provenance** | Easy to lose | Every claim stays tied to source summaries and citations |
-| **Contradictions** | Silent | Explicitly recorded and surfaced |
-| **Quality signals** | None | Claim registry, contradiction registry, scorecard |
-| **Link structure** | Manual | Auto-suggested from graph and text signals |
-| **Multi-agent** | Typically one model | Claude Code, Codex CLI, Gemini CLI |
-| **Staleness** | No tracking | Freshness thresholds and revalidation flags |
-| **Schema enforcement** | None | `config/schema.yaml` validation at lint time |
-| **Research runs** | Ad hoc | Resumable: brief -> collect -> review -> report -> archive |
+| | Karpathy original gist | v2 gist (rohitg00) | Community implementations | K-Ops |
+|---|---|---|---|---|
+| **Status** | Pattern / idea doc | Spec doc | Working code, narrow scope | Working system with Python CLI |
+| **Source types** | Any (unspecified) | Any (unspecified) | Session transcripts or posts | URLs, PDFs, GitHub repos, local files |
+| **Pipeline structure** | raw → wiki | raw → wiki | raw → atoms → wiki | raw → source summary → concept page |
+| **Provenance** | Not specified | Proposed | Partial | Every claim tied to source summaries |
+| **Contradictions** | Not addressed | Proposed (auto-resolve) | Lint check only | Contradiction registry (`data/contradictions.json`) |
+| **Claim registry** | No | Proposed | No | Machine-readable `data/claims.json` |
+| **Quality scorecard** | No | No | No | `data/scorecard.json` with health drift |
+| **Staleness** | No | Confidence decay / forgetting curves | Lifecycle states | Freshness thresholds and revalidation flags |
+| **Multi-agent** | Single model | Proposed mesh | Multiple adapters | Claude Code, Codex CLI, Gemini CLI |
+| **Obsidian integration** | Not specified | Not specified | Symlink overlay | Native: `.obsidian/` at repo root |
+| **Research runs** | None | None | None | Resumable: brief → collect → review → report → archive |
+| **Bootstrap new vault** | No | No | No | `kb.py bootstrap --target <dir>` |
 
-The short version: a Karpathy-style wiki is a great scratchpad. `K-Ops` is the system you use when you need to trust the knowledge, not just store it.
+The v2 gist proposes many of the same features as K-Ops — confidence scoring, contradiction resolution, multi-agent coordination, output rendering. The difference is that K-Ops ships all of this as working code with a CLI. The v2 gist is a well-reasoned spec; K-Ops is the thing you run.
+
+## Compared With Mainstream Variants
+
+The Karpathy gist generated direct implementations worth knowing:
+
+- [cablate/llm-atomic-wiki](https://github.com/cablate/llm-atomic-wiki) inserts an atom layer between raw sources and wiki pages (raw → atoms → wiki), adds two-layer linting (programmatic first, then LLM semantic), and parallel-compile locking. The atom layer is a legitimate architectural idea: atoms are immutable single-claim units that become the source of truth. K-Ops uses source summaries as an intermediate layer for a similar reason, but stays closer to prose rather than atomic claims.
+- [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki) targets coding assistant session transcripts specifically. It adds an MCP server (12 tools), HTML rendering for browser access, and confidence scoring with a 5-state lifecycle. Its scope is narrower — session history, not arbitrary research sources — but its MCP approach is production-ready.
+
+Other categories that are adjacent but different:
+
+- Memory layers such as [Mem0](https://mem0.ai/) optimize for persistent context across agent sessions. Useful infrastructure, but not a curated knowledge base.
+- Notebook tools such as [NotebookLM](https://notebooklm.google/) ground answers in provided sources. Narrower than a vault workflow; not file-native or repairable.
+
+One empirical result is directly relevant: arXiv [2605.15184](https://arxiv.org/abs/2605.15184), *Is Grep All You Need? How Agent Harnesses Reshape Agentic Search*, ran 116-question evaluations across Chronos, Claude Code, Codex, and Gemini CLI comparing grep versus vector retrieval. Grep generally outperformed vector retrieval, and the choice of harness mattered more than the choice of retrieval strategy. K-Ops is text-first, file-native, and grep-aligned by design — that is not an accident or a limitation.
+
+`K-Ops` is not trying to be the fastest scratchpad, the most polished MCP server, or the most abstract memory API. It is trying to make knowledge durable enough to audit, repair, and reuse — with a working CLI you can run today.
 
 ---
 
