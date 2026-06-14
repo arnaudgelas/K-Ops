@@ -9,13 +9,13 @@ description: Review newly ingested raw sources and draft or update source summar
 Turn already-fetched raw source folders into structured source summary notes that the vault compiler can use.
 
 ## Context
-Mechanical fetching and normalization is handled automatically by `scripts/ingest_sources.py` (run via `kb.py ingest`).
-This skill covers the **agent-driven** step that follows: reading the normalized content and writing or updating source summary notes.
+Mechanical fetching and normalization is handled by `scripts/ingest_sources.py` via `kb.py ingest`.
+This skill covers the agent-driven step that follows: reading normalized content and writing or updating source summaries.
 
 ## Inputs
-- `data/registry.json` — registry of all ingested sources
-- `data/raw/<id>/normalized.md` — normalized text for each source
-- `data/raw/<id>/metadata.json` — source metadata (URL, type, timestamps)
+- `data/registry.json` - registry of all ingested sources
+- `data/raw/<id>/normalized.md` - normalized text for each source
+- `data/raw/<id>/metadata.json` - source metadata (URL, type, timestamps)
 - Existing `notes/Sources/<id>.md` if a prior summary exists
 
 ## Output contract
@@ -29,10 +29,26 @@ Frontmatter (all fields mandatory per `config/schema.yaml`):
 - `source_id` (canonical `src-[0-9a-f]{10}`)
 - `title`
 - `source_url`
-- `source_kind` (`web-page` | `github-repo` | `pdf` | `imported_model_report` | `imported_model_report_citation` | `other`)
-- `evidence_strength`
-- `ingested_at` (ISO-8601 date)
-- `tags` (include `kb/source`)
+- `source_kind` (must map to a canonical schema value):
+  `arxiv-paper` | `paper-pdf` | `github-repo-snapshot` | `github-file` | `official-doc` | `spec` | `blog` | `news` | `local-file` | `imported-model-report` | `citation-stub`
+- `evidence_strength` (must map to a canonical schema value):
+  `primary-doc` | `primary-doc-partial` | `official-spec` | `strong` | `code` | `maintainer-commentary` | `changelog` | `pr-issue` | `secondary` | `model-generated` | `stub` | `citation-only` | `image-only`
+- `source_status` (defaults to `active`)
+- `ingested_at` (ISO-8601 date, e.g. 2026-06-14T10:53:44Z)
+- `tags` (must include `kb/source`)
+
+### Kind-Specific Required Frontmatter:
+- **arxiv-paper**: `authors`, `arxiv_id`, `published_date`, `abstract`
+- **paper-pdf**: `page_count`
+- **github-repo-snapshot**: `git_commit`, `branch`, `tracked_file_count`, `sampled_file_count`
+- **github-file**: `github_url`, `git_commit`
+- **official-doc**: `organization`
+- **spec**: `organization`, `version`, `status`
+
+### Strong PDF / Imported Report Constraints:
+- **PDF Coverage**: Any PDF source (`paper-pdf`, `arxiv-paper`, or URL ending in `.pdf`) with strong evidence strength (`primary-doc`, `strong`, `official-spec`) MUST include `extraction_coverage` metadata in its frontmatter (e.g. `extraction_coverage: 1.0`).
+- **Imported Report**: If kind is `imported-model-report`, set `authority: lead_only`, `verification_state: needs_primary_sources`, `evidence_strength: secondary`.
+- **Imported Citation Stub**: If kind is `citation-stub`, set `canonical_url: "<url>"`, `authority: lead_only`, `verification_state: needs_fetch`, `evidence_strength: stub`.
 
 Sections (in this order, all required):
 - `## Summary`
@@ -41,8 +57,8 @@ Sections (in this order, all required):
 - `## Important evidence / details`
 - `## Candidate concepts`
 - `## Open questions`
-- `## Reliability notes`
-- `## Related Concepts`
+- `## Reliability notes` (Required by linter)
+- `## Related Concepts` (Required by linter)
 - `## Backlinks`
 
 ## Safe behavior

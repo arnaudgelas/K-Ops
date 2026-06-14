@@ -2,6 +2,8 @@
 
 This repo is designed for agentic CLI workflows.
 
+Canonical rules: see `OPERATING_RULES.md`.
+
 ## Roles
 
 ### Source Ingestor
@@ -40,3 +42,4 @@ Goal: convert the current vault into memos, briefings, slide outlines, diagrams,
 - Use `uv run python scripts/install_agent_assets.py` to sync canonical skills/templates to the Codex runtime directory.
 - Use `uv run python scripts/kb.py validate` to confirm config loads before running workflows.
 - Prefer `uv run python scripts/kb.py compile --agent codex` when you want Codex to do the compilation pass.
+- Use `uv run python scripts/kb.py extract-claims`, `extract-contradictions`, and `scorecard` to keep the machine-readable quality layer current.

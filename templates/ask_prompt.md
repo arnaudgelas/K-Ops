@@ -11,16 +11,16 @@ Web fetch policy:
 
 ## Idempotency guard
 
-Read `{answer_path}` first. If the answer section no longer contains `__ANSWER_PENDING__`, the question has already been answered — print the file path and stop. Do not overwrite a completed answer.
+Read `{answer_path}` first. If the answer section no longer contains `__ANSWER_PENDING__`, the question has already been answered - print the file path and stop. Do not overwrite a completed answer.
 
 ---
 
 ## Search strategy (depth-first, capped at 10 concept pages)
 
-Work through these steps in order. Stop reading when you have enough to answer confidently — do not read everything.
+Work through these steps in order. Stop reading when you have enough to answer confidently - do not read everything.
 
 1. Read `notes/Home.md` to understand the vault's topic map and navigation links.
-2. Scan `notes/Concepts/` filenames. Pick the 3–5 most relevant to the question by title alone.
+2. Scan `notes/Concepts/` filenames. Pick the 3-5 most relevant to the question by title alone.
 3. Read those concept pages. Note every `source_id` cited in their `## Evidence / Source Basis` sections.
 4. If the concept pages are thin or the question requires deeper evidence, read the source summaries for those source_ids from `notes/Sources/`.
 5. Read raw files from `data/raw/<source_id>.*` only if the source summary is insufficient and the raw file is likely to contain the answer.
@@ -35,13 +35,24 @@ If web fetch policy is disabled, do not browse the web.
 
 Replace `__ANSWER_PENDING__` in `{answer_path}` with your answer. Keep the rest of the scaffold intact.
 
-Answer requirements:
-- Cite sources inline with Obsidian wikilinks: `[[Sources/<source_id>|<source_id>]]` or `[[Concepts/<name>|<name>]]`.
-- Distinguish established vault knowledge from inference or uncertainty. Use phrases like "according to [[Sources/...]]" vs "this is unclear — vault does not address".
-- If a claim is not grounded in anything you read, mark it `(unverified)`.
-- Do not invent citations or claim to have read files you did not read.
-
-Populate `sources_consulted` in the frontmatter with every `source_id` you actually opened. Format: a YAML list, e.g. `sources_consulted: ["src-abc123def0", "src-xyz789ghi0"]`.
+Answer structure and requirements:
+- **Title and Headers**: The document must have a top-level heading (`# Question` / `# Answer`) and second-level subheadings (e.g. `## Summary`, `## Analysis`).
+- **Citation**: Cite sources inline with Obsidian wikilinks: `[[Sources/<source_id>|<source_id>]]` or `[[Concepts/<name>|<name>]]`.
+- **Uncertainty**: Distinguish established vault knowledge from inference or uncertainty. Use phrases like "according to [[Sources/...]]" vs "this is unclear - vault does not address".
+- **Unverified Claims**: If a claim is not grounded in anything you read, mark it `(unverified)`.
+- **Provenance**:
+  - `sources_consulted`: Populate in the frontmatter with every `source_id` you actually opened. Format: a YAML list, e.g. `sources_consulted: ["src-abc123def0", "src-xyz789ghi0"]`.
+  - `query_class`: Choose one of: `lookup`, `synthesis`, `contradiction`, `freshness`, `code`, `audit`, `research`.
+  - `retrieval_path`: A list of retrieval steps you executed to find the answer. Each step must be a YAML dictionary with keys:
+    - `method`: one of `exact`, `bm25`, `graph`, `manual`.
+    - `layer`: one of `claim`, `concept`, `source`, `contradiction`, `scorecard`, `symbol`, `registry`.
+    - `query`: the search query/string used.
+    - `results_count`: the number of matches returned (integer).
+  - `fetch_required`: Set to `true` if you fetched external web sources during this Q&A session, or `false` otherwise.
+- **Answer Quality and Scope Alignment**:
+  - If you are making durable updates to the vault (updating concept pages): set `answer_quality: durable` and `scope: shared`. You MUST populate the `## Vault Updates` section with the list of changes made.
+  - If you are not making durable updates: set `answer_quality: memo-only` and `scope: private`. The `## Vault Updates` section MUST be exactly `- None.`.
+  - Do not use mismatched combinations (like `private` + `durable`, or `shared` + `memo-only`).
 
 ---
 
@@ -49,8 +60,10 @@ Populate `sources_consulted` in the frontmatter with every `source_id` you actua
 
 After writing the answer, decide: did you learn something durable that belongs in a concept page?
 
-- If yes: edit the relevant concept page(s) and list each edit under `## Vault Updates` in the answer file.
-- If no: write `- None.` under `## Vault Updates` and leave concept pages untouched.
+- If yes: edit the relevant concept page(s) and list each edit under `## Vault Updates` in the answer file. Align quality/scope to `durable` and `shared`.
+- If no: write `- None.` under `## Vault Updates`, leave concept pages untouched, and keep `memo-only` and `private`.
+- If a gap was found: add to concept page's `## Open Questions` and `notes/TODO.md`.
+- If a contradiction was found: add to `notes/Maintenance/Contradictions.md`.
 
 Do not create new concept pages from a Q&A session. Add to existing ones only.
 
@@ -61,7 +74,9 @@ Do not create new concept pages from a Q&A session. Add to existing ones only.
 Stop when all of the following are true:
 - [ ] `{answer_path}` no longer contains `__ANSWER_PENDING__`.
 - [ ] `sources_consulted` in the frontmatter lists every source_id you read.
-- [ ] `## Vault Updates` is populated (edits made or `- None.`).
+- [ ] `query_class`, `retrieval_path`, and `fetch_required` are valid and fully populated in the frontmatter.
+- [ ] `answer_quality` and `scope` are aligned (`durable` + `shared` OR `memo-only` + `private`).
+- [ ] `## Vault Updates` is populated correctly.
 - [ ] You have not read more than 10 concept pages.
 
 Print the answer file path and a one-line summary of any vault updates made.

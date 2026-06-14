@@ -11,7 +11,14 @@ Turn raw sources into a durable Markdown knowledge base. Every answer should eit
 
 ## Operating Rules
 
-- Treat `data/raw/` as immutable source evidence. Each `data/raw/src-*/` directory contains `metadata.json` (the per-source manifest: `id`, `source`, `ingested_at`, `kind`, `original_path`, `normalized_path`, `title_guess`, `content_hash`) and is the authoritative record for that source even if `data/registry.json` is lost.
+- Treat `data/raw/` as immutable source evidence. Each `data/raw/src-*/`
+  directory contains `metadata.json` (the per-source manifest: `id`,
+  `source`, `ingested_at`, `kind`, `original_path`, `normalized_path`,
+  `title_guess`, `content_hash`) and is the authoritative record for that
+  source even if `data/registry.json` is lost.
+- For long sources, the logical hierarchy lives in
+  `data/raw/src-*/large_source_manifest.json`; do not move hierarchy into
+  `metadata.json`. See `notes/Runbooks/Large_Source_Hierarchy.md`.
 - Treat `notes/` as the curated Obsidian vault.
 - Treat `research/` as the active run workspace for resumable research jobs, not as a substitute for the curated vault.
 - Prefer updating existing concept pages instead of creating duplicates.
@@ -51,20 +58,27 @@ Use the skills in `skills/` when relevant:
 - `qa-agent`
 - `render-output`
 
-## Research Runs
-
-When a topic needs a full research run, use the resumable workflow in `research/`:
-- create a brief, status checkpoint, and progress log
-- record the `quality_tier` as `fast`, `standard`, or `deep`
-- collect sources into `notes/Sources/`
-- write findings, run a contrarian review, then draft the final report
-- archive completed runs with a manifest that lists every moved artifact
-
 ## Claim & Freshness Rules
 
 - Run `extract-claims` after any compile pass to keep `data/claims.json` current.
+- Treat `data/claims.json` as the derived evidence-card layer for concept-page `## Key Claims` bullets. It is regenerated from the vault; do not hand-edit it.
+- Each claim distinguishes direct inline evidence from page-level inherited evidence:
+  - `inline_source_ids`: source IDs cited on the claim bullet itself.
+  - `page_source_ids`: source IDs cited in the page's `## Evidence / Source Basis`.
+  - `source_resolution`: `inline`, `page-inherited`, or `missing`.
+  - `evidence_status`: `direct`, `inherited`, or `unsupported`.
+- Direct claim evidence is the promotion standard. Page-level inherited evidence preserves compatibility and traceability, but it does not count as direct support for `supported` claims.
+- New or repaired `## Key Claims` bullets should end with direct source links, optionally with source-span anchors:
+  - `([[Sources/web/src-1234567890|src-1234567890]])`
+  - `src-1234567890#page=12`
+  - `src-1234567890#path=src/app.py&L10=L20&commit=<sha>`
+- Existing claims without source-span anchors are marked with `span_status: missing` in `data/claims.json`; add spans when the source format supports them.
 - `refresh` automatically sets `revalidation_required: true` on concept pages that cite changed sources. Run `stale-impact` to review the impact list, update the affected pages, then run `clear-stale-flags` to dismiss.
-- Concept pages with `claim_quality: conflicting` **must** have an `## Open Questions` section that names the conflicting sources and why they disagree. Lint warns if the section is absent.
+- Concept pages with `claim_quality: conflicting` **must** have an `## Open Questions` section that names the conflicting sources and why they disagree. The page should directly cite at least two source IDs across `## Key Claims` and `## Open Questions`.
+- Strict lint enforces the claim-evidence gates:
+  - `supported` concepts must have at least 90% direct citation coverage in `## Key Claims`.
+  - `provisional` concepts below 70% direct citation coverage are warning-level evidence debt.
+  - durable uncited claims must be cited directly or demoted.
 - Answer memos include a `sources_consulted` frontmatter list. Populate it with the source IDs and concept filenames read during the Q&A session.
 
 ## Evidence Strength Taxonomy
@@ -112,9 +126,9 @@ These rules make the compilation step deterministic: given the same sources, dif
 
 | Value | Evidence required |
 |---|---|
-| `supported` | ≥2 `primary-doc` / `strong` sources, OR 1 `official-spec` |
-| `provisional` | 1 `strong` or `secondary` source; single corroborating source only |
-| `conflicting` | Sources exist but actively disagree; both sides must be named in `## Open Questions` |
+| `supported` | ≥2 `primary-doc` / `strong` sources, OR 1 `official-spec`; and ≥90% direct claim-citation coverage |
+| `provisional` | 1 `strong` or `secondary` source; single corroborating source only; below 70% direct claim-citation coverage remains review debt |
+| `conflicting` | Sources exist but actively disagree; both sides must be directly cited and named in `## Open Questions` |
 | `speculative` | 0 primary sources; inferred or model-generated only; no direct source evidence |
 
 ### Before creating any new concept page
@@ -185,6 +199,7 @@ Source notes and the claims they support degrade over time. Apply these threshol
 ## Reference Notes
 
 - `notes/Runbooks/Agent_Workflow_Quick_Reference.md`
+- `notes/Runbooks/Large_Source_Hierarchy.md`
 - `notes/Concepts/Workflow_Pattern_Inventory.md`
 - `scripts/kb.py bootstrap --target <dir>`
 

@@ -1,102 +1,31 @@
-You are drafting the final report for research run `{slug}`.
+You are the Research Report agent for this repository.
 
-Topic: {topic}
-Quality tier: {tier}
+Goal:
+- Draft the final research report synthesizing the brief, findings, and contrarian review into a bounded, evidence-grounded deliverable.
 
-Files:
-- Brief (read first): {brief_path}
-- Findings: {findings_path}
-- Contrarian review: {review_path}
-- Report output (write here): {report_path}
+Inputs:
+- Research brief: {brief_path}
+- Findings file: {findings_path}
+- Review file: {review_path}
+- Report file: {report_path}
 
----
+Instructions:
+1. **Synthesize inputs**: Read the brief, findings, source notes, and contrarian review thoroughly.
+2. **Draft the report**:
+   - Write/update `{report_path}`. Preserve its frontmatter (type: `research-report`, `topic_slug`, etc.).
+   - Under `## Executive Summary`, provide a high-level overview of the findings, conclusions, and engineering recommendations.
+   - Under `## Methodology`, briefly detail the source collection and review process.
+   - Under `## Evidence and Analysis`, write the core sections. Every key fact or claim must be directly cited with Obsidian wikilinks to the source summaries (e.g. `[[Sources/src-<id>|src-<id>]]`). Group findings logically.
+   - Under `## Engineering Recommendations`, list concrete actionable steps derived from the evidence.
+   - Under `## Contradictory or Missing Evidence`, explicitly address each objection and gap raised in the contrarian review and document remaining uncertainties or contradictions between sources.
+   - Under `## Source Map`, list all concept pages and source summaries (with Obsidian wikilinks) that informed this report.
+3. **Evidence bounds**:
+   - Keep conclusions strictly bounded by the collected evidence. Avoid making general or sweeping assertions that aren't backed by the cited sources.
+   - If a claim relies on an imported model report, ensure it has been verified against a primary source before including it in the report.
+4. **Progress Log**: Append a short progress update when done.
 
-## Idempotency guard
-
-Read `{report_path}`. If it already contains a completed report (not just a scaffold), print "Report already written" and stop. Do not overwrite a completed report.
-
----
-
-## Read before writing — strict order
-
-1. Read `{brief_path}` — understand the original question and success criteria.
-2. Read `{review_path}` — the contrarian review may have invalidated findings or flagged missing sources. If the review says "major gaps", note what to omit or caveat.
-3. Read `{findings_path}` — the synthesized evidence base.
-4. Read the source summaries cited in the findings (`notes/Sources/<source_id>.md`). Read at most 8.
-5. For any claim the review specifically challenged as unsupported: read the raw source file to verify before including it in the report.
-
-Do not rely on memory or reasoning alone for factual claims. Read the sources.
-
----
-
-## Report protocol
-
-Build the report from evidence upward, not from the thesis downward.
-
-- Start with what the sources clearly establish (high-confidence claims).
-- Then cover areas where evidence is mixed or sources disagree.
-- Then identify genuine open questions that remain unresolved.
-- Do not promote model-generated report claims unless a primary source corroborates them.
-
----
-
-## Report output format
-
-Write `{report_path}` using this structure:
-
-```markdown
-# Research Report: {topic}
-
-*Generated: <date>*
-*Quality tier: {tier}*
-*Sources consulted: <N>*
-
-## Executive Summary
-
-<3–5 sentence synthesis of the most important, well-supported findings. State the confidence level.>
-
-## Key Findings
-
-### <Finding category 1>
-
-<Finding text. Cite supporting sources inline: ([[Sources/<source_id>|<source_id>]]).>
-
-### <Finding category 2>
-
-<Finding text with citations.>
-
-## Contested or Uncertain Areas
-
-<Claims where sources disagree, evidence is thin, or the contrarian review raised valid objections. Be explicit about what is uncertain and why.>
-
-## Open Questions
-
-- <Specific unanswered question that further research could address>
-- <What primary source is missing>
-
-## Sources
-
-| source_id | title | evidence_strength |
-|---|---|---|
-| <source_id> | <title> | <strength> |
-```
-
----
-
-## What NOT to do
-
-- Do not include claims the contrarian review recommended removing unless you have found corroborating evidence.
-- Do not cite model-generated sources as authoritative.
-- Do not present uncertain findings as established facts.
-- Do not create or edit concept pages — that is the compile step.
-
----
-
-## Done checklist
-
-- [ ] Report covers: executive summary, key findings, contested areas, open questions, source table.
-- [ ] Every factual claim in Key Findings cites at least one source inline.
-- [ ] Claims challenged in the contrarian review are either corroborated or placed in "Contested" section.
-- [ ] Status file `{status_path}` updated to `phase: done`.
-
-Print: report path, source count, count of claims placed in Contested vs Key Findings.
+Done checklist:
+- [ ] Completed report saved in `{report_path}` with all required sections (Executive Summary, Methodology, Evidence and Analysis, Engineering Recommendations, Contradictory or Missing Evidence, Source Map) populated.
+- [ ] All claims are backed by source citations.
+- [ ] Objections from the contrarian review are addressed or documented as open questions.
+- [ ] No placeholders remain in the report.

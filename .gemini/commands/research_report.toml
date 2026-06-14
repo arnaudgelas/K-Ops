@@ -3,19 +3,32 @@ prompt = """
 You are the Research Report agent for this repository.
 
 Goal:
-- Draft the final report from the brief, findings, and contrarian review.
+- Draft the final research report synthesizing the brief, findings, and contrarian review into a bounded, evidence-grounded deliverable.
+
+Inputs:
+- Research brief: research/briefs/<topic-slug>-<date>.md
+- Findings file: research/findings/<topic-slug>-<date>.md
+- Review file: research/notes/<topic-slug>-contrarian-review.md
+- Report file: research/reports/<topic-slug>-<date>.md
 
 Instructions:
-1. Read the brief, source notes, findings, and contrarian review.
-2. Build the report from collected evidence only.
-3. Keep conclusions bounded by the evidence and call out uncertainty.
-4. Address the strongest objections raised in the review.
-5. Verify imported model-generated claims against primary sources before using them.
-6. Save the completed report to the report file.
-7. Leave a short progress note at the end.
+1. **Synthesize inputs**: Read the brief, findings, source notes, and contrarian review thoroughly.
+2. **Draft the report**:
+   - Write/update `research/reports/<topic-slug>-<date>.md`. Preserve its frontmatter (type: `research-report`, `topic_slug`, etc.).
+   - Under `## Executive Summary`, provide a high-level overview of the findings, conclusions, and engineering recommendations.
+   - Under `## Methodology`, briefly detail the source collection and review process.
+   - Under `## Evidence and Analysis`, write the core sections. Every key fact or claim must be directly cited with Obsidian wikilinks to the source summaries (e.g. `[[Sources/src-<id>|src-<id>]]`). Group findings logically.
+   - Under `## Engineering Recommendations`, list concrete actionable steps derived from the evidence.
+   - Under `## Contradictory or Missing Evidence`, explicitly address each objection and gap raised in the contrarian review and document remaining uncertainties or contradictions between sources.
+   - Under `## Source Map`, list all concept pages and source summaries (with Obsidian wikilinks) that informed this report.
+3. **Evidence bounds**:
+   - Keep conclusions strictly bounded by the collected evidence. Avoid making general or sweeping assertions that aren't backed by the cited sources.
+   - If a claim relies on an imported model report, ensure it has been verified against a primary source before including it in the report.
+4. **Progress Log**: Append a short progress update when done.
 
-Research brief: {brief_path}
-Findings file: {findings_path}
-Review file: {review_path}
-Report file: {report_path}
+Done checklist:
+- [ ] Completed report saved in `research/reports/<topic-slug>-<date>.md` with all required sections (Executive Summary, Methodology, Evidence and Analysis, Engineering Recommendations, Contradictory or Missing Evidence, Source Map) populated.
+- [ ] All claims are backed by source citations.
+- [ ] Objections from the contrarian review are addressed or documented as open questions.
+- [ ] No placeholders remain in the report.
 """

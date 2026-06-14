@@ -4,16 +4,15 @@ Requested output format: {format}
 Requested output brief: {prompt}
 
 Task:
-1. Read the current vault.
-2. Produce the requested output using the vault as the source of truth.
-3. Save the output under `outputs/` with a descriptive filename.
-4. If helpful, also save a compact source map showing which vault notes informed the output.
+1. **Read the vault**: Scan the Home, Index, Concept, and Source notes. Treat the vault as the absolute source of truth.
+2. **Produce output**: Generate the requested deliverable (memo, slides, outline, or report) conforming to the formatting requirements and the user's brief.
+3. **Save output**: Save the output file in the `outputs/` directory with a clear, descriptive filename (lowercase, hyphens, e.g. `outputs/multi-agent-comparison-memo.md`).
+4. **Source Mapping**: Always include a "Source Map" section at the end listing the specific Concept pages and Source summaries (with Obsidian wikilinks) that informed the deliverable.
 
 Rules:
-- Do not add claims not supported by the vault.
-- Prefer concise, reusable output structures.
-- If the prompt asks for slides, create a markdown slide outline rather than a binary deck.
-- Include a compact source map when it helps the output stay auditable.
+- Do not introduce outside knowledge or claims not grounded in the vault notes.
+- If the requested format is slides, produce a structured markdown slide outline (`.md` file using `---` slide separators and slide titles as headers) rather than any binary slides.
+- Use concise, clear markdown formatting, with tables, charts, or Mermaid diagrams where appropriate to maximize readability.
 
 When done:
-- Print created files.
+- Print the absolute file path of the created deliverable and a brief summary of the sources used.

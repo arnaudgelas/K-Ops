@@ -1,5 +1,5 @@
 """
-retrieval.py — Hybrid retrieval baseline for the agkb vault.
+retrieval.py — Hybrid retrieval baseline for the K-Ops vault.
 
 Implements:
 - Exact lookup by source_id / claim_id / concept slug

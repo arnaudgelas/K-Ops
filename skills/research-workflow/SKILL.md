@@ -9,18 +9,18 @@ description: Manage resumable research runs under `research/` and coordinate the
 Run higher-stakes topics as resumable, tiered research threads outside the curated vault until they are ready to promote.
 
 ## Use When
-- the user wants a structured research run rather than an immediate vault answer
-- a topic needs source collection, contrarian review, and a final report
-- an external model report should be imported as a lead, not treated as authority
+- The user wants a structured research run rather than an immediate vault answer.
+- A topic needs source collection, contrarian review, and a final report.
+- An external model report should be imported as a lead, not treated as authority.
 
 ## Core Flow
-1. Start a run with `uv run python scripts/kb.py research-start --topic "<text>" --tier <fast|standard|deep>`.
-2. Check or resume with `research-status`.
-3. Collect sources with `research-collect`.
-4. Run a contrarian review with `research-review`.
-5. Draft the report with `research-report`.
-6. Import external reports with `research-import` only when you want to preserve provenance and treat them as leads.
-7. Archive the run with `research-archive` after completion.
+1. **Start a run**: `uv run python scripts/kb.py research-start --topic "<text>" --tier <fast|standard|deep>`.
+2. **Check status**: `uv run python scripts/kb.py research-status [topic|all]`.
+3. **Collect sources**: `uv run python scripts/kb.py research-collect --agent <codex|claude|gemini> --topic "<topic>"` (runs collect prompt).
+4. **Adversarial review**: `uv run python scripts/kb.py research-review --agent <codex|claude|gemini> --topic "<topic>"` (runs review prompt).
+5. **Draft report**: `uv run python scripts/kb.py research-report --agent <codex|claude|gemini> --topic "<topic>"` (runs report prompt).
+6. **Import external reports**: `uv run python scripts/kb.py research-import --topic "<topic>" --path <file> --provider <provider> --origin <origin>`.
+7. **Archive completed run**: `uv run python scripts/kb.py research-archive --topic "<topic>"` (after phase shows `done`).
 
 ## Companion Skills
 - `research-collect`
@@ -34,9 +34,9 @@ Run higher-stakes topics as resumable, tiered research threads outside the curat
 - Promote durable findings into the main vault only after verification.
 
 ## Outputs
-- `research/briefs/`
-- `research/notes/`
-- `research/findings/`
-- `research/reports/`
-- `research/imports/`
-- `research/archive/`
+- `research/briefs/` (brief files: `type: research-brief`)
+- `research/notes/` (status: `type: research-status`, progress: `type: research-progress`, review: `type: research-review`)
+- `research/findings/` (findings: `type: research-findings`)
+- `research/reports/` (reports: `type: research-report`)
+- `research/imports/` (manifest: `type: research-import-manifest`)
+- `research/archive/` (manifest: `type: research-archive-manifest`)

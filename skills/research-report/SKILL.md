@@ -15,16 +15,17 @@ Synthesize the brief, source notes, findings, and contrarian review into a bound
 - Report scaffold (`research/reports/<slug>-<date>.md`)
 - Source notes in `notes/Sources/`
 
-## Steps
-1. Read the brief, all source notes, findings, and contrarian review.
-2. Build the report from collected evidence — do not rely on background knowledge alone.
-3. Keep conclusions bounded by the evidence; acknowledge what is uncertain or missing.
-4. Address the strongest objections raised in the contrarian review.
-5. Treat any imported model-generated report claims as leads — verify against primary sources before citing.
-6. Save the completed report to the report file.
-7. Append a short progress update to the progress log when done.
+## Output contract
+- Build the report from collected evidence, not background memory.
+- Keep conclusions bounded by the evidence and name what remains uncertain.
+- Address the strongest objections and missing evidence raised in the contrarian review.
+- Write/update `{report_path}` preserving frontmatter.
+- Populate `## Executive Summary`, `## Methodology`, `## Evidence and Analysis`, and `## Contradictory or Missing Evidence`.
+- Cite source summaries using Obsidian wikilinks.
+- Save the completed report to the report file and update `{progress_path}`.
 
 ## Rules
 - Do not add claims not grounded in the collected sources.
 - Distinguish established findings from provisional claims.
+- Treat imported model-generated report claims as leads until verified against primary sources.
 - Cite the relevant source notes with wikilinks where appropriate.

@@ -13,16 +13,15 @@ Stress-test the emerging thesis before report drafting by actively seeking count
 - Findings file (`research/findings/<slug>-<date>.md`)
 - Contrarian review file (`research/notes/<slug>-contrarian-review.md`)
 
-## Steps
-1. Read the brief and findings thoroughly.
-2. Challenge the current thesis hard — assume the opposite is true and look for evidence.
-3. Identify contradictions, stale claims, weak evidence, and hidden assumptions.
-4. Specify which claims should be softened, qualified, or removed.
-5. Call out missing primary sources that would be needed to support key claims.
-6. Write a substantive review to the contrarian review file.
-7. Append a short progress update to the progress log when done.
+## Output contract
+- Write a substantive contrarian review focused on weak evidence, hidden assumptions, and missing primary sources.
+- Identify which claims should be softened, qualified, or removed.
+- Write/update `{review_path}` preserving the frontmatter.
+- Populate `## Strongest Objections`, `## Missing Evidence`, and `## Claims To Soften`.
+- Update `{progress_path}` with a review log.
 
 ## Rules
 - Adversarial mode: the goal is to break the thesis, not confirm it.
-- Do not fabricate counter-evidence — identify genuine gaps.
+- Do not fabricate counter-evidence - identify genuine gaps.
 - Keep the review grounded in what the evidence actually supports.
+- Suggest missing primary sources or specs that must be consulted before report drafting.

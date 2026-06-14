@@ -11,14 +11,13 @@ Transform the current vault into human-facing deliverables.
 ## Common outputs
 - executive memo
 - research brief
-- slide outline
+- slide outline (structured markdown outline, not a binary file)
 - architecture note
 - comparison table
 - Mermaid diagram spec
 
 ## Rules
-- outputs must be grounded in the vault
-- include a source map when useful
-## Runtime Prompt
-
-See `references/workflow-prompt.md` for the expanded workflow prompt.
+- Deliverables must be strictly grounded in the vault. Do not introduce outside information.
+- Include a "Source Map" section at the end of the rendered document, detailing which Concept pages and Source summaries (with Obsidian wikilinks) informed the content.
+- Save all rendered outputs under the `outputs/` directory with a clean, lowercase, hyphenated filename (e.g. `outputs/multi-agent-orchestration-slides.md`).
+- Print the file paths of all generated files when done.

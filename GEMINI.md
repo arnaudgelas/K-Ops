@@ -1,27 +1,16 @@
 # GEMINI.md
 
-This repository is a starter Obsidian-aligned living research vault. The same operating contract applies whether the active CLI is Gemini CLI, Claude Code, or Codex CLI.
+This repository is an Obsidian-aligned living research vault for agentic coding knowledge.
 
-**Canonical rules: see `OPERATING_RULES.md`.** This file contains the complete mission, workflow, page conventions, and Obsidian conventions. The sections below summarize key points and add Gemini-specific notes.
-
-## Summary
-
-- Raw evidence lives in `data/raw/` (immutable).
-- Curated knowledge lives in `notes/` (Obsidian vault).
-- `research/` is the active run workspace for resumable research jobs; keep it separate from curated notes.
-- Use `scripts/kb.py` commands for ingestion, compilation, Q&A, healing, and rendering.
-- Run `lint` after any structural edits.
-- File durable answers back into the vault.
-
-## Reference Notes
-
-- `notes/Runbooks/Agent_Workflow_Quick_Reference.md` — all commands and safe execution order
-- `notes/Runbooks/Research_Workflow.md` — multi-phase research pipeline
-- `notes/Concepts/Workflow_Pattern_Inventory.md` — workflow pattern catalogue
-- `OPERATING_RULES.md` — canonical operating rules (edit here to update all agent contexts)
+Canonical rules: see `OPERATING_RULES.md`. This file adds only Gemini-specific overrides.
 
 ## Gemini-Specific Notes
+- Use `uv run python scripts/kb.py compile --agent gemini` for wiki compilation passes.
+- Use `uv run python scripts/kb.py heal --agent gemini` for structural repair.
+- Use `uv run python scripts/kb.py validate` to confirm config before running workflows.
+- Use `uv run python scripts/install_agent_assets.py --agent gemini` to sync skills to the Gemini runtime directory.
+- Grounding via Google Search is available — prefer vault-first answers, use web grounding only for missing evidence.
 
-- Gemini commands in `.gemini/commands/` use TOML format with `{{args}}` variable syntax.
-- Use `uv run python scripts/install_agent_assets.py` to sync canonical skills/templates to the Gemini runtime directory.
-- Use `uv run python scripts/kb.py validate` to confirm config loads before running workflows.
+## Reference Notes
+- `notes/Runbooks/Agent_Workflow_Quick_Reference.md` — all commands and safe execution order
+- `OPERATING_RULES.md` — canonical operating rules (full contract)

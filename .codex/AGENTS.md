@@ -2,6 +2,8 @@
 
 This repo is designed for agentic CLI workflows.
 
+Canonical rules: see `OPERATING_RULES.md`.
+
 ## Roles
 
 ### Source Ingestor

@@ -262,7 +262,7 @@ def extract_html_text(raw_html: str, url: str) -> str:
 
 
 def fetch_url(url: str) -> tuple[bytes, str | None, str, str, str]:
-    response = get_session().get(url, timeout=30, headers={"User-Agent": "agkb/0.1"})
+    response = get_session().get(url, timeout=30, headers={"User-Agent": "K-Ops/0.1"})
     response.raise_for_status()
     content_type = response.headers.get("content-type", "").lower()
     filename = Path(urlparse(url).path).name or "downloaded"

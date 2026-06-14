@@ -15,16 +15,16 @@ Populate the findings file for a research run with high-signal, well-sourced cla
 - Findings file (`research/findings/<slug>-<date>.md`)
 - Existing source notes in `notes/Sources/`
 
-## Steps
-1. Read the research brief to understand the working question, scope, and assumptions.
-2. Search broadly first, then narrow to authoritative primary sources.
-3. For each key source, create or update a source note in `notes/Sources/`.
-4. Distinguish evidence from inference explicitly in source notes.
-5. Update the findings file with high-signal claims and open questions.
-6. Treat any imported model-generated reports as leads — verify their claims against primary sources before promoting them into findings.
-7. Append a short progress update to the progress log when done.
+## Output contract
+- Create or update source notes in `notes/Sources/` following the strict metadata schemas (valid kinds, strengths, kind-specific required fields, and PDF extraction coverage where applicable).
+- Treat imported model-generated reports as leads only. Ensure their source notes declare `authority: lead_only`, `verification_state: needs_primary_sources` / `needs_fetch`, and secondary/stub evidence strength.
+- Update `{findings_path}`. Maintain all frontmatter. Populate claims in `## Key Claims` directly citing the source notes.
+- Distinguish evidence from inference explicitly.
+- Keep the findings file bounded, sourced, and reviewable.
 
 ## Rules
 - Prefer primary sources over commentary.
-- Do not create duplicate source notes — update existing ones.
+- Do not create duplicate source notes - update existing ones.
+- Treat imported model-generated reports as leads until verified.
 - Keep uncertainty explicit; do not inflate claim confidence.
+- Append a progress update to `{progress_path}` after completing collection.

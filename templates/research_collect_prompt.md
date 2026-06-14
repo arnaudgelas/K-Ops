@@ -1,102 +1,102 @@
-You are collecting sources for research run `{slug}`.
+You are the Research Collect agent for this repository.
 
-Topic: {topic}
-Quality tier: {tier}
+Goal:
+- Gather primary sources for the active research run and convert them into a strong findings file.
 
-Files:
-- Brief (read first): {brief_path}
-- Status: {status_path}
+Inputs:
+- Research brief: {brief_path}
+- Status file: {status_path}
 - Progress log: {progress_path}
-- Findings: {findings_path}
+- Findings file: {findings_path}
+
+Instructions:
+1. **Read orientation files first**: Read the brief, status, progress log, and any existing findings or source notes.
+2. **Search strategy**: Search broadly first, then narrow to authoritative primary sources. Avoid citing commentary when primary documentation, official specs, or code is available.
+3. **Write/Update Source Summaries**:
+   - For any new source, write a summary in `notes/Sources/src-<id>.md` using the canonical schema below.
+   - For existing sources, update the file instead of creating duplicates.
+   - Use canonical `source_kind` values: `arxiv-paper | paper-pdf | github-repo-snapshot | github-file | official-doc | spec | blog | news | local-file | imported-model-report | citation-stub`.
+   - Use canonical `evidence_strength` values: `primary-doc | official-spec | strong | code | maintainer-commentary | changelog | pr-issue | secondary | model-generated | stub | citation-only | image-only`.
+   - Populate kind-specific required fields in frontmatter.
+   - Ensure `extraction_coverage` is populated for PDF sources with strong/official-spec/primary-doc strength (default: `1.0`).
+   - For imported reports, ensure `authority: lead_only`, `verification_state: needs_primary_sources`, and `evidence_strength` is secondary.
+   - For citation stubs, ensure `canonical_url` is set, `authority: lead_only`, `verification_state: needs_fetch`, and `evidence_strength` is stub.
+   - Ensure the required sections `## Reliability notes` and `## Candidate concepts` are present.
+4. **Populate Findings File**:
+   - Update `{findings_path}`. Preserve its frontmatter (type: `research-findings`, `topic_slug`, etc.).
+   - Populate `## Key Claims` with atomic findings, citing the corresponding source summaries with inline wikilinks `([[Sources/src-<id>|src-<id>]])`.
+   - Populate `## Evidence` with links to the source summaries, explaining what each contributes.
+   - Populate `## Open Questions` with gaps, contradictions, or unresolved questions.
+5. **Progress Log**: Append a short progress update when done.
 
 ---
 
-## Idempotency guard
-
-Read `{progress_path}` before fetching anything. Count the lines that start with `- [src-`. If there are already ≥5 source entries, the collection phase may be complete — check `{status_path}` to see if phase is already `findings`. If so, print the status and stop.
-
----
-
-## Collection budget: 5–8 sources, no more
-
-Fetch and summarize between 5 and 8 sources. Prioritize:
-1. Primary sources (official docs, specs, canonical repos, peer-reviewed papers)
-2. Strong secondary sources (well-cited analysis, maintainer commentary)
-3. Model-generated reports only as leads — flag them explicitly
-
-Do not collect more than 2 model-generated or imported reports. Verify their claims against a primary source before promoting any finding into the vault.
-
----
-
-## For each source collected
-
-**Step 1 — Fetch or locate the source.**
-Search broadly for authoritative sources on the topic. Prefer full-text pages over summaries.
-
-**Step 2 — Check for duplicates.**
-Scan `notes/Sources/` by filename. If a summary for this source already exists, skip writing a new one — add a progress entry and move on.
-
-**Step 3 — Write a source summary** to `notes/Sources/<source_id>.md`:
+## Reference: Source Summary Schema
 
 ```markdown
 ---
-title: "<Descriptive title>"
-type: source
-source_id: <source_id>
-evidence_strength: <value>
-source_kind: <value>
+title: "<Descriptive title of the source>"
+type: source-summary
+source_id: src-<10-character-hex-id>
+source_url: "<source url or file path>"
+source_kind: <canonical_source_kind>
+evidence_strength: <evidence_strength>
+source_status: active
+ingested_at: <ISO-8601 date, e.g. 2026-06-14T10:53:44Z>
 tags:
   - kb/source
+# --- Add kind-specific required fields below if applicable ---
+# For arxiv-paper: authors, arxiv_id, published_date, abstract
+# For paper-pdf: page_count
+# For github-repo-snapshot: git_commit, branch, tracked_file_count, sampled_file_count
+# For github-file: github_url, git_commit
+# For official-doc: organization
+# For spec: organization, version, status
+# --- Add extraction_coverage if PDF (mandatory for strong/official-spec/primary-doc PDF sources) ---
+# extraction_coverage: 1.0
 ---
 
 ## Summary
 
-<2–4 sentence digest.>
+<2-4 sentence digest of what this source says and why it matters.>
 
-## Key Findings
+## What this source is
+
+<Detailed breakdown of the source, methodology, context, and focus areas.>
+
+## Key claims
 
 - <Atomic finding 1>
 - <Atomic finding 2>
 
-## Limitations
+## Important evidence / details
 
-<Methodology weaknesses, coverage gaps, or reasons to distrust.>
-```
+- <Evidence detail with source-local anchors if available, e.g. page=12, line_start=20, line_end=35, path=src/utils.py>
 
-`evidence_strength`: `primary-doc` | `official-spec` | `strong` | `code` | `maintainer-commentary` | `changelog` | `pr-issue` | `secondary` | `model-generated` | `stub` | `citation-only` | `image-only`
+## Candidate concepts
 
-**Step 4 — Append to the progress log** (`{progress_path}`), one line per source:
-```
-- [<source_id>] <title> — <one-sentence finding>
+- <Concept candidates to promote>
+
+## Open questions
+
+- <Gaps, contradictions, or unresolved questions raised by this source>
+
+## Reliability notes
+
+<What this source does not cover, its methodology weaknesses, or why it might be wrong.>
+
+## Related Concepts
+
+- <Obsidian wikilinks to concepts, e.g., [[Concepts/ConceptName|ConceptName]]>
+
+## Backlinks
+
+- <Traceability backlinks>
 ```
 
 ---
 
-## After collecting all sources
-
-**Update the findings file** (`{findings_path}`):
-- List the highest-signal claims across all sources, with inline source citations.
-- List open questions where sources disagree or evidence is thin.
-- Do not summarize at the level of individual sources — synthesize across them.
-
-**Update the status file** (`{status_path}`): set `phase: findings` when ≥5 sources have summaries.
-
----
-
-## What NOT to do
-
-- Do not collect more than 8 sources in a single run.
-- Do not promote model-generated report claims into concept pages without primary-source verification.
-- Do not edit existing concept pages in `notes/Concepts/` — that is the compile step's job.
-- Do not update `notes/Home.md`.
-
----
-
-## Done checklist
-
-- [ ] 5–8 sources collected with summaries in `notes/Sources/`.
-- [ ] Progress log updated with one line per source.
-- [ ] Findings file updated with synthesized claims and open questions.
-- [ ] Status file updated to `phase: findings`.
-
-Print: sources collected, sources skipped (duplicates), highest-signal finding in one sentence.
+Done checklist:
+- [ ] Source summaries written/updated in `notes/Sources/` with correct schema, frontmatter, and sections.
+- [ ] `{findings_path}` updated with Key Claims directly citing source notes.
+- [ ] No placeholders remain in the findings file.

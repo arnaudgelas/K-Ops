@@ -42,7 +42,7 @@ ignore_errors = true
 python_version = "3.11"
 
 [project.scripts]
-agkb = "scripts.kb:main"
+k-ops = "scripts.kb:main"
 
 [tool.uv]
 package = false
