@@ -1,5 +1,9 @@
 # K-Ops
 
+<p align="center">
+  <img src="logo.png" alt="K-Ops Logo" width="250">
+</p>
+
 **Your research should not live in a graveyard of browser tabs.**
 
 `K-Ops` is a local, agent-first research pipeline for turning links, PDFs, notes, and files into a durable Markdown knowledge vault for Obsidian.
