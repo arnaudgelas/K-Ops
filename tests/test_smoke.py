@@ -62,6 +62,6 @@ def test_scorecard_exits_zero():
 
 
 def test_claim_map_exits_zero():
-    result = _run(["claim-map", "--concept", "Multi_Agent_Orchestration"])
+    result = _run(["claim-map", "--concept", "Workflow_Pattern_Inventory"])
     assert result.returncode == 0, f"claim-map failed:\n{result.stderr}"
     assert "graph TD" in result.stdout, "claim-map produced no Mermaid output"

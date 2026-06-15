@@ -26,6 +26,30 @@ _BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S.*?)\s*$")
 _CLAIMS_SECTION_RE = re.compile(r"## Key Claims\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 _EVIDENCE_SOURCE_RE = re.compile(r"\[\[Sources/(?:[^/]+/)?(src-[0-9a-f]{10})\|")
 _EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
+# A11: section-anchor and bare-citation regexes for scorecard metrics
+_SECTION_ANCHOR_CITE_RE = re.compile(
+    r"\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})#([^\]|]+)(?:\|[^\]]*)?\]\]"
+)
+_BARE_CITE_RE = re.compile(r"\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})\|\1\]\]")
+_RAW_DIR = ROOT / "data" / "raw"
+
+_v2_source_ids_cache: set[str] | None = None
+
+
+def _get_v2_source_ids() -> set[str]:
+    """Return the set of source IDs that have a v2 large_source_manifest.json."""
+    global _v2_source_ids_cache
+    if _v2_source_ids_cache is not None:
+        return _v2_source_ids_cache
+    _v2_source_ids_cache = set()
+    for mf in _RAW_DIR.rglob("large_source_manifest.json"):
+        try:
+            m = json.loads(mf.read_text(encoding="utf-8"))
+            if m.get("large_source_manifest_version") == 2 and m.get("nodes"):
+                _v2_source_ids_cache.add(mf.parent.name)
+        except Exception:
+            pass
+    return _v2_source_ids_cache
 
 
 def _claims_inline_citation_count(body: str) -> tuple[int, int]:
@@ -116,8 +140,12 @@ def _score_concepts() -> dict:
         evidence_status_counter[es] += 1
 
         # Count if this concept depends on any partial sources
-        page_refs = set(_EVIDENCE_SOURCE_RE.findall(text))
-        if page_refs & partial_source_ids:
+        # Count only Evidence-section references to partial sources (not Key Claims)
+        # A3 gate intent: concepts should not EVIDENCE-back claims with partial sources,
+        # but Key Claims may legitimately cite partial sources as claim-level attribution.
+        ev_text_for_partial = ev_match.group(1) if ev_match else ""
+        ev_refs = set(_EVIDENCE_SOURCE_RE.findall(ev_text_for_partial))
+        if ev_refs & partial_source_ids:
             partial_source_dependencies += 1
 
     return {
@@ -289,6 +317,49 @@ def _score_claims() -> dict:
         _anchor_coverage = {}
         _span_status_dist = Counter()
 
+    # A11: Compute source_section_anchor_coverage and long_source_bare_citation_count
+    # by scanning Key Claims sections across all concept pages
+    _v2_ids = _get_v2_source_ids()
+    _section_anchored_claims = 0
+    _v2_backed_claims = 0
+    _long_source_bare_count = 0
+    try:
+        from utils import CONFIG as _cfg
+
+        for _cp in _cfg.concepts_dir.glob("*.md"):
+            try:
+                _body = _cp.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            _kc_match = _CLAIMS_SECTION_RE.search(_body)
+            if not _kc_match:
+                continue
+            for _line in _kc_match.group(1).splitlines():
+                if not re.match(r"^\s*[-*]\s+", _line):
+                    continue
+                # Does this bullet cite a v2-manifest source (anchored or bare)?
+                _line_v2_bare = {
+                    _m.group(1) for _m in _BARE_CITE_RE.finditer(_line) if _m.group(1) in _v2_ids
+                }
+                _line_v2_anchored = {
+                    _m.group(1)
+                    for _m in _SECTION_ANCHOR_CITE_RE.finditer(_line)
+                    if _m.group(1) in _v2_ids
+                }
+                _line_v2 = _line_v2_bare | _line_v2_anchored
+                if _line_v2:
+                    _v2_backed_claims += 1
+                    if _line_v2_anchored:
+                        _section_anchored_claims += 1
+                    else:
+                        _long_source_bare_count += 1
+    except Exception:
+        pass
+
+    _section_anchor_coverage = (
+        round(_section_anchored_claims / _v2_backed_claims, 3) if _v2_backed_claims else None
+    )
+
     return {
         "total": total,
         "by_quality": dict(quality_counter),
@@ -302,6 +373,8 @@ def _score_claims() -> dict:
         "direct_citation_rate_by_quality": direct_by_quality,
         "span_status_distribution": dict(_span_status_dist),
         "anchor_coverage_by_source_kind": _anchor_coverage,
+        "source_section_anchor_coverage": _section_anchor_coverage,
+        "long_source_bare_citation_count": _long_source_bare_count,
     }
 
 
@@ -832,6 +905,13 @@ def print_summary(scorecard: dict) -> None:
             f"{cl.get('unsupported', 0)} unsupported "
             f"({cl['direct_citation_rate']:.0%} direct)"
         )
+    _sac = cl.get("source_section_anchor_coverage")
+    _lsbc = cl.get("long_source_bare_citation_count", 0)
+    print(
+        f"  section-anchor coverage (v2-manifest sources): "
+        f"{'n/a' if _sac is None else f'{_sac:.1%}'}  |  "
+        f"bare citations to v2-manifest sources: {_lsbc}"
+    )
 
     print("\nAnswers")
     print(

@@ -108,6 +108,39 @@ VALID_RESEARCH_KINDS = {
     "research-archive-manifest",
 }
 
+# A11: Regex to detect bare wikilinks to sources without an anchor fragment
+_BARE_SOURCE_CITE_RE = re.compile(r"\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})\|\1\]\]")
+# A11: Regex to capture the anchor fragment from a section-anchored wikilink
+_ANCHORED_SOURCE_CITE_RE = re.compile(
+    r"\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})#([^\]|]+)(?:\|[^\]]*)?\]\]"
+)
+
+_v2_anchor_index: dict[str, set[str]] | None = None
+
+
+def _get_v2_anchor_index() -> dict[str, set[str]]:
+    """Return mapping of source_id -> set of valid anchor strings from v2 manifests."""
+    global _v2_anchor_index
+    if _v2_anchor_index is not None:
+        return _v2_anchor_index
+    _v2_anchor_index = {}
+    for mf in (RAW_DIR).rglob("large_source_manifest.json"):
+        try:
+            m = json.loads(mf.read_text(encoding="utf-8"))
+            if m.get("large_source_manifest_version") == 2 and m.get("nodes"):
+                anchors: set[str] = set()
+                for node in m["nodes"]:
+                    a = node.get("anchor")
+                    if a:
+                        anchors.add(a)
+                    nid = node.get("node_id")
+                    if nid:
+                        anchors.add(nid)
+                _v2_anchor_index[mf.parent.name] = anchors
+        except Exception:
+            pass
+    return _v2_anchor_index
+
 
 @dataclass
 class Finding:
@@ -117,10 +150,13 @@ class Finding:
 
 
 def section_body(text: str, heading: str) -> tuple[str, str, str] | None:
-    header = f"{heading}\n\n"
-    if header not in text:
+    import re
+
+    pattern = rf"^{re.escape(heading)}\r?\n"
+    match = re.search(pattern, text, re.MULTILINE)
+    if not match:
         return None
-    start = text.index(header) + len(header)
+    start = match.end()
     remainder = text[start:]
     next_heading = remainder.find("\n## ")
     if next_heading == -1:
@@ -716,6 +752,18 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                         f"{note_path.relative_to(ROOT)} should usually use `evidence_strength: stub`",
                     )
                 )
+        # A8: source note size check — warn if > 60 KB and not flagged
+        note_size = note_path.stat().st_size
+        _SIZE_LIMIT = 61440  # 60 KB
+        if note_size > _SIZE_LIMIT and not frontmatter.get("source_summary_too_large"):
+            findings.append(
+                Finding(
+                    "warning",
+                    "source-note-too-large",
+                    f"{note_path.relative_to(ROOT)} is {note_size} bytes, exceeding the 60 KB guideline. Add `source_summary_too_large: true` to frontmatter or reduce the note size.",
+                )
+            )
+
         required_source_sections = {
             "Reliability notes": (
                 "Reliability notes",
@@ -1023,7 +1071,7 @@ def collect_findings(strict: bool = False) -> list[Finding]:
         if page_path == HOME_PATH:
             continue
         frontmatter, _ = parse_frontmatter(text)
-        if frontmatter.get("type") == "redirect":
+        if frontmatter.get("type") == "redirect" or frontmatter.get("retired") is True:
             continue
         if frontmatter.get("type") != "concept":
             findings.append(
@@ -1212,6 +1260,24 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                     )
                     break
 
+        # Check: adversarial source backing a supported concept
+        if claim_quality == "supported" and evidence_source_ids:
+            for source_id in evidence_source_ids:
+                source_fm = source_note_meta.get(source_id, {})
+                is_adversarial = (
+                    source_fm.get("evidence_strength") == "adversarial"
+                    or source_fm.get("adversarial_content") is True
+                )
+                if is_adversarial:
+                    findings.append(
+                        Finding(
+                            "error",
+                            "adversarial-source-backs-supported",
+                            f"{page_path.relative_to(ROOT)} is claim_quality: supported but cites adversarial source {source_id}",
+                        )
+                    )
+                    break
+
         # Check for strong claims based only on partial repository snapshots
         if claim_quality == "supported":
             has_strong_non_partial = False
@@ -1279,6 +1345,35 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                             "warning",
                             "supported-claim-partial-manifest-only",
                             f"{page_path.relative_to(ROOT)} is claim_quality: supported and all github-repo-snapshot sources have coverage_completeness: partial in their repo_manifest.json with no non-partial alternative source",
+                        )
+                    )
+
+        # A11: Check for bare citations to v2-manifest sources in Key Claims
+        _v2_index = _get_v2_anchor_index()
+        kc_match = KEY_CLAIMS_SECTION_RE.search(text)
+        if kc_match:
+            kc_text = kc_match.group(1)
+            for _m in _BARE_SOURCE_CITE_RE.finditer(kc_text):
+                sid = _m.group(1)
+                if sid in _v2_index:
+                    findings.append(
+                        Finding(
+                            "warning",
+                            "bare-citation-to-v2-manifest-source",
+                            f"{page_path.relative_to(ROOT)} cites {sid} in Key Claims without a section anchor; "
+                            f"this source has a v2 manifest. Use [[Sources/.../{sid}#<anchor>|...]] for direct evidence.",
+                        )
+                    )
+            for _m in _ANCHORED_SOURCE_CITE_RE.finditer(kc_text):
+                sid = _m.group(1)
+                anchor_frag = _m.group(2)
+                if sid in _v2_index and anchor_frag not in _v2_index[sid]:
+                    findings.append(
+                        Finding(
+                            "warning",
+                            "unresolved-section-anchor",
+                            f"{page_path.relative_to(ROOT)} cites {sid}#{anchor_frag} in Key Claims "
+                            f"but '{anchor_frag}' does not match any node anchor in the v2 manifest.",
                         )
                     )
 
@@ -1813,6 +1908,28 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                         )
                     )
 
+    # Pre-compute source IDs that are exempt from error-level backlink checking:
+    # - partial sources: adding to Evidence would breach the A3 gate
+    # - stub sources: adding to Evidence would trigger stub-source-cited-by-concept warning
+    exempt_backlink_source_ids: set[str] = set()
+    for _src_path in SOURCES_DIR.rglob("src-*.md"):
+        try:
+            _fm, _ = parse_frontmatter(_src_path.read_text(encoding="utf-8"))
+            _strength = _fm.get("evidence_strength", "")
+            _is_exempt = _strength in ("primary-doc-partial", "stub")
+            if _fm.get("source_kind") == "github-repo-snapshot":
+                _s = _fm.get("sampled_file_count")
+                _t = _fm.get("tracked_file_count")
+                try:
+                    if _s is not None and _t is not None and int(_s) < int(_t):
+                        _is_exempt = True
+                except (ValueError, TypeError):
+                    pass
+            if _is_exempt:
+                exempt_backlink_source_ids.add(_src_path.stem)
+        except Exception:
+            pass
+
     backlink_severity = "error" if strict else "warning"
     for note_path in sorted(SOURCES_DIR.rglob("src-*.md")):
         text = note_path.read_text(encoding="utf-8")
@@ -1829,9 +1946,14 @@ def collect_findings(strict: bool = False) -> list[Finding]:
                 )
                 continue
             if note_path.stem not in concept_path.read_text(encoding="utf-8"):
+                # Partial/stub sources cannot be safely added to Evidence (partial breaches
+                # A3 gate; stub triggers stub-citation warning). Downgrade to warning.
+                sev = (
+                    "warning" if note_path.stem in exempt_backlink_source_ids else backlink_severity
+                )
                 findings.append(
                     Finding(
-                        backlink_severity,
+                        sev,
                         "missing-concept-backlink",
                         f"{note_path.relative_to(ROOT)} references `{concept_ref}` but {concept_path.relative_to(ROOT)} does not cite `{note_path.stem}`",
                     )

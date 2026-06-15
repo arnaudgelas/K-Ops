@@ -67,7 +67,9 @@
     },
     "anchor_coverage_by_source_kind": {
       "unknown": 0.0
-    }
+    },
+    "source_section_anchor_coverage": null,
+    "long_source_bare_citation_count": 0
   },
   "answers": {
     "total": 0,
