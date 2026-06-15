@@ -141,6 +141,20 @@ class Validator:
                     )
                 )
 
+        # Optional field: adversarial_content (bool) — set to true when fetch detected
+        # prompt-injection attempts or manipulative instructions in source text.
+        # A source flagged adversarial_content: true cannot back supported claims (lint gate).
+        adversarial_content = frontmatter.get("adversarial_content")
+        if adversarial_content is not None and not isinstance(adversarial_content, bool):
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "adversarial_content",
+                    f"`adversarial_content` must be a boolean (true/false), got: {adversarial_content!r}",
+                    path,
+                )
+            )
+
         if source_kind:
             kinds_spec = self._schema.get("source_kinds", {})
             if source_kind not in kinds_spec:
@@ -316,6 +330,228 @@ class Validator:
 
         return issues
 
+    def validate_large_source_manifest(
+        self, manifest: dict[str, Any], path: Path | None = None
+    ) -> list[ValidationIssue]:
+        """Validate a large_source_manifest.json against the v2 node schema."""
+        issues: list[ValidationIssue] = []
+
+        _VALID_NODE_TYPES = frozenset(
+            {
+                "document",
+                "part",
+                "chapter",
+                "section",
+                "subsection",
+                "heading",
+                "page",
+                "file",
+                "function",
+                "class",
+                "method",
+                "table",
+                "figure",
+                "caption",
+                "abstract",
+                "method_section",
+                "results",
+                "limitations",
+                "references",
+                "appendix",
+                "glossary",
+                "speaker",
+                "paragraph",
+                "segment",
+            }
+        )
+        _VALID_CONFIDENCE = frozenset({"low", "medium", "high"})
+        _VALID_EXTRACTION_METHODS = frozenset(
+            {
+                "pdf-outline",
+                "html-heading",
+                "md-heading",
+                "heuristic",
+                "backfill-v1",
+                "page-split",
+                "file-split",
+                "legacy-segment",
+            }
+        )
+        _ANCHOR_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+        _NODE_REQUIRED = {
+            "node_id",
+            "parent_id",
+            "order",
+            "level",
+            "type",
+            "title",
+            "anchor",
+            "start_char",
+            "end_char",
+            "page_start",
+            "page_end",
+            "content_hash",
+            "extraction_method",
+            "confidence",
+            "warnings",
+            "source_note_heading",
+        }
+
+        version = manifest.get("large_source_manifest_version")
+        if version is None:
+            issues.append(
+                ValidationIssue(
+                    "warning",
+                    "large_source_manifest_version",
+                    "missing `large_source_manifest_version`; expected 2",
+                    path,
+                )
+            )
+        elif version != 2:
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "large_source_manifest_version",
+                    f"`large_source_manifest_version` is {version!r}, expected 2",
+                    path,
+                )
+            )
+
+        nodes = manifest.get("nodes")
+        if nodes is None:
+            # v1 manifest without nodes — not an error if version warning already raised
+            return issues
+
+        if not isinstance(nodes, list):
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "nodes",
+                    "`nodes` must be a list",
+                    path,
+                )
+            )
+            return issues
+
+        seen_ids: set[str] = set()
+        valid_ids: set[str] = {
+            n["node_id"] for n in nodes if isinstance(n, dict) and "node_id" in n
+        }
+
+        for idx, node in enumerate(nodes):
+            if not isinstance(node, dict):
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        f"nodes[{idx}]",
+                        f"node at index {idx} is not an object",
+                        path,
+                    )
+                )
+                continue
+
+            # Required fields presence
+            missing = _NODE_REQUIRED - node.keys()
+            for field in sorted(missing):
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        f"nodes[{idx}].{field}",
+                        f"node[{idx}] missing required field `{field}`",
+                        path,
+                    )
+                )
+
+            node_id = node.get("node_id", f"<index-{idx}>")
+
+            # Uniqueness
+            if node_id in seen_ids:
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        f"nodes[{idx}].node_id",
+                        f"duplicate node_id `{node_id}`",
+                        path,
+                    )
+                )
+            else:
+                seen_ids.add(str(node_id))
+
+            # parent_id references
+            parent_id = node.get("parent_id")
+            if parent_id is not None and parent_id not in valid_ids:
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        f"nodes[{idx}].parent_id",
+                        f"parent_id `{parent_id}` does not reference a known node_id",
+                        path,
+                    )
+                )
+
+            # anchor pattern
+            anchor = node.get("anchor", "")
+            if anchor and not _ANCHOR_RE.match(str(anchor)):
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        f"nodes[{idx}].anchor",
+                        f"anchor `{anchor}` does not match [a-z0-9][a-z0-9-]* pattern",
+                        path,
+                    )
+                )
+
+            # confidence enum
+            confidence = node.get("confidence")
+            if confidence is not None and confidence not in _VALID_CONFIDENCE:
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        f"nodes[{idx}].confidence",
+                        f"confidence `{confidence}` must be one of: {', '.join(sorted(_VALID_CONFIDENCE))}",
+                        path,
+                    )
+                )
+
+            # type enum
+            node_type = node.get("type")
+            if node_type is not None and node_type not in _VALID_NODE_TYPES:
+                issues.append(
+                    ValidationIssue(
+                        "warning",
+                        f"nodes[{idx}].type",
+                        f"type `{node_type}` is not in preferred node type set",
+                        path,
+                    )
+                )
+
+            # start_char < end_char
+            start_char = node.get("start_char")
+            end_char = node.get("end_char")
+            if isinstance(start_char, int) and isinstance(end_char, int) and start_char >= end_char:
+                issues.append(
+                    ValidationIssue(
+                        "warning",
+                        f"nodes[{idx}].start_char",
+                        f"start_char ({start_char}) must be < end_char ({end_char})",
+                        path,
+                    )
+                )
+
+            # warnings must be a list
+            node_warnings = node.get("warnings")
+            if node_warnings is not None and not isinstance(node_warnings, list):
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        f"nodes[{idx}].warnings",
+                        "`warnings` must be a list",
+                        path,
+                    )
+                )
+
+        return issues
+
     def validate_metadata_json(
         self, metadata: dict[str, Any], path: Path | None = None
     ) -> list[ValidationIssue]:
@@ -397,6 +633,32 @@ def run_strict_validation() -> int:
                     path,
                 )
             )
+
+    # Validate large_source_manifest.json files
+    manifest_paths = sorted(CONFIG.raw_dir.glob("*/large_source_manifest.json"))
+    manifest_errors = 0
+    manifest_warnings = 0
+    for path in manifest_paths:
+        try:
+            manifest = json.loads(path.read_text(encoding="utf-8"))
+            m_issues = validator.validate_large_source_manifest(manifest, path)
+            all_issues.extend(m_issues)
+            manifest_errors += sum(1 for i in m_issues if i.severity == "error")
+            manifest_warnings += sum(1 for i in m_issues if i.severity != "error")
+        except Exception as exc:
+            all_issues.append(
+                ValidationIssue(
+                    "error",
+                    "large_source_manifest.json",
+                    f"failed to load or parse large_source_manifest.json: {exc}",
+                    path,
+                )
+            )
+            manifest_errors += 1
+    print(
+        f"Manifest validation: {len(manifest_paths)} file(s) checked, "
+        f"{manifest_errors} error(s), {manifest_warnings} warning(s)"
+    )
 
     errors = [i for i in all_issues if i.severity == "error"]
     warnings = [i for i in all_issues if i.severity != "error"]
