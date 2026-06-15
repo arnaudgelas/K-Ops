@@ -31,7 +31,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--kind",
-        choices=["source", "concept", "claim"],
+        choices=["source", "concept", "claim", "source-section"],
         default=None,
         help="Filter results by kind",
     )

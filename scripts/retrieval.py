@@ -99,7 +99,7 @@ def _make_result(
 ) -> dict:
     """Normalise an internal record into the public result shape."""
     text = record.get("search_text") or record.get("claim_text") or record.get("title") or ""
-    return {
+    result = {
         "id": record["id"],
         "kind": record["kind"],
         "title": record.get("title") or record["id"],
@@ -107,6 +107,16 @@ def _make_result(
         "retrieval_method": retrieval_method,
         "snippet": _snippet(text),
     }
+    # Pass through source-section-specific fields
+    if record.get("kind") == "source-section":
+        result["source_id"] = record.get("source_id", "")
+        result["node_id"] = record.get("node_id", "")
+        result["anchor"] = record.get("anchor", "")
+        result["path"] = record.get("path", "")
+        result["page_start"] = record.get("page_start")
+        result["page_end"] = record.get("page_end")
+        result["content_hash"] = record.get("content_hash", "")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +237,62 @@ class VaultIndex:
             }
             self._add_record(record)
 
+    def _index_source_sections(self) -> None:
+        """Index v2 manifest nodes as kind=source-section records."""
+        raw_dir = ROOT / "data" / "raw"
+        _MAX_SECTION_CHARS = 2000
+        for mf in sorted(raw_dir.rglob("large_source_manifest.json")):
+            try:
+                manifest = json.loads(mf.read_text(encoding="utf-8"))
+                if manifest.get("large_source_manifest_version") != 2:
+                    continue
+                source_id = mf.parent.name
+                nodes = manifest.get("nodes", [])
+                if not nodes:
+                    continue
+                # Resolve raw text file: prefer original.md, fall back to normalized.md
+                orig = mf.parent / "original.md"
+                norm = mf.parent / "normalized.md"
+                if orig.exists():
+                    raw_path = orig
+                elif norm.exists():
+                    raw_path = norm
+                else:
+                    continue  # skip — no text to slice
+                raw_text = raw_path.read_text(encoding="utf-8", errors="replace")
+                rel_path = raw_path.relative_to(ROOT).as_posix()
+                for node in nodes:
+                    node_id = node.get("node_id")
+                    if not node_id:
+                        continue
+                    start = node.get("start_char") or 0
+                    end = node.get("end_char") or 0
+                    if end <= start:
+                        continue
+                    section_text = raw_text[start : min(end, start + _MAX_SECTION_CHARS)]
+                    anchor = node.get("anchor") or ""
+                    title = node.get("title") or ""
+                    record = {
+                        "id": node_id,
+                        "kind": "source-section",
+                        "source_id": source_id,
+                        "node_id": node_id,
+                        "anchor": anchor,
+                        "path": rel_path,
+                        "page_start": node.get("page_start"),
+                        "page_end": node.get("page_end"),
+                        "content_hash": node.get("content_hash") or "",
+                        "title": title,
+                        "search_text": section_text,
+                    }
+                    self._add_record(record)
+                    # Also index by 'src-XXXX#anchor' key
+                    if anchor:
+                        anchor_key = f"{source_id}#{anchor}"
+                        self._id_map.setdefault(anchor_key, []).append(len(self._records) - 1)
+            except Exception:
+                pass
+
     def build(self) -> None:
         """Index source summaries + concept pages + claims. Tokenise by whitespace+punctuation."""
         self._records = []
@@ -237,6 +303,7 @@ class VaultIndex:
         self._index_sources()
         self._index_concepts()
         self._index_claims()
+        self._index_source_sections()
 
         # Build BM25 corpus from all records
         self._corpus = [
@@ -254,9 +321,24 @@ class VaultIndex:
     # ------------------------------------------------------------------
 
     def exact(self, query_id: str) -> list[dict]:
-        """Look up by source_id, claim_id, or concept slug. Returns matching records."""
+        """Look up by source_id, claim_id, concept slug, node_id, or src-XXXX#anchor.
+
+        For source-section records the retrieval_method is 'exact-section';
+        for all other kinds it is 'exact'.
+        """
         self._ensure_built()
-        indices = self._id_map.get(query_id, [])
+        # Normalise 'src-XXXX#anchor' queries: look up the combined key directly
+        lookup_keys = [query_id]
+        if "#" in query_id and not query_id.startswith("#"):
+            # Already in 'src-XXXX#anchor' form — look up directly
+            pass
+        indices = []
+        seen_key: set[str] = set()
+        for key in lookup_keys:
+            for i in self._id_map.get(key, []):
+                if i not in seen_key:  # type: ignore[operator]
+                    seen_key.add(i)  # type: ignore[arg-type]
+                    indices.append(i)
         results = []
         seen: set[int] = set()
         for idx in indices:
@@ -264,7 +346,8 @@ class VaultIndex:
                 continue
             seen.add(idx)
             r = self._records[idx]
-            results.append(_make_result(r, 1.0, "exact"))
+            method = "exact-section" if r.get("kind") == "source-section" else "exact"
+            results.append(_make_result(r, 1.0, method))
         return results
 
     # ------------------------------------------------------------------
@@ -283,7 +366,8 @@ class VaultIndex:
         results = []
         for idx, score in hits:
             r = self._records[idx]
-            results.append(_make_result(r, score, "bm25"))
+            method = "bm25-section" if r.get("kind") == "source-section" else "bm25"
+            results.append(_make_result(r, score, method))
         return results
 
     # ------------------------------------------------------------------
@@ -297,8 +381,9 @@ class VaultIndex:
         # Try exact first
         exact_results = self.exact(query)
 
-        # BM25 for everything else
-        bm25_results = self.bm25(query, top_k=top_k)
+        # BM25: request extra candidates when kind filtering to avoid over-pruning
+        bm25_fetch = top_k * 10 if kind else top_k
+        bm25_results = self.bm25(query, top_k=bm25_fetch)
 
         # Merge: exact results first, then bm25 not already in exact set
         seen_ids: set[str] = set()
@@ -319,6 +404,59 @@ class VaultIndex:
 
         return combined[:top_k]
 
+    # ------------------------------------------------------------------
+    # Section extraction helper
+    # ------------------------------------------------------------------
+
+    def extract_source_section(self, source_id: str, node_id_or_anchor: str) -> str | None:
+        """Return the raw Markdown text for a specific section of a source.
+
+        Args:
+            source_id: The source directory name (e.g. 'src-abc123').
+            node_id_or_anchor: A full node_id or just the anchor string.
+
+        Returns the sliced section text, or None if not found.
+        """
+        mf_path = ROOT / "data" / "raw" / source_id / "large_source_manifest.json"
+        if not mf_path.exists():
+            return None
+        try:
+            manifest = json.loads(mf_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        nodes = manifest.get("nodes", [])
+        # Find the matching node: node_id match first, then anchor match
+        target = None
+        for node in nodes:
+            if node.get("node_id") == node_id_or_anchor:
+                target = node
+                break
+        if target is None:
+            for node in nodes:
+                if node.get("anchor") == node_id_or_anchor:
+                    target = node
+                    break
+        if target is None:
+            return None
+        raw_dir = mf_path.parent
+        orig = raw_dir / "original.md"
+        norm = raw_dir / "normalized.md"
+        if orig.exists():
+            raw_path = orig
+        elif norm.exists():
+            raw_path = norm
+        else:
+            return None
+        try:
+            raw_text = raw_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        start = target.get("start_char") or 0
+        end = target.get("end_char") or 0
+        if end <= start:
+            return None
+        return raw_text[start:end]
+
 
 # ---------------------------------------------------------------------------
 # Module-level singleton for reuse
@@ -337,6 +475,11 @@ def get_index(rebuild: bool = False) -> VaultIndex:
     return _INDEX
 
 
+def extract_source_section(source_id: str, node_id_or_anchor: str) -> str | None:
+    """Module-level convenience wrapper around VaultIndex.extract_source_section."""
+    return get_index().extract_source_section(source_id, node_id_or_anchor)
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point (thin wrapper; full CLI in search_vault.py)
 # ---------------------------------------------------------------------------
@@ -347,7 +490,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Build and query the vault retrieval index.")
     parser.add_argument("query", help="Search query or ID")
     parser.add_argument("--top", type=int, default=10, help="Number of results")
-    parser.add_argument("--kind", choices=["source", "concept", "claim"], default=None)
+    parser.add_argument(
+        "--kind", choices=["source", "concept", "claim", "source-section"], default=None
+    )
     args = parser.parse_args()
 
     t0 = time.perf_counter()
