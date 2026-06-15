@@ -518,6 +518,12 @@ def cmd_claim_map(concept: str, output: str = "stdout") -> None:
     all_claims = payload.get("claims", [])
     concept_claims = [c for c in all_claims if c.get("concept") == concept]
 
+    if not concept_claims:
+        print(
+            f"No claims found for concept '{concept}'. Check the stem matches claims.json 'concept' field."
+        )
+        return
+
     def safe_id(text: str) -> str:
         return re.sub(r"[^a-zA-Z0-9_]", "_", text)
 
@@ -587,3 +593,55 @@ def run_evaluate(
     print("\nRunning feedback loop...")
     feedback_cmd = [sys.executable, str(ROOT / "scripts" / "feedback_loop.py")]
     subprocess.run(feedback_cmd, check=True)
+
+
+def run_compile_large_source(
+    source_id: str,
+    dry_run: bool = False,
+    resume: bool = False,
+    force: bool = False,
+) -> None:
+    """
+    Route large sources (>50 pages with a v2 manifest) through the bottom-up
+    summarization orchestrator in compile_large_source.py.
+
+    Falls back to the standard compile path if the manifest is absent or the
+    source is small.
+    """
+    manifest_path = ROOT / "data" / "raw" / source_id / "large_source_manifest.json"
+    if not manifest_path.exists():
+        print(
+            f"No large_source_manifest.json for {source_id}; "
+            "use 'compile' subcommand for standard sources."
+        )
+        return
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print(f"ERROR: could not load manifest for {source_id}: {e}")
+        return
+
+    if manifest.get("large_source_manifest_version") != 2:
+        print(
+            f"Manifest version is not 2 for {source_id}; "
+            "run migrate_large_source_manifests.py first."
+        )
+        return
+
+    node_count = len(manifest.get("nodes", []))
+    if node_count <= 50:
+        print(
+            f"Source {source_id} has only {node_count} nodes; "
+            "use standard 'compile' subcommand instead."
+        )
+        return
+
+    cmd = [sys.executable, str(ROOT / "scripts" / "compile_large_source.py"), source_id]
+    if dry_run:
+        cmd.append("--dry-run")
+    if resume:
+        cmd.append("--resume")
+    if force:
+        cmd.append("--force")
+    subprocess.run(cmd, check=True, cwd=ROOT)

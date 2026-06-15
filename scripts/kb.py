@@ -38,6 +38,7 @@ from kb_commands import (
     cmd_claim_map,
     run_generate_probes,
     run_evaluate,
+    run_compile_large_source,
 )
 from kb_runtime import cmd_ask, cmd_compile, cmd_heal, cmd_render
 from research_workflow import (
@@ -107,6 +108,29 @@ def main() -> None:
         "--show-prompt",
         action="store_true",
         help="Print rendered prompt and exit without running the agent.",
+    )
+
+    p_compile_large = sub.add_parser(
+        "compile-large",
+        help="Bottom-up summarization orchestrator for large sources (>50 pages).",
+    )
+    p_compile_large.add_argument(
+        "--source-id", required=True, help="Source ID (e.g. src-e481bf41d0)"
+    )
+    p_compile_large.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Write placeholder summaries without LLM calls.",
+    )
+    p_compile_large.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip nodes whose output files already exist.",
+    )
+    p_compile_large.add_argument(
+        "--force",
+        action="store_true",
+        help="Proceed even if estimated token budget exceeds hard limit.",
     )
 
     p_refresh = sub.add_parser("refresh")
@@ -418,6 +442,13 @@ def main() -> None:
             cmd_compile(args.compile_agent)
     elif args.command == "compile":
         cmd_compile(args.agent, show_prompt=args.show_prompt)
+    elif args.command == "compile-large":
+        run_compile_large_source(
+            args.source_id,
+            dry_run=args.dry_run,
+            resume=args.resume,
+            force=args.force,
+        )
     elif args.command == "refresh":
         run_refresh_sources(branch=args.branch, fail_fast=args.fail_fast)
         cmd_compile(args.agent)
