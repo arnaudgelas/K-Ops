@@ -403,14 +403,166 @@ def extract_doi_fallback(text: str) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------------
+# A7: v2 segment node helpers
+# ---------------------------------------------------------------------------
+
+
+def _to_anchor(title: str) -> str:
+    """Convert a title to a Markdown-safe heading anchor (max 60 chars)."""
+    s = title.lower().strip()
+    s = re.sub(r"^[a-z]+:\s*", "", s)  # strip "type: " prefix
+    s = re.sub(r"[^a-z0-9 \-]", "", s)
+    s = re.sub(r"\s+", "-", s.strip())
+    s = re.sub(r"-+", "-", s).strip("-")
+    if not s or not s[0].isalnum():
+        s = "node-" + s
+    return s[:60]
+
+
+def _make_node(
+    node_id: str,
+    type_: str,
+    title: str,
+    start_char: int,
+    end_char: int,
+    content: str,
+    level: int = 1,
+    parent_id: str | None = None,
+    order: int = 0,
+    page_start: int | None = None,
+    page_end: int | None = None,
+    extraction_method: str = "heuristic",
+    confidence: str = "medium",
+    warnings: list | None = None,
+) -> dict:
+    return {
+        "node_id": node_id,
+        "parent_id": parent_id,
+        "order": order,
+        "level": level,
+        "type": type_,
+        "title": title,
+        "anchor": _to_anchor(title),
+        "start_char": start_char,
+        "end_char": end_char,
+        "page_start": page_start,
+        "page_end": page_end,
+        "content_hash": hashlib.sha256(content.encode("utf-8")).hexdigest()[:10],
+        "extraction_method": extraction_method,
+        "confidence": confidence,
+        "warnings": warnings or [],
+        "source_note_heading": None,
+    }
+
+
+def _dedup_node_ids(nodes: list[dict]) -> list[dict]:
+    """Append -2, -3, … suffix to any repeated node_id values."""
+    seen: dict[str, int] = {}
+    for node in nodes:
+        nid = node["node_id"]
+        if nid in seen:
+            seen[nid] += 1
+            node["node_id"] = f"{nid}-{seen[nid]}"
+            node["warnings"] = list(node.get("warnings") or []) + ["deduplicated-node-id"]
+        else:
+            seen[nid] = 0
+    return nodes
+
+
+def _heading_type(title_lower: str) -> str:
+    if "abstract" in title_lower:
+        return "abstract"
+    if any(w in title_lower for w in ("method", "methodology", "approach", "implementation")):
+        return "method_section"
+    if any(w in title_lower for w in ("result", "evaluation", "experiment", "finding")):
+        return "results"
+    if any(w in title_lower for w in ("limitation", "discussion", "future")):
+        return "limitations"
+    if any(w in title_lower for w in ("reference", "bibliography")):
+        return "references"
+    if re.search(r"\b(appendix|annex)\b", title_lower):
+        return "appendix"
+    if re.search(r"\b(glossary)\b", title_lower):
+        return "glossary"
+    return "heading"
+
+
+def _segment_by_md_headings(
+    normalized_content: str,
+    source_id: str,
+    extraction_method: str = "md-heading",
+    confidence: str = "medium",
+    extra_warnings: list | None = None,
+) -> list[dict]:
+    """Build v2 nodes from ATX headings in normalized_content."""
+    content_len = len(normalized_content)
+    headings = list(re.finditer(r"(?m)^(#+)\s+(.+)$", normalized_content))
+    nodes: list[dict] = []
+
+    if not headings:
+        return nodes
+
+    root_id = f"{source_id}-doc-root"
+    root_node = _make_node(
+        root_id,
+        "document",
+        source_id,
+        0,
+        content_len,
+        normalized_content,
+        level=0,
+        parent_id=None,
+        order=0,
+        extraction_method=extraction_method,
+        confidence=confidence,
+        warnings=(extra_warnings or []) + ["heading-fallback-root"],
+    )
+    nodes.append(root_node)
+
+    parent_stack: list[tuple[int, str]] = [(0, root_id)]
+    for i, h in enumerate(headings):
+        hashes = h.group(1)
+        title = h.group(2).strip()
+        hlevel = len(hashes)
+        start_pos = h.start()
+        end_pos = headings[i + 1].start() if i + 1 < len(headings) else content_len
+
+        while len(parent_stack) > 1 and parent_stack[-1][0] >= hlevel:
+            parent_stack.pop()
+        parent_id_val = parent_stack[-1][1]
+
+        h_type = _heading_type(title.lower())
+        node_id = f"{source_id}-h{hlevel}-{slugify(title)}-{i}"
+        node = _make_node(
+            node_id,
+            h_type,
+            title,
+            start_pos,
+            end_pos,
+            normalized_content[start_pos:end_pos],
+            level=hlevel,
+            parent_id=parent_id_val,
+            order=i,
+            extraction_method=extraction_method,
+            confidence=confidence,
+        )
+        nodes.append(node)
+        parent_stack.append((hlevel, node_id))
+
+    return nodes
+
+
 def segment_source(
     normalized_content: str,
     source_kind: str,
     source_id: str,
     is_pdf: bool = False,
     pdf_path: Path | None = None,
+    raw_html: str | None = None,
 ) -> list[dict]:
-    segments = []
+    """Return a list of v2 segment nodes for normalized_content."""
+    nodes: list[dict] = []
     content_len = len(normalized_content)
 
     # 1. Determine structural type
@@ -433,22 +585,33 @@ def segment_source(
     if struct_type == "repos":
         # Segment by files (e.g. "### README.md", "### scripts/kb.py")
         matches = list(re.finditer(r"(?m)^###\s+([a-zA-Z0-9_\-\./]+)\s*$", normalized_content))
+        seen_file_ids: dict[str, int] = {}
         for i, match in enumerate(matches):
             filename = match.group(1)
             start_pos = match.start()
             end_pos = matches[i + 1].start() if i + 1 < len(matches) else content_len
             file_content = normalized_content[start_pos:end_pos]
-            seg_id = f"{source_id}-file-{slugify(filename)}"
-            segments.append(
-                {
-                    "id": seg_id,
-                    "type": "file",
-                    "title": f"file: {filename}",
-                    "start_char": start_pos,
-                    "end_char": end_pos,
-                    "content_hash": hashlib.sha256(file_content.encode("utf-8")).hexdigest()[:10],
-                }
+            base_id = f"{source_id}-file-{slugify(filename)}"
+            if base_id in seen_file_ids:
+                seen_file_ids[base_id] += 1
+                node_id = f"{base_id}-{seen_file_ids[base_id]}"
+            else:
+                seen_file_ids[base_id] = 0
+                node_id = base_id
+            node = _make_node(
+                node_id,
+                "file",
+                f"file: {filename}",
+                start_pos,
+                end_pos,
+                file_content,
+                level=1,
+                parent_id=None,
+                order=i,
+                extraction_method="file-split",
+                confidence="high",
             )
+            nodes.append(node)
 
             # Look for sub-elements: class, function, symbol inside
             sub_matches = re.finditer(
@@ -464,22 +627,25 @@ def segment_source(
                 sub_end = min(sub_start + 2000, end_pos)
                 sub_content = normalized_content[sub_start:sub_end]
                 sub_id = f"{source_id}-{sub_type}-{slugify(sub_name)}"
-                segments.append(
-                    {
-                        "id": sub_id,
-                        "type": sub_type,
-                        "title": f"{sub_type}: {sub_name}",
-                        "start_char": sub_start,
-                        "end_char": sub_end,
-                        "content_hash": hashlib.sha256(sub_content.encode("utf-8")).hexdigest()[
-                            :10
-                        ],
-                    }
+                sub_node = _make_node(
+                    sub_id,
+                    sub_type,
+                    f"{sub_type}: {sub_name}",
+                    sub_start,
+                    sub_end,
+                    sub_content,
+                    level=2,
+                    parent_id=node_id,
+                    order=len(nodes),
+                    extraction_method="heuristic",
+                    confidence="medium",
                 )
+                nodes.append(sub_node)
 
     elif struct_type == "transcripts":
         # Segment by speaker, topic, decision, action item
         matches = list(re.finditer(r"(?m)^([a-zA-Z0-9\s]+):\s+(.+)$", normalized_content))
+        last_speaker_id: str | None = None
         for i, match in enumerate(matches):
             speaker = match.group(1).strip()
             if len(speaker) > 40 or "\n" in speaker or "#" in speaker:
@@ -488,18 +654,21 @@ def segment_source(
             end_pos = matches[i + 1].start() if i + 1 < len(matches) else content_len
             speaker_content = normalized_content[start_pos:end_pos]
             seg_id = f"{source_id}-speaker-{slugify(speaker)}-{i}"
-            segments.append(
-                {
-                    "id": seg_id,
-                    "type": "speaker",
-                    "title": f"speaker: {speaker}",
-                    "start_char": start_pos,
-                    "end_char": end_pos,
-                    "content_hash": hashlib.sha256(speaker_content.encode("utf-8")).hexdigest()[
-                        :10
-                    ],
-                }
+            node = _make_node(
+                seg_id,
+                "speaker",
+                f"speaker: {speaker}",
+                start_pos,
+                end_pos,
+                speaker_content,
+                level=1,
+                parent_id=None,
+                order=i,
+                extraction_method="heuristic",
+                confidence="medium",
             )
+            nodes.append(node)
+            last_speaker_id = seg_id
 
         action_matches = re.finditer(
             r"(?m)(?i)^([*-]\s+)?(decision|action item):\s*(.+)$", normalized_content
@@ -510,151 +679,278 @@ def segment_source(
             start_pos = match.start()
             end_pos = start_pos + len(match.group(0))
             seg_id = f"{source_id}-{item_type}-{idx}"
-            segments.append(
-                {
-                    "id": seg_id,
-                    "type": item_type,
-                    "title": f"{item_type}: {item_text[:30]}",
-                    "start_char": start_pos,
-                    "end_char": end_pos,
-                    "content_hash": hashlib.sha256(match.group(0).encode("utf-8")).hexdigest()[:10],
-                }
+            node = _make_node(
+                seg_id,
+                item_type,
+                f"{item_type}: {item_text[:30]}",
+                start_pos,
+                end_pos,
+                match.group(0),
+                level=2,
+                parent_id=last_speaker_id,
+                order=idx,
+                extraction_method="heuristic",
+                confidence="low",
             )
+            nodes.append(node)
 
     elif struct_type == "books":
-        # Segment by part, chapter, section, paragraph
+        # Segment by heading only (no paragraph-as-node)
         headings = list(re.finditer(r"(?m)^(#+)\s+(.+)$", normalized_content))
+        parent_stack: list[tuple[int, str]] = [(0, None)]  # type: ignore[list-item]
         for i, h in enumerate(headings):
             title = h.group(2).strip()
             start_pos = h.start()
             end_pos = headings[i + 1].start() if i + 1 < len(headings) else content_len
             h_content = normalized_content[start_pos:end_pos]
+            hlevel = len(h.group(1))
             t_lower = title.lower()
-            h_type = (
-                "part" if "part" in t_lower else ("chapter" if "chapter" in t_lower else "section")
-            )
-            seg_id = f"{source_id}-{h_type}-{slugify(title)}"
-            segments.append(
-                {
-                    "id": seg_id,
-                    "type": h_type,
-                    "title": f"{h_type}: {title}",
-                    "start_char": start_pos,
-                    "end_char": end_pos,
-                    "content_hash": hashlib.sha256(h_content.encode("utf-8")).hexdigest()[:10],
-                }
-            )
+            if "part" in t_lower or "book" in t_lower:
+                h_type = "part"
+            elif "chapter" in t_lower:
+                h_type = "chapter"
+            elif re.search(r"\b(appendix|annex)\b", t_lower):
+                h_type = "appendix"
+            elif re.search(r"\b(glossary)\b", t_lower):
+                h_type = "glossary"
+            elif re.search(r"\b(index)\b", t_lower):
+                h_type = "index"
+            elif re.search(r"\b(reference|bibliography)\b", t_lower):
+                h_type = "references"
+            else:
+                h_type = "section"
 
-        paragraphs = list(re.finditer(r"\n\n([^\n]+)", normalized_content))
-        for idx, p in enumerate(paragraphs):
-            p_text = p.group(1).strip()
-            if len(p_text) < 100:
-                continue
-            start_pos = p.start(1)
-            end_pos = p.end(1)
-            p_hash = hashlib.sha256(p_text.encode("utf-8")).hexdigest()[:10]
-            seg_id = f"{source_id}-para-{p_hash}"
-            segments.append(
-                {
-                    "id": seg_id,
-                    "type": "paragraph",
-                    "title": f"paragraph {idx}",
-                    "start_char": start_pos,
-                    "end_char": end_pos,
-                    "content_hash": p_hash,
-                }
+            while len(parent_stack) > 1 and parent_stack[-1][0] >= hlevel:
+                parent_stack.pop()
+            parent_id_val = parent_stack[-1][1]
+
+            seg_id = f"{source_id}-{h_type}-{slugify(title)}-{i}"
+            node = _make_node(
+                seg_id,
+                h_type,
+                f"{h_type}: {title}",
+                start_pos,
+                end_pos,
+                h_content,
+                level=hlevel,
+                parent_id=parent_id_val,
+                order=i,
+                extraction_method="md-heading",
+                confidence="medium",
             )
+            nodes.append(node)
+            parent_stack.append((hlevel, seg_id))
 
     else:
-        # PDFs & papers: abstract, method, results, limitations, references OR page, heading, table, figure, caption
+        # Papers / PDFs / HTML / generic
+
+        # --- HTML path: use BeautifulSoup heading hierarchy when raw_html available ---
+        if raw_html and not is_pdf:
+            try:
+                soup = BeautifulSoup(raw_html, "html.parser")
+                html_headings = soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"])
+                if html_headings:
+                    root_id = f"{source_id}-doc-root"
+                    root_node = _make_node(
+                        root_id,
+                        "document",
+                        source_id,
+                        0,
+                        content_len,
+                        normalized_content,
+                        level=0,
+                        parent_id=None,
+                        order=0,
+                        extraction_method="html-headings",
+                        confidence="high",
+                    )
+                    nodes.append(root_node)
+                    parent_stack_html: list[tuple[int, str]] = [(0, root_id)]
+                    for i, tag in enumerate(html_headings):
+                        title = tag.get_text(strip=True)
+                        hlevel = int(tag.name[1])
+                        # Find title in normalized_content
+                        start_pos = normalized_content.find(title)
+                        if start_pos == -1:
+                            # Try first 50 chars
+                            start_pos = (
+                                normalized_content.find(title[:50]) if len(title) > 50 else -1
+                            )
+                        if start_pos == -1:
+                            conf = "low"
+                            warns = ["html-heading-not-found-in-content"]
+                            start_pos = 0
+                        else:
+                            conf = "high"
+                            warns = []
+
+                        end_pos = content_len  # will be fixed in next pass
+                        while len(parent_stack_html) > 1 and parent_stack_html[-1][0] >= hlevel:
+                            parent_stack_html.pop()
+                        parent_id_val = parent_stack_html[-1][1]
+
+                        h_type = _heading_type(title.lower())
+                        node_id = f"{source_id}-h{hlevel}-{slugify(title)}-{i}"
+                        node = _make_node(
+                            node_id,
+                            h_type,
+                            title,
+                            start_pos,
+                            end_pos,
+                            normalized_content[start_pos:end_pos],
+                            level=hlevel,
+                            parent_id=parent_id_val,
+                            order=i,
+                            extraction_method="html-headings",
+                            confidence=conf,
+                            warnings=warns,
+                        )
+                        nodes.append(node)
+                        parent_stack_html.append((hlevel, node_id))
+
+                    # Fix end_char: each node ends where the next same-or-lower-level node starts
+                    for idx in range(1, len(nodes)):
+                        cur = nodes[idx]
+                        # Find next node at same or higher level (lower number = higher in hierarchy)
+                        for j in range(idx + 1, len(nodes)):
+                            nxt = nodes[j]
+                            if nxt["level"] <= cur["level"] and nxt["level"] > 0:
+                                cur["end_char"] = nxt["start_char"]
+                                break
+
+                    nodes = _dedup_node_ids(nodes)
+                    return nodes
+            except Exception:
+                pass  # Fall through to heading regex
+
+        # --- PDF outline path ---
         if is_pdf and pdf_path and pdf_path.exists():
             try:
                 reader = PdfReader(str(pdf_path))
-                current_offset = 0
-                for idx, page in enumerate(reader.pages):
-                    page_num = idx + 1
-                    page_text = page.extract_text() or ""
-                    start_pos = normalized_content.find(page_text[:100], current_offset)
-                    if start_pos == -1:
-                        start_pos = normalized_content.find(page_text[:30], current_offset)
-                    if start_pos == -1:
-                        start_pos = current_offset
-                    end_pos = normalized_content.find(page_text[-100:], start_pos)
-                    if end_pos == -1:
-                        end_pos = start_pos + len(page_text)
-                    else:
-                        end_pos += 100
-                    end_pos = min(end_pos, content_len)
-                    current_offset = end_pos
-                    p_content = normalized_content[start_pos:end_pos]
-                    seg_id = f"{source_id}-page-{page_num}"
-                    segments.append(
-                        {
-                            "id": seg_id,
-                            "type": "page",
-                            "title": f"Page {page_num}",
-                            "start_char": start_pos,
-                            "end_char": end_pos,
-                            "content_hash": hashlib.sha256(p_content.encode("utf-8")).hexdigest()[
-                                :10
-                            ],
-                        }
-                    )
+                outline = reader.outline
+                total_pages = len(reader.pages)
+
+                if outline and len(outline) >= 2:
+                    # Flatten outline with depth tracking
+                    def _process_outline(
+                        items: list,
+                        level: int = 1,
+                        parent_id: str | None = None,
+                        order_start: int = 0,
+                    ) -> list[dict]:
+                        result: list[dict] = []
+                        order = order_start
+                        for item in items:
+                            if isinstance(item, list):
+                                # Nested children — attach to last node
+                                if result:
+                                    sub_parent = result[-1]["node_id"]
+                                else:
+                                    sub_parent = parent_id
+                                sub = _process_outline(item, level + 1, sub_parent, 0)
+                                result.extend(sub)
+                            else:
+                                title = getattr(item, "title", None) or f"Section {order}"
+                                try:
+                                    page_num = reader.get_destination_page_number(item) + 1
+                                except Exception:
+                                    page_num = None
+
+                                # Locate title in normalized_content
+                                anchor_text = title[:50]
+                                start_pos = normalized_content.find(anchor_text)
+                                if start_pos == -1:
+                                    conf = "low"
+                                    warns = ["outline-title-not-found-in-text"]
+                                    start_pos = 0
+                                else:
+                                    conf = "high"
+                                    warns = []
+
+                                node_id = f"{source_id}-outline-{slugify(title)}-{order}"
+                                node = _make_node(
+                                    node_id,
+                                    "section",
+                                    title,
+                                    start_pos,
+                                    content_len,  # end_char fixed after
+                                    normalized_content[start_pos:content_len],
+                                    level=level,
+                                    parent_id=parent_id,
+                                    order=order,
+                                    page_start=page_num,
+                                    page_end=None,
+                                    extraction_method="pdf-outline",
+                                    confidence=conf,
+                                    warnings=warns,
+                                )
+                                result.append(node)
+                                order += 1
+                        return result
+
+                    outline_nodes = _process_outline(outline)
+                    if outline_nodes:
+                        # Fix end_char between same-level siblings
+                        for idx in range(len(outline_nodes) - 1):
+                            if outline_nodes[idx]["level"] == outline_nodes[idx + 1]["level"]:
+                                next_start = outline_nodes[idx + 1]["start_char"]
+                                if next_start > outline_nodes[idx]["start_char"]:
+                                    outline_nodes[idx]["end_char"] = next_start
+                        # Fix page_end
+                        for idx in range(len(outline_nodes)):
+                            cur = outline_nodes[idx]
+                            if cur["page_start"] is not None:
+                                for j in range(idx + 1, len(outline_nodes)):
+                                    nxt = outline_nodes[j]
+                                    if (
+                                        nxt["level"] <= cur["level"]
+                                        and nxt["page_start"] is not None
+                                    ):
+                                        cur["page_end"] = nxt["page_start"] - 1
+                                        break
+                                if cur["page_end"] is None:
+                                    cur["page_end"] = total_pages
+
+                        outline_nodes = _dedup_node_ids(outline_nodes)
+                        return outline_nodes
             except Exception:
                 pass
 
-        # Headings
-        headings = list(re.finditer(r"(?m)^(#+)\s+(.+)$", normalized_content))
-        for i, h in enumerate(headings):
-            title = h.group(2).strip()
-            start_pos = h.start()
-            end_pos = headings[i + 1].start() if i + 1 < len(headings) else content_len
-            h_content = normalized_content[start_pos:end_pos]
-            t_lower = title.lower()
-            if "abstract" in t_lower:
-                h_type = "abstract"
-            elif any(w in t_lower for w in ("method", "methodology", "approach", "implementation")):
-                h_type = "method"
-            elif any(w in t_lower for w in ("result", "evaluation", "experiment", "finding")):
-                h_type = "results"
-            elif any(w in t_lower for w in ("limitation", "discussion", "future work")):
-                h_type = "limitations"
-            elif any(w in t_lower for w in ("reference", "bibliography")):
-                h_type = "references"
-            else:
-                h_type = "heading"
+        # --- Heading-regex path (PDF fallback or generic/papers without outline) ---
+        heading_nodes = _segment_by_md_headings(
+            normalized_content,
+            source_id,
+            extraction_method="md-heading",
+            confidence="medium" if not is_pdf else "low",
+            extra_warnings=["no-pdf-outline-fallback-to-headings"] if is_pdf else [],
+        )
+        if heading_nodes:
+            nodes = _dedup_node_ids(heading_nodes)
+            return nodes
 
-            seg_id = f"{source_id}-heading-{slugify(title)}"
-            segments.append(
-                {
-                    "id": seg_id,
-                    "type": h_type,
-                    "title": f"{h_type}: {title}",
-                    "start_char": start_pos,
-                    "end_char": end_pos,
-                    "content_hash": hashlib.sha256(h_content.encode("utf-8")).hexdigest()[:10],
-                }
-            )
-
-        # Tables
+        # --- Tables ---
         tables = list(re.finditer(r"(?s)\n\n(\|.+?\|\n\n|<table>.+?</table>)", normalized_content))
         for idx, t in enumerate(tables):
             t_text = t.group(1).strip()
             start_pos = t.start(1)
             end_pos = t.end(1)
-            seg_id = f"{source_id}-table-{idx}"
-            segments.append(
-                {
-                    "id": seg_id,
-                    "type": "table",
-                    "title": f"Table {idx + 1}",
-                    "start_char": start_pos,
-                    "end_char": end_pos,
-                    "content_hash": hashlib.sha256(t_text.encode("utf-8")).hexdigest()[:10],
-                }
+            node_id = f"{source_id}-table-{idx}"
+            node = _make_node(
+                node_id,
+                "table",
+                f"Table {idx + 1}",
+                start_pos,
+                end_pos,
+                t_text,
+                level=1,
+                parent_id=None,
+                order=idx,
+                extraction_method="heuristic",
+                confidence="medium",
             )
+            nodes.append(node)
 
-        # Figures
+        # --- Figures ---
         figures = list(
             re.finditer(r"(?i)\b(figure|fig\.)\s+\d+[:\s\.]+(.*?)(?=\n\n|\Z)", normalized_content)
         )
@@ -662,32 +958,59 @@ def segment_source(
             f_text = f.group(0).strip()
             start_pos = f.start()
             end_pos = f.end()
-            seg_id = f"{source_id}-figure-{idx}"
-            segments.append(
-                {
-                    "id": seg_id,
-                    "type": "figure",
-                    "title": f"Figure {idx + 1}",
-                    "start_char": start_pos,
-                    "end_char": end_pos,
-                    "content_hash": hashlib.sha256(f_text.encode("utf-8")).hexdigest()[:10],
-                }
+            node_id = f"{source_id}-figure-{idx}"
+            node = _make_node(
+                node_id,
+                "figure",
+                f"Figure {idx + 1}",
+                start_pos,
+                end_pos,
+                f_text,
+                level=1,
+                parent_id=None,
+                order=idx,
+                extraction_method="heuristic",
+                confidence="medium",
             )
+            nodes.append(node)
             caption = f.group(2).strip()
             if caption:
                 c_id = f"{source_id}-caption-{idx}"
-                segments.append(
-                    {
-                        "id": c_id,
-                        "type": "caption",
-                        "title": f"Caption {idx + 1}",
-                        "start_char": f.start(2),
-                        "end_char": f.end(2),
-                        "content_hash": hashlib.sha256(caption.encode("utf-8")).hexdigest()[:10],
-                    }
+                cap_node = _make_node(
+                    c_id,
+                    "caption",
+                    f"Caption {idx + 1}",
+                    f.start(2),
+                    f.end(2),
+                    caption,
+                    level=2,
+                    parent_id=node_id,
+                    order=idx,
+                    extraction_method="heuristic",
+                    confidence="medium",
                 )
+                nodes.append(cap_node)
 
-    return segments
+    # --- Headingless long doc fallback ---
+    if not nodes and content_len > 10000:
+        root_id = f"{source_id}-doc-root"
+        root_node = _make_node(
+            root_id,
+            "document",
+            source_id,
+            0,
+            content_len,
+            normalized_content,
+            level=1,
+            parent_id=None,
+            order=0,
+            extraction_method="heuristic",
+            confidence="low",
+            warnings=["no_structure_detected"],
+        )
+        nodes.append(root_node)
+
+    return _dedup_node_ids(nodes)
 
 
 def process_large_source(
@@ -813,39 +1136,50 @@ def process_large_source(
     if not doi:
         doi = extract_doi_fallback(normalized_content)
 
-    # Build segments
-    segments = segment_source(
+    # Build segments (v2 nodes)
+    nodes = segment_source(
         normalized_content=normalized_content,
         source_kind=source_kind,
         source_id=source_id,
         is_pdf=is_pdf,
         pdf_path=pdf_path,
+        raw_html=raw_html,
     )
 
+    # Collect extraction warnings from nodes (low-confidence signals)
+    extraction_warnings: list[str] = []
+    for n in nodes:
+        for w in n.get("warnings") or []:
+            if w not in extraction_warnings:
+                extraction_warnings.append(w)
+    if not nodes and len(normalized_content) > 10000:
+        extraction_warnings.append("no_structure_detected")
+
+    _SECTION_TYPES = {
+        "heading",
+        "abstract",
+        "method_section",
+        "results",
+        "limitations",
+        "references",
+        "part",
+        "chapter",
+        "section",
+        "appendix",
+        "glossary",
+    }
     sections_detected = [
-        s["title"].split(": ", 1)[-1]
-        for s in segments
-        if s["type"]
-        in (
-            "heading",
-            "abstract",
-            "method",
-            "results",
-            "limitations",
-            "references",
-            "part",
-            "chapter",
-            "section",
-        )
+        n["title"].split(": ", 1)[-1] for n in nodes if n["type"] in _SECTION_TYPES
     ]
     tables_detected = [
-        {"id": s["id"], "title": s["title"]} for s in segments if s["type"] == "table"
+        {"id": n["node_id"], "title": n["title"]} for n in nodes if n["type"] == "table"
     ]
     figures_detected = [
-        {"id": s["id"], "title": s["title"]} for s in segments if s["type"] == "figure"
+        {"id": n["node_id"], "title": n["title"]} for n in nodes if n["type"] == "figure"
     ]
 
     manifest = {
+        "large_source_manifest_version": 2,
         "page_count": page_count,
         "text_extraction_coverage": text_extraction_coverage,
         "page_level_chunks": page_level_chunks,
@@ -861,8 +1195,9 @@ def process_large_source(
         "ocr_used": False,
         "ocr_confidence": None,
         "extraction_tool": "pypdf" if is_pdf else "trafilatura",
-        "extraction_warnings": [],
-        "segments": segments,
+        "extraction_warnings": extraction_warnings,
+        "nodes": nodes,
+        "segments": nodes,  # backward-compat alias
         "omitted_content": [],
     }
 
@@ -953,6 +1288,42 @@ def ingest_one(item: str) -> dict:
         normalized_path = source_dir / "normalized.md"
         normalized_path.write_text(normalized_content, encoding="utf-8")
         metadata["normalized_path"] = str(normalized_path.relative_to(ROOT))
+
+    # Prompt-injection heuristic scan — flag suspicious content for human review.
+    # These patterns match common injection signatures; detection does NOT auto-reject the
+    # source. The ingest-sources step should set evidence_strength: adversarial if confirmed.
+    _INJECTION_PATTERNS = [
+        re.compile(
+            r"^\s*ignore\s+(previous|all|prior)\s+instructions?", re.IGNORECASE | re.MULTILINE
+        ),
+        re.compile(r"^\s*disregard\s+(the\s+)?(system\s+)?prompt", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*you\s+are\s+now\s+", re.IGNORECASE | re.MULTILINE),
+        re.compile(
+            r"^\s*act\s+as\s+(a\s+)?(?:new|different|unrestricted)", re.IGNORECASE | re.MULTILINE
+        ),
+        re.compile(r"^\s*</?SYSTEM>", re.IGNORECASE | re.MULTILINE),
+        re.compile(r"^\s*###\s*(?:system|instruction|override)\b", re.IGNORECASE | re.MULTILINE),
+        re.compile(
+            r"^\s*forget\s+everything\s+(you\s+)?(have\s+)?learned", re.IGNORECASE | re.MULTILINE
+        ),
+        re.compile(r"^\s*jailbreak\b", re.IGNORECASE | re.MULTILINE),
+    ]
+    matched_patterns: list[str] = []
+    for pat in _INJECTION_PATTERNS:
+        m = pat.search(normalized_content)
+        if m:
+            matched_patterns.append(m.group(0).strip()[:120])
+    if matched_patterns:
+        import sys
+
+        print(
+            f"WARNING: adversarial_hint detected in source {source_id} — "
+            f"{len(matched_patterns)} injection-like pattern(s) found. "
+            "Set evidence_strength: adversarial in the source summary if confirmed.",
+            file=sys.stderr,
+        )
+        metadata["adversarial_hint"] = True
+        metadata["adversarial_patterns_found"] = matched_patterns
 
     # Segment and write large source manifest if content exceeds 10,000 chars
     manifest = process_large_source(
