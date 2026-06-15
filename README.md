@@ -253,6 +253,20 @@ uv run python scripts/kb.py install-agent-assets --agent all --scope project
 
 This syncs the repo's Codex skills, Claude Code agents and commands, and Gemini CLI commands/context into the selected runtime locations.
 
+### 9. Use agent-native entries
+
+After installing runtime assets, you can run the same loop from Claude Code, Codex, or Gemini instead of only through `scripts/kb.py`. If you are already inside one of those tools, just say what you want:
+
+| Workflow | Just say (with Claude-code, Codex, or Gemini) | Python CLI |
+|---|---|---|
+| Ingest source | `ingest this source` | `uv run python scripts/kb.py ingest --input examples/links.txt` |
+| Consolidate vault | `consolidate the vault` | `uv run python scripts/kb.py compile --agent <codex\|claude\|gemini>` |
+| Ask question | `answer this question from the vault: ...` | `uv run python scripts/kb.py ask --agent <agent> --question "..."` |
+| Heal vault | `heal the vault` | `uv run python scripts/kb.py heal --agent <agent>` |
+| Render output | `render this as a memo: ...` | `uv run python scripts/kb.py render --agent <agent> --format memo --prompt "..."` |
+
+Use the Python CLI for mechanical fetching and registry updates. Use the agent-native entries when you are already inside Claude Code, Codex, or Gemini and want that runtime to perform the source-summary, Q&A, healing, consolidation, or rendering pass.
+
 ---
 
 ## Command Reference
@@ -269,6 +283,7 @@ This syncs the repo's Codex skills, Claude Code agents and commands, and Gemini 
 ### Vault Work
 
 - `compile --agent <...>`: compile source summaries into durable notes
+- `compile-large --source-id <id>`: run the bottom-up summarization orchestrator for large sources (>50 nodes)
 - `ask --agent <...> --question <text>`: generate an answer memo from the vault
 - `heal --agent <...>`: run the healing prompt
 - `render --agent <...> --format <memo|slides|outline|report> --prompt <text>`: generate an output artifact
