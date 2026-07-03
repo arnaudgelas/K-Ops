@@ -6,9 +6,18 @@
 
 **Your research should not live in a graveyard of browser tabs.**
 
-`K-Ops` is a local, agent-first research pipeline for turning links, PDFs, notes, and files into a durable Markdown knowledge vault for Obsidian.
+`K-Ops` is a local, agent-operated research pipeline for turning links,
+PDFs, repositories, notes, and files into a durable Markdown knowledge vault.
 
-It keeps the Karpathy-style LLM wiki idea in view, but treats that as the starting point. K-Ops is more opinionated: sources are normalized, claims are tracked, contradictions are surfaced, and the vault stays honest about what it knows and what it does not.
+It keeps the Karpathy-style LLM wiki idea in view, but treats that as the
+starting point. K-Ops is more opinionated: raw evidence is preserved, sources
+are normalized, claims are extracted into machine-readable registries,
+contradictions are surfaced, answers are filed back into the vault, and health
+checks make epistemic debt visible.
+
+The project is intentionally file-native. You should be able to inspect every
+artifact with a text editor, review changes with Git, and open the curated
+vault directly in Obsidian.
 
 ---
 
@@ -50,17 +59,103 @@ One empirical result matters for positioning: arXiv [2605.15184](https://arxiv.o
 
 ---
 
+## Architecture
+
+K-Ops has two cooperating layers:
+
+```text
+raw evidence -> registry -> source summaries -> concept pages
+                         \-> claims / contradictions / scorecard
+                         \-> retrieval seeds for Q&A
+```
+
+**Deterministic Python layer**
+
+- ingests URLs, PDFs, repositories, and local files into `data/raw/`
+- maintains `data/registry.json`
+- computes content hashes and large-source manifests
+- extracts claim and contradiction registries from curated notes
+- builds graph/index artifacts and vault scorecards
+- seeds Q&A prompts with local BM25/exact-search results
+- validates answer memo frontmatter after agent runs
+- performs atomic writes for shared JSON/text state
+
+**Agent layer**
+
+- summarizes raw evidence into `notes/Sources/`
+- compiles source summaries into `notes/Concepts/`
+- answers questions into `notes/Answers/`
+- performs judgment-heavy healing, synthesis, and rendering
+
+This split is deliberate. Python should own repeatable bookkeeping and
+validation. Agents should own interpretation, synthesis, and prose. Recent
+hardening work moves more context from Python into prompts instead of asking
+agents to rediscover it by hand.
+
+### Implemented vs planned
+
+Implemented today:
+
+- Obsidian-compatible Markdown vault under `notes/`
+- OKF-style progressive `index.md` files for directory traversal
+- source registry, claim registry, contradiction registry, and scorecard
+- exact lookup and BM25 retrieval over sources, concepts, claims, and sections
+- deterministic compile plans written to `.tmp/compile_plan.json`
+- answer memo schema checks after `ask`
+- GitHub repository snapshot ingestion
+- resumable research-run workflow under `research/`
+
+Planned, not implemented as a production feature:
+
+- RVF binary capsule export
+- MCP serving over a compiled RVF capsule
+- persistent SQLite/FTS index
+- quote-span claim verification against raw evidence
+- automatic content-hash stale cascade on refresh
+- supervised concept merge, rename, and distillation tools
+
+---
+
 ## What You Get
 
-- source ingestion for URLs, PDFs, local files, and note files
+- direct single-source capture with `kb.py add <source>`
+- batch source ingestion for URLs, PDFs, local files, and note files
 - GitHub repository ingestion with repository snapshot support
 - normalized source artifacts under `data/raw/`
 - a source registry in `data/registry.json`
 - an Obsidian-ready vault under `notes/`
+- progressive disclosure directory listings (`index.md` files) auto-generated at all folder levels
 - prompt templates and role-based skills for ingestion, compilation, healing, Q&A, rendering, and research
-- atomic claim and contradiction registries plus a vault scorecard for quality tracking
+- machine-readable claim and contradiction registries plus a vault scorecard
 - a Python CLI in `scripts/kb.py` that orchestrates the workflow with Codex CLI, Claude Code, or Gemini CLI
 - repo-root `.obsidian/` settings so the repository can be opened directly in Obsidian
+
+## Trust Model and Limits
+
+K-Ops is designed to make provenance and review cheaper. It does not make
+LLM-written summaries automatically true.
+
+Current guarantees:
+
+- raw evidence under `data/raw/` is preserved
+- source metadata includes stable IDs and content hashes
+- concept claims can be required to carry inline source links
+- model-generated and weak sources can be quarantined at claim-registry level
+- answer memos must provide valid `retrieval_path` and `fetch_required`
+- lint/schema/scorecard checks expose unsupported, stale, conflicting, or weak
+  areas
+
+Current limits:
+
+- citation presence is checked more strongly than citation entailment
+- quote-span verification against raw text is not yet implemented
+- content hash changes do not yet trigger a full automatic invalidation cascade
+- concept pages can still accumulate duplicate or stale claims without a
+  supervised distillation pass
+- agent runs still require human review before consequential use
+
+Treat K-Ops as a governed research-workflow substrate, not as an autonomous
+truth oracle.
 
 ---
 
@@ -70,10 +165,10 @@ One empirical result matters for positioning: arXiv [2605.15184](https://arxiv.o
 Capture -> Normalize -> Compile -> Ask -> Render
 ```
 
-1. **Capture** - drop in URLs, PDFs, GitHub repos, notes, or local files.
+1. **Capture** - add URLs, PDFs, GitHub repos, notes, or local files.
 2. **Normalize** - ingest them into `data/raw/` and register them in `data/registry.json`.
-3. **Compile** - agents turn raw content into source summaries, then merge them into concept pages under `notes/`.
-4. **Ask** - query the vault in natural language and file grounded answers back into `notes/Answers/`.
+3. **Compile** - agents turn raw content into source summaries, then merge them into concept pages under `notes/`, generating OKF progressive index files.
+4. **Ask** - query the vault in natural language; Python seeds the prompt with local retrieval results and files grounded answers back into `notes/Answers/`.
 5. **Render** - convert the current knowledge base into memos, outlines, slides, or reports.
 
 ---
@@ -125,7 +220,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 ```
 
-This project uses `uv` for dependency management. Use `uv sync` and `uv run`; do not use `pip install`.
+This project uses `uv` for dependency management. Use `uv sync` and `uv run`.
+Do not rely on `pip install .` as the primary interface; the CLI is currently
+designed as a repo-local tool.
 
 ### 3. Verify an agent CLI
 
@@ -141,9 +238,17 @@ If the command name differs on your machine, set the override variables above.
 
 ## Quick Start
 
-### 1. Add sources
+### 1. Add a source
 
-Use one of the example input files:
+For daily capture, add one URL, GitHub repository, or local file directly:
+
+```bash
+uv run python scripts/kb.py add https://example.com/article
+uv run python scripts/kb.py add https://github.com/owner/repo
+uv run python scripts/kb.py add ./papers/interesting-paper.pdf
+```
+
+For batch capture, use a newline-delimited input file:
 
 - `examples/links.txt`
 - `examples/kb-seed-sources.txt`
@@ -159,7 +264,7 @@ https://github.com/owner/repo
 ./papers/interesting-paper.pdf
 ```
 
-### 2. Ingest sources
+### 2. Ingest a batch
 
 ```bash
 uv run python scripts/kb.py ingest --input examples/links.txt
@@ -172,7 +277,7 @@ The ingest flow automatically routes:
 - other URLs to the regular web/PDF ingest path
 - local files to direct copy/normalization
 
-This creates:
+Both `add` and `ingest` create:
 
 - `data/raw/<source-id>/original.*`
 - `data/raw/<source-id>/normalized.md`
@@ -198,7 +303,8 @@ uv run python scripts/kb.py compile --agent claude
 uv run python scripts/kb.py compile --agent gemini
 ```
 
-This uses `templates/compile_prompt.md` and updates:
+This writes `.tmp/compile_plan.json`, uses `templates/compile_prompt.md`, and
+updates:
 
 - `notes/Sources/`
 - `notes/Concepts/`
@@ -211,7 +317,9 @@ This uses `templates/compile_prompt.md` and updates:
 uv run python scripts/kb.py ask --agent codex --question "What are the main claims and open questions?"
 ```
 
-This writes a timestamped answer memo to `notes/Answers/`.
+This seeds the Q&A prompt with local retrieval results and writes a timestamped
+answer memo to `notes/Answers/`. The runtime rejects answer memos that leave
+required provenance fields such as `retrieval_path` empty.
 
 ### 5. Heal and lint
 
@@ -233,6 +341,12 @@ uv run python scripts/kb.py scorecard
 ```
 
 `validate` confirms the vault paths load. The registry commands rebuild the machine-readable claim and contradiction layers, and `scorecard` summarizes health drift.
+
+`audit-kb` is an alias for the scorecard audit surface:
+
+```bash
+uv run python scripts/kb.py audit-kb
+```
 
 ### 7. Render output
 
@@ -277,6 +391,8 @@ Use the Python CLI for mechanical fetching and registry updates. Use the agent-n
 
 ### Ingest
 
+- `add <source>`: ingest one URL, GitHub repo URL, or local file directly
+- `add <source> --branch <name>`: override the branch for a GitHub repo URL
 - `ingest --input <file>`: ingest URLs and local paths from a newline-separated input file
 - `ingest --branch <name>`: override the branch for GitHub repository URLs
 - `ingest --fail-fast`: stop at the first ingestion error
@@ -291,12 +407,15 @@ Use the Python CLI for mechanical fetching and registry updates. Use the agent-n
 - `ask --agent <...> --question <text>`: generate an answer memo from the vault
 - `heal --agent <...>`: run the healing prompt
 - `render --agent <...> --format <memo|slides|outline|report> --prompt <text>`: generate an output artifact
+- `uv run python scripts/generate_indexes.py`: regenerate Source Atlas, Topic Atlas, and OKF directory indexes
+
 
 ### Maintenance
 
 - `lint`: check registry, source notes, concept links, and backlink consistency
 - `lint --strict`: fail on backlink drift
 - `lint --fix-backlinks`: append missing source backlinks into concept evidence sections where possible
+- `lint --check`: dry-run index generation in memory and fail if any auto-generated index files differ
 - `normalize-github-sources`: align GitHub-backed metadata fields
 - `normalize-github-sources --dry-run`: preview GitHub metadata changes
 - `backfill-source-notes`: create or repair missing source-summary notes
@@ -309,6 +428,7 @@ Use the Python CLI for mechanical fetching and registry updates. Use the agent-n
 - `extract-contradictions`: rebuild `data/contradictions.json`
 - `contradiction-search --query <text>`: search contradiction records
 - `scorecard`: compute `data/scorecard.json`
+- `audit-kb`: run the scorecard audit under an explicit audit command name
 - `stale-impact`: list notes flagged for revalidation
 - `clear-stale-flags`: remove `revalidation_required` flags
 - `validate`: confirm the vault config and required paths load
@@ -380,16 +500,21 @@ K-Ops/
 ├── examples/
 ├── notes/
 │   ├── Answers/
+│   │   └── index.md
 │   ├── Attachments/
 │   ├── Concepts/
+│   │   └── index.md
 │   ├── Indexes/
 │   ├── Maintenance/
 │   ├── Runbooks/
+│   │   └── index.md
 │   ├── Sources/
+│   │   └── index.md
 │   ├── _Archive/
 │   ├── _Templates/
 │   ├── Home.md
-│   └── TODO.md
+│   ├── TODO.md
+│   └── index.md
 ├── outputs/
 ├── research/
 ├── scripts/
@@ -412,3 +537,6 @@ K-Ops/
 - Most synthesis work is delegated to the selected agent CLI.
 - GitHub repo ingestion creates a markdown snapshot with links back to the repository and extracted key concepts, architectural decisions, and a small set of high-signal files across the repository tree.
 - Open the repo root in Obsidian to browse the curated note graph directly.
+- For high-stakes use, review diffs and run `validate --strict`, `lint --strict`,
+  `extract-claims`, `extract-contradictions`, and `audit-kb` before relying on
+  generated conclusions.
