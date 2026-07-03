@@ -77,6 +77,37 @@ yet this canonical model. The design should evolve toward evented claim state:
 created, promoted, demoted, contradicted, superseded, merged, deprecated,
 validated, and retired.
 
+## OKF Interop Position
+
+OKF v0.1 is a deliberately small interchange format. Its useful core is:
+
+- a bundle is a directory tree of Markdown files
+- concept documents carry YAML frontmatter
+- `type` is the only required concept frontmatter field
+- `index.md` and `log.md` are reserved filenames
+- generated `index.md` files support progressive disclosure
+- standard Markdown links express cross-concept relationships
+- consumers tolerate unknown fields, missing optional fields, and broken links
+
+That is the right portability layer for K-Ops, because it keeps the vault
+readable by humans, Git, Obsidian, static renderers, and agents without custom
+SDKs.
+
+The pushback is equally important: OKF is intentionally not a governed
+intelligence schema. It does not define claim objects, source spans,
+validation events, contradiction states, decay policies, access controls,
+evaluation metrics, or action thresholds. Those have to remain K-Ops
+extensions or move into a stricter canonical claim graph.
+
+Design rule:
+
+- generated traversal files should stay close to OKF and avoid K-Ops-only
+  syntax where portability matters
+- curated K-Ops notes may carry richer frontmatter and sections as
+  producer-defined extensions
+- consumers must preserve unknown K-Ops fields when round-tripping
+- OKF conformance must not be treated as evidence validation
+
 ## Implemented Control Points
 
 ### Source Intake

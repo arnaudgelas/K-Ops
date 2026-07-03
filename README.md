@@ -118,12 +118,43 @@ Until that canonical claim graph is implemented, treat concept pages as curated
 working surfaces and the registries as audit surfaces, not as proof that every
 claim has been independently verified.
 
+### OKF compatibility posture
+
+K-Ops uses OKF as an interchange and traversal layer, not as the whole
+governance model.
+
+OKF v0.1 is intentionally minimal: a knowledge bundle is a directory tree of
+Markdown files with YAML frontmatter, `type` is the only required concept
+frontmatter field, `index.md` and `log.md` are reserved filenames, and consumers
+are expected to tolerate unknown fields, missing optional fields, and broken
+links. That permissiveness is a strength for exchange.
+
+K-Ops should therefore use OKF for:
+
+- portable bundle layout
+- standard Markdown links in generated traversal indexes
+- root `okf_version` declaration
+- progressive disclosure through `index.md`
+- tolerance of producer-specific frontmatter
+
+K-Ops should not use OKF as a substitute for:
+
+- claim admission
+- citation-span verification
+- contradiction adjudication
+- staleness propagation
+- validation events
+- consequence gating
+
+In other words: OKF makes the vault easier to read and exchange. It does not
+make claims true, fresh, scoped, or safe to act on.
+
 ### Implemented vs planned
 
 Implemented today:
 
 - Obsidian-compatible Markdown vault under `notes/`
-- OKF-style progressive `index.md` files for directory traversal
+- OKF-style progressive `index.md` files for bundle traversal
 - source registry, claim registry, contradiction registry, and scorecard
 - exact lookup and BM25 retrieval over sources, concepts, claims, and sections
 - deterministic compile plans written to `.tmp/compile_plan.json`
