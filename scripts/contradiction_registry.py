@@ -24,9 +24,28 @@ CONTRADICTIONS_PATH = ROOT / "data" / "contradictions.json"
 _CLAIMS_PATH = ROOT / "data" / "claims.json"
 _MAINTENANCE_CONTRADICTIONS_PATH = ROOT / "notes" / "Maintenance" / "Contradictions.md"
 
+
+class DualLinkPattern:
+    def __init__(self, pattern_str: str) -> None:
+        self._re = re.compile(pattern_str)
+
+    def findall(self, text: str) -> list[str]:
+        results = []
+        for m in self._re.finditer(text):
+            non_nones = [g for g in m.groups() if g is not None]
+            if len(non_nones) == 1:
+                results.append(non_nones[0])
+            elif len(non_nones) > 1:
+                results.append(tuple(non_nones))
+        return results
+
+
 _OQ_SECTION_RE = re.compile(r"## Open Questions\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 _MAINT_OPEN_SECTION_RE = re.compile(r"## Contradictions — Open\s+(.*?)(?:\n## |\Z)", re.DOTALL)
-_EVIDENCE_SOURCE_RE = re.compile(r"\[\[Sources/(?:[^/|]+/)?(src-[0-9a-f]{10})\|")
+_EVIDENCE_SOURCE_RE = DualLinkPattern(
+    r"(?:\[\[Sources/(?:[^/|]+/)?(src-[0-9a-f]{10})\||"
+    r"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(src-[0-9a-f]{10})\.md(?:#[^)]*)?\))"
+)
 _EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 _BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S.*?)\s*$")
 

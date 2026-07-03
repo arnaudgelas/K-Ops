@@ -447,6 +447,116 @@ def generate_vault_dashboard_content(sources, concepts):
     return "\n".join(lines).rstrip() + "\n"
 
 
+def generate_okf_progressive_indexes():
+    # 1. Generate notes/Concepts/index.md
+    concepts_dir = CONFIG.concepts_dir
+    concept_lines = ["# Concepts", "", "A curated layer of durable knowledge pages.", ""]
+    for path in sorted(concepts_dir.glob("*.md")):
+        if path.name == "index.md":
+            continue
+        try:
+            fm, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+            if fm.get("type") == "redirect":
+                continue
+            title = fm.get("title") or path.stem
+            desc = fm.get("description") or "Durable concept page."
+            concept_lines.append(f"* [{title}]({path.name}) - {desc}")
+        except Exception:
+            pass
+    concepts_dir.joinpath("index.md").write_text("\n".join(concept_lines) + "\n", encoding="utf-8")
+    print(f"Updated {concepts_dir / 'index.md'}")
+
+    # 2. Generate notes/Sources/index.md
+    sources_dir = CONFIG.summaries_dir
+    source_lines = ["# Sources", "", "Normalised source evidence summaries.", ""]
+    # Group by subdirectory name under notes/Sources
+    subdirs = sorted([d for d in sources_dir.iterdir() if d.is_dir()])
+    for subdir in subdirs:
+        source_lines.append(f"## {subdir.name.capitalize()}")
+        source_lines.append("")
+        for path in sorted(subdir.glob("src-*.md")):
+            try:
+                fm, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+                title = fm.get("title") or path.stem
+                desc = fm.get("description") or f"Source summary for {path.stem}."
+                # OKF path is relative to the subdirectory's index
+                source_lines.append(f"* [{path.stem}: {title}]({subdir.name}/{path.name}) - {desc}")
+            except Exception:
+                pass
+        source_lines.append("")
+    # Also flat sources directly under notes/Sources
+    flat_sources = sorted(sources_dir.glob("src-*.md"))
+    if flat_sources:
+        source_lines.append("## General")
+        source_lines.append("")
+        for path in flat_sources:
+            try:
+                fm, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+                title = fm.get("title") or path.stem
+                desc = fm.get("description") or f"Source summary for {path.stem}."
+                source_lines.append(f"* [{path.stem}: {title}]({path.name}) - {desc}")
+            except Exception:
+                pass
+        source_lines.append("")
+    sources_dir.joinpath("index.md").write_text("\n".join(source_lines) + "\n", encoding="utf-8")
+    print(f"Updated {sources_dir / 'index.md'}")
+
+    # 3. Generate notes/Answers/index.md
+    answers_dir = CONFIG.answers_dir
+    answer_lines = ["# Answers", "", "Durable answer memos from Q&A runs.", ""]
+    for path in sorted(answers_dir.glob("*.md")):
+        if path.name == "index.md":
+            continue
+        try:
+            fm, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+            title = fm.get("title") or path.stem
+            desc = fm.get("description") or "Grounded Q&A response memo."
+            answer_lines.append(f"* [{title}]({path.name}) - {desc}")
+        except Exception:
+            pass
+    answers_dir.joinpath("index.md").write_text("\n".join(answer_lines) + "\n", encoding="utf-8")
+    print(f"Updated {answers_dir / 'index.md'}")
+
+    # 4. Generate notes/Runbooks/index.md
+    runbooks_dir = CONFIG.vault_dir / "Runbooks"
+    if runbooks_dir.exists():
+        runbook_lines = ["# Runbooks", "", "Operational runbooks and quick references.", ""]
+        for path in sorted(runbooks_dir.glob("*.md")):
+            if path.name == "index.md":
+                continue
+            try:
+                fm, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+                title = fm.get("title") or path.stem
+                desc = fm.get("description") or "K-Ops operational guide."
+                runbook_lines.append(f"* [{title}]({path.name}) - {desc}")
+            except Exception:
+                pass
+        runbooks_dir.joinpath("index.md").write_text(
+            "\n".join(runbook_lines) + "\n", encoding="utf-8"
+        )
+        print(f"Updated {runbooks_dir / 'index.md'}")
+
+    # 5. Generate notes/index.md (Bundle Root)
+    root_lines = [
+        "---",
+        'okf_version: "0.1"',
+        "---",
+        "# K-Ops Knowledge Bundle",
+        "",
+        "A local, agent-first research vault for Obsidian and OKF.",
+        "",
+        "## Vault Sections",
+        "",
+        "* [Concepts](Concepts/) - Curated layer of durable concept pages",
+        "* [Sources](Sources/) - Normalised source summaries and evidence links",
+        "* [Answers](Answers/) - Durable answer memos from Q&A runs",
+        "* [Runbooks](Runbooks/) - Operational guides and quick references",
+        "* [Indexes](Indexes/) - Vault indexes, atlases, and dashboards",
+    ]
+    CONFIG.vault_dir.joinpath("index.md").write_text("\n".join(root_lines) + "\n", encoding="utf-8")
+    print(f"Updated {CONFIG.vault_dir / 'index.md'}")
+
+
 def main():
     sources = get_sources_data()
     concepts = get_concepts_data()
@@ -479,3 +589,10 @@ def main():
     vault_dashboard_content = generate_vault_dashboard_content(sources, concepts)
     vault_dashboard_path.write_text(vault_dashboard_content, encoding="utf-8")
     print(f"Updated {vault_dashboard_path}")
+
+    # 6. OKF Progressive Indexes
+    generate_okf_progressive_indexes()
+
+
+if __name__ == "__main__":
+    main()

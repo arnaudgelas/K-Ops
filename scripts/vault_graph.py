@@ -20,11 +20,43 @@ ANSWER_VAULT_UPDATES_RE = re.compile(r"## Vault Updates\s+(.*?)(?:\n## |\Z)", re
 RELATED_SECTION_RE = re.compile(r"## Related Concepts\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 CLAIMS_SECTION_RE = re.compile(r"## Key Claims\s+(.*?)(?:\n## |\Z)", re.DOTALL)
-SOURCE_LINK_RE = re.compile(r"\[\[Sources/(src-[0-9a-f]{10})\|")
-CONCEPT_LINK_RE = re.compile(r"\[\[Concepts/([^|\]]+)")
-GENERIC_LINK_RE = re.compile(r"\[\[((?:Concepts|Sources)/[^|\]]+)")
-INDEX_LINK_RE = re.compile(r"\[\[(Indexes/[^|\]]+)")
-ANSWER_LINK_RE = re.compile(r"\[\[(Answers/[^|\]]+)")
+
+
+class DualLinkPattern:
+    def __init__(self, pattern_str: str) -> None:
+        self._re = re.compile(pattern_str)
+
+    def findall(self, text: str) -> list[str]:
+        results = []
+        for m in self._re.finditer(text):
+            non_nones = [g for g in m.groups() if g is not None]
+            if len(non_nones) == 1:
+                results.append(non_nones[0])
+            elif len(non_nones) > 1:
+                results.append(tuple(non_nones))
+        return results
+
+
+SOURCE_LINK_RE = DualLinkPattern(
+    r"(?:\[\[Sources/(src-[0-9a-f]{10})\||"
+    r"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(src-[0-9a-f]{10})\.md(?:#[^)]*)?\))"
+)
+CONCEPT_LINK_RE = DualLinkPattern(
+    r"(?:\[\[Concepts/([^|\]]+)|"
+    r"\[[^\]]*\]\((?:\.\./)*Concepts/([^)#\n]+)\.md(?:#[^)]*)?\))"
+)
+GENERIC_LINK_RE = DualLinkPattern(
+    r"(?:\[\[((?:Concepts|Sources)/[^|\]#\n]+)|"
+    r"\[[^\]]*\]\((?:\.\./)*(\b(?:Concepts|Sources)/[^)#\n]+)\.md(?:#[^)]*)?\))"
+)
+INDEX_LINK_RE = DualLinkPattern(
+    r"(?:\[\[(Indexes/[^|\]#\n]+)|"
+    r"\[[^\]]*\]\((?:\.\./)*(\bIndexes/[^)#\n]+)\.md(?:#[^)]*)?\))"
+)
+ANSWER_LINK_RE = DualLinkPattern(
+    r"(?:\[\[(Answers/[^|\]#\n]+)|"
+    r"\[[^\]]*\]\((?:\.\./)*(\bAnswers/[^)#\n]+)\.md(?:#[^)]*)?\))"
+)
 BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S.*?)\s*$")
 
 
@@ -251,7 +283,11 @@ def extract_section_links(text: str, section_re: re.Pattern[str]) -> list[str]:
     match = section_re.search(text)
     if not match:
         return []
-    return sorted(set(re.findall(r"\[\[(?:Concepts|Sources|Answers)/([^|\]]+)", match.group(1))))
+    pattern = DualLinkPattern(
+        r"(?:\[\[(?:Concepts|Sources|Answers)/(?:[^/]+/)?([^|\]#\n]+)(?:#[^\]|]*)?\]\]|"
+        r"\[[^\]]*\]\((?:\.\./)*(?:Concepts|Sources|Answers)/(?:[^/]+/)?([^)#\n]+)\.md(?:#[^)]*)?\))"
+    )
+    return sorted(set(pattern.findall(match.group(1))))
 
 
 def extract_any_links(text: str) -> list[str]:

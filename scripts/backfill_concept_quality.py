@@ -12,8 +12,27 @@ ROOT = Path(__file__).resolve().parent.parent
 CONCEPTS_DIR = ROOT / "notes" / "Concepts"
 SOURCES_DIR = ROOT / "notes" / "Sources"
 
+
+class DualLinkPattern:
+    def __init__(self, pattern_str: str) -> None:
+        self._re = re.compile(pattern_str)
+
+    def findall(self, text: str) -> list[str]:
+        results = []
+        for m in self._re.finditer(text):
+            non_nones = [g for g in m.groups() if g is not None]
+            if len(non_nones) == 1:
+                results.append(non_nones[0])
+            elif len(non_nones) > 1:
+                results.append(tuple(non_nones))
+        return results
+
+
 EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
-SOURCE_LINK_RE = re.compile(r"\[\[Sources/(src-[0-9a-f]{10})\|")
+SOURCE_LINK_RE = DualLinkPattern(
+    r"(?:\[\[Sources/(src-[0-9a-f]{10})\||"
+    r"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(src-[0-9a-f]{10})\.md(?:#[^)]*)?\))"
+)
 CONTRADICTION_RE = re.compile(r"\bcontradiction\b|\bconflict(?:ing)?\b", re.IGNORECASE)
 
 VALID_QUALITIES = {"supported", "provisional", "weak", "conflicting", "stale"}

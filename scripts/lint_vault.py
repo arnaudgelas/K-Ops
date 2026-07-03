@@ -5,6 +5,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from utils import CONFIG, ROOT, find_source_note, parse_frontmatter
 
@@ -23,12 +24,56 @@ RESEARCH_REPORTS_DIR = RESEARCH_DIR / "reports"
 RESEARCH_IMPORTS_DIR = RESEARCH_DIR / "imports"
 RESEARCH_ARCHIVE_DIR = RESEARCH_DIR / "archive"
 
-SOURCE_REF_RE = re.compile(r"\[\[Sources/(?:[^/]+/)?(src-[0-9a-f]{10})\|")
-INLINE_SOURCE_REF_RE = re.compile(
-    r"(?:\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})(?:#[^\]|)]+)?(?:\|[^\]]*)?\]\]|"
-    r"(src-[0-9a-f]{10})(?:#[\w./=&:%+-]+)?)"
+
+class DualLinkPattern:
+    def __init__(self, pattern_str: str) -> None:
+        self._re = re.compile(pattern_str, re.MULTILINE if "::" in pattern_str else 0)
+
+    def findall(self, text: str) -> list[str]:
+        results = []
+        for m in self._re.finditer(text):
+            # For typed edges or multiple captures, collect all matched groups except None
+            non_nones = [g for g in m.groups() if g is not None]
+            if len(non_nones) == 1:
+                results.append(non_nones[0])
+            elif len(non_nones) > 1:
+                # If there are multiple captures, e.g. (predicate, target), return them as a tuple or similar
+                # but standard findall on multiple groups returns list of tuples
+                results.append(tuple(non_nones))
+        return results
+
+    def finditer(self, text: str) -> list[Any]:
+        class MatchWrapper:
+            def __init__(self, m: re.Match) -> None:
+                self._m = m
+
+            def group(self, idx: int | str = 0) -> str | None:
+                non_nones = [g for g in self._m.groups() if g is not None]
+                if isinstance(idx, int) and idx > 0 and idx <= len(non_nones):
+                    return non_nones[idx - 1]
+                return self._m.group(idx)
+
+            def groups(self) -> tuple[str, ...]:
+                return tuple(g for g in self._m.groups() if g is not None)
+
+            def span(self, idx: int = 0) -> tuple[int, int]:
+                return self._m.span(idx)
+
+        return [MatchWrapper(m) for m in self._re.finditer(text)]
+
+
+SOURCE_REF_RE = DualLinkPattern(
+    r"(?:\[\[Sources/(?:[^/]+/)?(src-[0-9a-f]{10})\||"
+    r"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(src-[0-9a-f]{10})\.md(?:#[^)]*)?\))"
 )
-RELATED_CONCEPT_RE = re.compile(r"\[\[(Concepts/[^|\]]+)")
+INLINE_SOURCE_REF_RE = DualLinkPattern(
+    r"(?:\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})(?:#[^\]|)]+)?(?:\|[^\]]*)?\]\]|"
+    r"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(src-[0-9a-f]{10})\.md(?:#[^)]*)?\)|\b(src-[0-9a-f]{10})(?:#[\w./=&:%+-]+)?\b)"
+)
+RELATED_CONCEPT_RE = DualLinkPattern(
+    r"(?:\[\[(Concepts/[^|\]]+)|"
+    r"\[[^\]]*\]\((?:\.\./)*(Concepts/[^)#\n]+)\.md(?:#[^)]*)?\))"
+)
 SOURCE_ID_RE = re.compile(r"^source_id:\s*(src-[0-9a-f]{10})\s*$", re.MULTILINE)
 TITLE_RE = re.compile(r'^title:\s*"([^"]+)"\s*$', re.MULTILINE)
 SUMMARY_SECTION_RE = re.compile(r"## Summary\s+(.+?)(?:\n## |\Z)", re.DOTALL)
@@ -44,18 +89,21 @@ _VALID_PREDICATES = frozenset(
         "part_of",
     )
 )
-_TYPED_EDGE_RE = re.compile(
+_TYPED_EDGE_RE = DualLinkPattern(
     r"^\s*-\s+`("
     + "|".join(_VALID_PREDICATES)
-    + r")::`\s+\[\[Concepts/([^/|\]]+?)(?:\|[^\]]+)?\]\]",
-    re.MULTILINE,
+    + r")::`\s+(?:\[\[Concepts/([^/|\]]+?)(?:\|[^\]]+)?\]\]|"
+    r"\[[^\]]*\]\((?:\.\./)*Concepts/([^)#\n]+)\.md(?:#[^)]*)?\))"
 )
 EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 KEY_CLAIMS_SECTION_RE = re.compile(r"(?mi)^##\s+Key Claims\s*\n+(.*?)(?:\n##\s|\Z)", re.DOTALL)
 OPEN_QUESTIONS_SECTION_RE = re.compile(
     r"(?mi)^##\s+.*Open Questions\b.*\n+(.*?)(?:\n##\s|\Z)", re.DOTALL
 )
-CONCEPT_LINK_IN_SECTION_RE = re.compile(r"\[\[Concepts/([^|\]]+)")
+CONCEPT_LINK_IN_SECTION_RE = DualLinkPattern(
+    r"(?:\[\[Concepts/([^|\]]+)|"
+    r"\[[^\]]*\]\((?:\.\./)*Concepts/([^)#\n]+)\.md(?:#[^)]*)?\))"
+)
 EVIDENCE_STRENGTH_RE = re.compile(r"^evidence_strength:\s*(\S+)\s*$", re.MULTILINE)
 ANSWER_HEADING_RE = re.compile(r"^#\s+", re.MULTILINE)
 ANSWER_SUBHEADING_RE = re.compile(r"^##\s+", re.MULTILINE)
@@ -108,11 +156,15 @@ VALID_RESEARCH_KINDS = {
     "research-archive-manifest",
 }
 
-# A11: Regex to detect bare wikilinks to sources without an anchor fragment
-_BARE_SOURCE_CITE_RE = re.compile(r"\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})\|\1\]\]")
-# A11: Regex to capture the anchor fragment from a section-anchored wikilink
-_ANCHORED_SOURCE_CITE_RE = re.compile(
-    r"\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})#([^\]|]+)(?:\|[^\]]*)?\]\]"
+# A11: Regex to detect bare wikilinks/markdown links to sources without an anchor fragment
+_BARE_SOURCE_CITE_RE = DualLinkPattern(
+    r"(?:\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})\|\1\]\]|"
+    r"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(src-[0-9a-f]{10})\.md\))"
+)
+# A11: Regex to capture the anchor fragment from a section-anchored wikilink/markdown link
+_ANCHORED_SOURCE_CITE_RE = DualLinkPattern(
+    r"(?:\[\[Sources/(?:[^/\]#|]+/)?(src-[0-9a-f]{10})#([^\]|]+)(?:\|[^\]]*)?\]\]|"
+    r"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(src-[0-9a-f]{10})\.md#([^)]+)\))"
 )
 
 _v2_anchor_index: dict[str, set[str]] | None = None
