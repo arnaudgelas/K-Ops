@@ -17,6 +17,7 @@ from utils import (
     slugify,
     write_text,
 )
+from kb_schema import Validator
 
 ANSWER_PLACEHOLDER = "__ANSWER_PENDING__"
 VAULT_UPDATES_RE = re.compile(r"## Vault Updates\s+(.*?)(?:\n## |\Z)", re.DOTALL)
@@ -89,6 +90,58 @@ def build_answer_scaffold(question: str, asked_at: str) -> str:
             "",
         ]
     )
+
+
+def _format_seed_retrieval_result(result: dict) -> str:
+    parts = [
+        f"- id: {result.get('id', '')}",
+        f"  kind: {result.get('kind', '')}",
+        f"  method: {result.get('retrieval_method', '')}",
+        f"  score: {result.get('score', 0)}",
+        f"  title: {result.get('title', '')}",
+    ]
+    if result.get("path"):
+        parts.append(f"  path: {result['path']}")
+    if result.get("source_id") and result.get("anchor"):
+        parts.append(f"  source_anchor: {result['source_id']}#{result['anchor']}")
+    snippet = " ".join(str(result.get("snippet") or "").split())
+    if snippet:
+        parts.append(f"  snippet: {snippet[:240]}")
+    return "\n".join(parts)
+
+
+def build_ask_retrieval_context(question: str, top_k: int = 8) -> str:
+    try:
+        from retrieval import VaultIndex
+
+        index = VaultIndex()
+        index.build()
+        results = index.search(question, top_k=top_k)
+    except Exception as exc:
+        return (
+            "Seed retrieval failed before agent handoff.\n"
+            f"- error: {type(exc).__name__}: {exc}\n"
+            "- fallback: follow the manual search strategy below."
+        )
+
+    if not results:
+        return (
+            "Seed retrieval returned 0 results.\n"
+            "- retrieval_path entry to record if no follow-up search is used: "
+            f"method=bm25, layer=concept, query={json.dumps(question)}, results_count=0"
+        )
+
+    rendered = [
+        "Seed retrieval was run before agent handoff using VaultIndex.search.",
+        f"- query: {question}",
+        f"- results_count: {len(results)}",
+        "- retrieval_path entry to include if you use these seeds: "
+        f"method=bm25, layer=concept, query={json.dumps(question)}, results_count={len(results)}",
+        "",
+        "Results:",
+    ]
+    rendered.extend(_format_seed_retrieval_result(result) for result in results)
+    return "\n".join(rendered)
 
 
 def update_frontmatter_field(text: str, field: str, value: str) -> tuple[str, bool]:
@@ -167,40 +220,98 @@ def normalize_answer_quality(answer_path: Path) -> str:
     return desired
 
 
+def validate_answer_memo_after_agent(answer_path: Path) -> None:
+    text = answer_path.read_text(encoding="utf-8")
+    frontmatter, _ = parse_frontmatter(text)
+    issues = Validator().validate_answer_memo(frontmatter, answer_path)
+    errors = [issue for issue in issues if issue.severity == "error"]
+    if errors:
+        rendered = "\n".join(f"- {issue.field}: {issue.message}" for issue in errors)
+        raise RuntimeError(f"Answer memo schema validation failed for {answer_path}:\n{rendered}")
+
+    retrieval_path = frontmatter.get("retrieval_path")
+    if not isinstance(retrieval_path, list) or not retrieval_path:
+        raise RuntimeError(
+            f"Answer memo `{answer_path.relative_to(ROOT)}` must populate non-empty `retrieval_path`."
+        )
+
+    if "fetch_required" not in frontmatter:
+        raise RuntimeError(
+            f"Answer memo `{answer_path.relative_to(ROOT)}` must set `fetch_required`."
+        )
+
+
+def _registry_entry_flag_reasons(entry: dict) -> list[str]:
+    reasons: list[str] = []
+    if entry.get("adversarial_content") is True:
+        reasons.append("adversarial_content")
+    if entry.get("prompt_injection_detected") is True:
+        reasons.append("prompt_injection_detected")
+    if entry.get("fetch_warning"):
+        reasons.append(f"fetch_warning:{entry['fetch_warning']}")
+    if entry.get("source_status") in {"revoked", "permission-revoked", "do-not-use"}:
+        reasons.append(f"source_status:{entry['source_status']}")
+    return reasons
+
+
+def _build_compile_plan() -> dict:
+    registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
+    existing_ids = {path.stem for path in CONFIG.summaries_dir.rglob("src-*.md")}
+    all_ids = {item["id"] for item in registry if item.get("id")}
+
+    flagged: list[dict] = []
+    flagged_ids: set[str] = set()
+    for item in registry:
+        source_id = item.get("id")
+        if not source_id:
+            continue
+        reasons = _registry_entry_flag_reasons(item)
+        if reasons:
+            flagged_ids.add(source_id)
+            flagged.append({"id": source_id, "reasons": reasons})
+
+    return {
+        "generated_at": dt.datetime.now().replace(microsecond=0).isoformat(),
+        "registry_count": len(registry),
+        "to_summarize": sorted(all_ids - existing_ids - flagged_ids),
+        "skip": sorted(existing_ids & all_ids),
+        "flag_for_review": flagged,
+    }
+
+
+def _format_compile_plan_summary(plan: dict) -> str:
+    to_summarize = plan.get("to_summarize", [])
+    skip = plan.get("skip", [])
+    flag = plan.get("flag_for_review", [])
+    lines = [
+        "Deterministic compile plan written to `.tmp/compile_plan.json`.",
+        f"- registry_count: {plan.get('registry_count', 0)}",
+        f"- to_summarize_count: {len(to_summarize)}",
+        f"- skip_count: {len(skip)}",
+        f"- flag_for_review_count: {len(flag)}",
+    ]
+    if to_summarize:
+        lines.append("- to_summarize:")
+        lines.extend(f"  - {source_id}" for source_id in to_summarize)
+    if flag:
+        lines.append("- flag_for_review:")
+        for item in flag:
+            reasons = ", ".join(item.get("reasons") or [])
+            lines.append(f"  - {item.get('id')}: {reasons}")
+    return "\n".join(lines)
+
+
 def _build_compile_plan_summary() -> str:
     plan_path = ROOT / ".tmp" / "compile_plan.json"
-    if plan_path.exists():
-        try:
-            plan = json.loads(plan_path.read_text(encoding="utf-8"))
-            to_summarize = plan.get("to_summarize", [])
-            skip = plan.get("skip", [])
-            flag = plan.get("flag_for_review", [])
-            return (
-                f"Loaded from `.tmp/compile_plan.json`: "
-                f"{len(to_summarize)} source(s) to summarize, "
-                f"{len(skip)} to skip, {len(flag)} flagged for review."
-            )
-        except Exception:
-            pass
     try:
-        registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
-        all_ids = {item["id"] for item in registry}
-        existing_ids = {path.stem for path in CONFIG.summaries_dir.rglob("src-*.md")}
-        to_summarize = sorted(all_ids - existing_ids)
+        plan = _build_compile_plan()
+        ensure_dir(plan_path.parent)
+        plan_path.write_text(
+            json.dumps(plan, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        return _format_compile_plan_summary(plan)
     except Exception:
         return "Full vault compile run."
-    if not to_summarize:
-        return (
-            "Full vault compile run — all registry sources already have summaries; "
-            "focus on concept page synthesis and backlink updates."
-        )
-    first_five = ", ".join(to_summarize[:5])
-    more = f", … and {len(to_summarize) - 5} more" if len(to_summarize) > 5 else ""
-    return (
-        f"Derived plan: {len(to_summarize)} source(s) need summaries "
-        f"(first 5: {first_five}{more}). "
-        f"Registry has {len(all_ids)} entries; {len(existing_ids)} already have notes."
-    )
 
 
 def cmd_compile(agent: str, show_prompt: bool = False) -> None:
@@ -231,6 +342,7 @@ def cmd_ask(agent: str, question: str) -> None:
         question=question,
         answer_path=str(answer_path.relative_to(ROOT)),
         web_fetch_policy=web_fetch_policy,
+        retrieval_context=build_ask_retrieval_context(question),
     )
     agent_run(agent, prompt)
     if not answer_path.exists():
@@ -238,6 +350,7 @@ def cmd_ask(agent: str, question: str) -> None:
     answer_text = answer_path.read_text(encoding="utf-8")
     if ANSWER_PLACEHOLDER in answer_text:
         raise RuntimeError(f"Answer memo still contains scaffold placeholders: {answer_path}")
+    validate_answer_memo_after_agent(answer_path)
     answer_quality = normalize_answer_quality(answer_path)
     if CONFIG.file_answer_back_into_vault:
         update_recent_answers(answer_path)

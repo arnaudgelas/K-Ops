@@ -19,22 +19,41 @@ from utils import CONFIG, ROOT, ensure_dir, parse_frontmatter
 
 CLAIMS_PATH = ROOT / "data" / "claims.json"
 
+
+class DualLinkPattern:
+    def __init__(self, pattern_str: str) -> None:
+        self._re = re.compile(pattern_str, re.MULTILINE if "::" in pattern_str else 0)
+
+    def findall(self, text: str) -> list[str]:
+        results = []
+        for m in self._re.finditer(text):
+            non_nones = [g for g in m.groups() if g is not None]
+            if len(non_nones) == 1:
+                results.append(non_nones[0])
+            elif len(non_nones) > 1:
+                results.append(tuple(non_nones))
+        return results
+
+
 _CLAIMS_SECTION_RE = re.compile(r"## Key Claims\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 _SOURCE_ID_PATTERN = r"src-[0-9a-f]{10}"
 _SOURCE_REF_RE = re.compile(
     rf"(?:\[\[Sources/(?:[^/\]#|]+/)?(?P<wiki>{_SOURCE_ID_PATTERN})"
     rf"(?P<wiki_anchor>#[^\]|)]+)?(?:\|[^\]]*)?\]\]|"
+    rf"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(?P<md>{_SOURCE_ID_PATTERN})\.md(?P<md_anchor>#[^)]*)?\)|"
     rf"(?P<plain>{_SOURCE_ID_PATTERN})(?P<plain_anchor>#[\w./=&:%+-]+)?)"
 )
-_EVIDENCE_SOURCE_RE = re.compile(
-    r"\[\[Sources/(?:[^/|\]#]+/)?(src-[0-9a-f]{10})(?:#[^\]|)]+)?(?:\|[^\]]*)?\]\]"
+_EVIDENCE_SOURCE_RE = DualLinkPattern(
+    r"(?:\[\[Sources/(?:[^/|\]#]+/)?(src-[0-9a-f]{10})(?:#[^\]|)]+)?(?:\|[^\]]*)?\]\]|"
+    r"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(src-[0-9a-f]{10})\.md(?:#[^)]*)?\))"
 )
 _EVIDENCE_SECTION_RE = re.compile(r"## Evidence / Source Basis\s+(.*?)(?:\n## |\Z)", re.DOTALL)
 _BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S.*?)\s*$")
 _SOURCE_CITATION_RE = re.compile(
     rf"\s*\(?(?:\[\[Sources/(?:[^/\]#|]+/)?{_SOURCE_ID_PATTERN}"
-    rf"(?:#[^\]|)]+)?(?:\|[^\]]*)?\]\]|{_SOURCE_ID_PATTERN}"
-    rf"(?:#[\w./=&:%+-]+)?)\)?"
+    rf"(?:#[^\]|)]+)?(?:\|[^\]]*)?\]\]|"
+    rf"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?{_SOURCE_ID_PATTERN}\.md(?:#[^)]*)?\)|\b{_SOURCE_ID_PATTERN}"
+    rf"(?:#[\w./=&:%+-]+)?\b)\)?"
 )
 
 _VALID_PREDICATES = frozenset(
@@ -48,12 +67,98 @@ _VALID_PREDICATES = frozenset(
         "part_of",
     )
 )
-_TYPED_EDGE_RE = re.compile(
+_TYPED_EDGE_RE = DualLinkPattern(
     r"^\s*-\s+`("
     + "|".join(_VALID_PREDICATES)
-    + r")::`\s+\[\[Concepts/([^/|\]]+?)(?:\|[^\]]+)?\]\]",
-    re.MULTILINE,
+    + r")::`\s+(?:\[\[Concepts/([^/|\]]+?)(?:\|[^\]]+)?\]\]|"
+    r"\[[^\]]*\]\((?:\.\./)*Concepts/([^)#\n]+)\.md(?:#[^)]*)?\))"
 )
+
+_BLOCKED_SOURCE_STATUSES = frozenset(
+    ("revoked", "permission-revoked", "deleted-from-origin", "do-not-use")
+)
+_QUARANTINE_SOURCE_STRENGTHS = frozenset(("model-generated", "stub", "citation-only", "image-only"))
+_QUARANTINE_SOURCE_KINDS = frozenset(
+    ("imported-model-report", "imported_model_report", "citation-stub", "citation_stub")
+)
+_QUARANTINE_VERIFICATION_STATES = frozenset(("needs_primary_sources", "needs_fetch"))
+
+
+def _load_source_metadata_by_id() -> dict[str, dict]:
+    metadata: dict[str, dict] = {}
+    summaries_dir = getattr(CONFIG, "summaries_dir", None)
+    if not summaries_dir or not summaries_dir.exists():
+        return metadata
+    for path in sorted(summaries_dir.rglob("src-*.md")):
+        try:
+            frontmatter, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        source_id = str(frontmatter.get("source_id") or path.stem)
+        metadata[source_id] = frontmatter
+    return metadata
+
+
+def _classify_source(
+    source_id: str, source_metadata_by_id: dict[str, dict]
+) -> tuple[str, list[str]]:
+    frontmatter = source_metadata_by_id.get(source_id)
+    if frontmatter is None:
+        return "unknown", [f"missing-source-note:{source_id}"]
+
+    reasons: list[str] = []
+    status = str(frontmatter.get("source_status") or "unknown")
+    strength = str(frontmatter.get("evidence_strength") or "unknown")
+    kind = str(frontmatter.get("source_kind") or "unknown")
+    verification_state = str(frontmatter.get("verification_state") or "")
+
+    if status in _BLOCKED_SOURCE_STATUSES:
+        reasons.append(f"source-status:{status}")
+    if frontmatter.get("adversarial_content") is True:
+        reasons.append("adversarial-content")
+    if reasons:
+        return "blocked", reasons
+
+    if status == "deprecated":
+        reasons.append("source-status:deprecated")
+    if strength in _QUARANTINE_SOURCE_STRENGTHS:
+        reasons.append(f"evidence-strength:{strength}")
+    if kind in _QUARANTINE_SOURCE_KINDS:
+        reasons.append(f"source-kind:{kind}")
+    if verification_state in _QUARANTINE_VERIFICATION_STATES:
+        reasons.append(f"verification-state:{verification_state}")
+    if reasons:
+        return "quarantine", reasons
+
+    return "admitted", []
+
+
+def _claim_admission(
+    source_ids: list[str], source_metadata_by_id: dict[str, dict]
+) -> tuple[str, list[str], bool]:
+    if not source_ids:
+        return "unsupported", ["missing-source-evidence"], False
+
+    statuses: list[str] = []
+    reasons: list[str] = []
+    synthetic_origin = False
+    for source_id in source_ids:
+        frontmatter = source_metadata_by_id.get(source_id, {})
+        if frontmatter.get("evidence_strength") == "model-generated" or frontmatter.get(
+            "source_kind"
+        ) in {"imported-model-report", "imported_model_report"}:
+            synthetic_origin = True
+        status, source_reasons = _classify_source(source_id, source_metadata_by_id)
+        statuses.append(status)
+        reasons.extend(source_reasons)
+
+    if "blocked" in statuses:
+        return "blocked", sorted(set(reasons)), synthetic_origin
+    if "quarantine" in statuses:
+        return "quarantine", sorted(set(reasons)), synthetic_origin
+    if "unknown" in statuses:
+        return "unknown", sorted(set(reasons)), synthetic_origin
+    return "admitted", [], synthetic_origin
 
 
 def claim_stable_id(concept_stem: str, claim_text: str) -> str:
@@ -134,8 +239,10 @@ def extract_source_refs(text: str) -> list[dict]:
     refs: list[dict] = []
     seen: set[tuple[str, str | None]] = set()
     for match in _SOURCE_REF_RE.finditer(text):
-        source_id = match.group("wiki") or match.group("plain")
-        anchor = match.group("wiki_anchor") or match.group("plain_anchor")
+        source_id = match.group("wiki") or match.group("plain") or match.group("md")
+        anchor = (
+            match.group("wiki_anchor") or match.group("plain_anchor") or match.group("md_anchor")
+        )
         if not source_id:
             continue
         key = (source_id, anchor)
@@ -197,6 +304,7 @@ def extract_claims_from_concept(path) -> list[dict]:
     concept_stem = path.stem
     claim_quality = str(frontmatter.get("claim_quality") or "")
     last_updated = str(frontmatter.get("updated") or frontmatter.get("created") or "")
+    source_metadata_by_id = _load_source_metadata_by_id()
 
     claims: list[dict] = []
     for idx, bullet in enumerate(bullets, start=1):
@@ -214,6 +322,9 @@ def extract_claims_from_concept(path) -> list[dict]:
             "missing": "unsupported",
         }[source_resolution]
         effective_source_ids = inline_source_ids or source_ids
+        admission_status, admission_reasons, synthetic_origin = _claim_admission(
+            effective_source_ids, source_metadata_by_id
+        )
         clean_claim = normalize_claim_text(bullet)
         claim_id = claim_stable_id(concept_stem, clean_claim)
         claims.append(
@@ -239,6 +350,9 @@ def extract_claims_from_concept(path) -> list[dict]:
                 "relations": [],
                 "confidence": _confidence_from_quality(claim_quality, source_resolution),
                 "status": _status_from_quality(claim_quality),
+                "admission_status": admission_status,
+                "admission_reasons": admission_reasons,
+                "synthetic_origin": synthetic_origin,
                 "extraction_method": "deterministic-key-claims",
                 "last_verified": last_updated,
                 "last_updated": last_updated,

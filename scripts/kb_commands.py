@@ -43,6 +43,15 @@ def run_fetch(input_path: str, branch: str | None = None, fail_fast: bool = Fals
     ingest_sources(input_path, fail_fast=fail_fast, branch=branch, refresh=False)
 
 
+def run_add_source(source: str, branch: str | None = None, fail_fast: bool = False) -> None:
+    from ingest_sources import ingest_sources
+
+    add_list = ROOT / ".tmp" / f"add-source-{now_stamp()}.txt"
+    ensure_dir(add_list.parent)
+    add_list.write_text(source.strip() + "\n", encoding="utf-8")
+    ingest_sources(str(add_list), fail_fast=fail_fast, branch=branch, refresh=False)
+
+
 def run_refresh_sources(branch: str | None = None, fail_fast: bool = False) -> Path:
     from ingest_sources import ingest_sources
 

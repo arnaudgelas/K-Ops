@@ -72,6 +72,10 @@ def _substitute_runtime_placeholders(body: str, name: str, *, arg_var: str = "$A
         body = body.replace("{question}", arg_var)
         body = body.replace("{answer_path}", "notes/Answers/<timestamped-memo>.md")
         body = body.replace("{web_fetch_policy}", "disabled")
+        body = body.replace(
+            "{retrieval_context}",
+            'Not precomputed in generated slash-command mode. Run `uv run python scripts/search_vault.py "$ARGUMENTS" --top 10` before answering.',
+        )
     elif name == "render":
         body = body.replace("{format}", "$1")
         body = body.replace("{prompt}", arg_var)

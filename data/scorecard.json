@@ -1,6 +1,6 @@
 {
   "project": "K-Ops",
-  "generated_at": "2026-06-14T17:53:28",
+  "generated_at": "2026-07-03T21:39:39",
   "eval_pass_rate": null,
   "catastrophic_failure_count": 0,
   "concepts": {
@@ -20,9 +20,9 @@
     "partial_source_dependencies": 0
   },
   "indexes": {
-    "total": 1,
+    "total": 4,
     "by_type": {
-      "index": 1
+      "index": 4
     }
   },
   "sources": {
@@ -55,9 +55,15 @@
     "by_evidence_status": {
       "direct": 3
     },
+    "by_admission_status": {
+      "admitted": 3
+    },
     "direct": 3,
     "inherited": 0,
     "unsupported": 0,
+    "quarantined": 0,
+    "blocked": 0,
+    "synthetic_origin": 0,
     "direct_citation_rate": 1.0,
     "direct_citation_rate_by_quality": {
       "supported": 1.0

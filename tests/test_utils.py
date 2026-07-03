@@ -56,6 +56,22 @@ class UtilsTests(unittest.TestCase):
             utils.CONFIG_PATH = original_config_path
             utils.get_config.cache_clear()
 
+    def test_save_json_writes_atomically_visible_json(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "nested" / "state.json"
+            utils.save_json(path, {"title": "Café", "items": [1, 2]})
+
+            self.assertEqual(utils.load_json(path, default={})["title"], "Café")
+            self.assertEqual(list(path.parent.glob("*.tmp")), [])
+
+    def test_write_text_writes_atomically_visible_text(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "nested" / "note.md"
+            utils.write_text(path, "hello\n")
+
+            self.assertEqual(path.read_text(encoding="utf-8"), "hello\n")
+            self.assertEqual(list(path.parent.glob("*.tmp")), [])
+
 
 if __name__ == "__main__":
     unittest.main()

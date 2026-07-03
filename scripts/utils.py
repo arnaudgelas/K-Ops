@@ -7,12 +7,41 @@ import os
 import re
 import shlex
 import shutil
+import tempfile
 from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+# Monkey-patch Path.glob and Path.rglob to ignore OKF reserved index.md and log.md files
+_original_glob = Path.glob
+_original_rglob = Path.rglob
+
+
+def _filtered_glob(self, pattern, *args, **kwargs):
+    gen = _original_glob(self, pattern, *args, **kwargs)
+    if isinstance(pattern, str) and pattern.endswith("*.md"):
+        for p in gen:
+            if p.name not in ("index.md", "log.md"):
+                yield p
+    else:
+        yield from gen
+
+
+def _filtered_rglob(self, pattern, *args, **kwargs):
+    gen = _original_rglob(self, pattern, *args, **kwargs)
+    if isinstance(pattern, str) and pattern.endswith("*.md"):
+        for p in gen:
+            if p.name not in ("index.md", "log.md"):
+                yield p
+    else:
+        yield from gen
+
+
+Path.glob = _filtered_glob
+Path.rglob = _filtered_rglob
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = Path(os.environ.get("KB_CONFIG_PATH", str(ROOT / "config" / "kb_config.yaml")))
@@ -149,7 +178,18 @@ def load_json(path: Path, default: Any) -> Any:
 
 def save_json(path: Path, data: Any) -> None:
     ensure_dir(path.parent)
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    content = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+    os.replace(tmp_path, path)
 
 
 def shell_join(cmd: list[str]) -> str:
@@ -188,7 +228,17 @@ def detect_agent_command(agent: str) -> list[str]:
 
 def write_text(path: Path, content: str) -> None:
     ensure_dir(path.parent)
-    path.write_text(content, encoding="utf-8")
+    with tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        delete=False,
+    ) as tmp:
+        tmp.write(content)
+        tmp_path = Path(tmp.name)
+    os.replace(tmp_path, path)
 
 
 def find_source_note(source_id: str) -> Path | None:

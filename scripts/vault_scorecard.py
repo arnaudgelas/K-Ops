@@ -265,6 +265,10 @@ def _score_claims() -> dict:
             "unsupported": 0,
             "direct_citation_rate": None,
             "direct_citation_rate_by_quality": {},
+            "by_admission_status": {},
+            "quarantined": 0,
+            "blocked": 0,
+            "synthetic_origin": 0,
         }
     payload = json.loads(_CLAIMS_PATH.read_text(encoding="utf-8"))
     claims = payload.get("claims", [])
@@ -272,6 +276,9 @@ def _score_claims() -> dict:
     with_sources = sum(1 for c in claims if c.get("source_ids"))
     quality_counter: Counter = Counter(str(c.get("claim_quality") or "unknown") for c in claims)
     evidence_counter: Counter = Counter(str(c.get("evidence_status") or "unknown") for c in claims)
+    admission_counter: Counter = Counter(
+        str(c.get("admission_status") or "unknown") for c in claims
+    )
     direct_by_quality: dict[str, float | None] = {}
     for quality in sorted(quality_counter):
         quality_claims = [c for c in claims if str(c.get("claim_quality") or "unknown") == quality]
@@ -366,9 +373,13 @@ def _score_claims() -> dict:
         "with_sources": with_sources,
         "without_sources": total - with_sources,
         "by_evidence_status": dict(evidence_counter),
+        "by_admission_status": dict(admission_counter),
         "direct": direct,
         "inherited": inherited,
         "unsupported": unsupported,
+        "quarantined": admission_counter.get("quarantine", 0),
+        "blocked": admission_counter.get("blocked", 0),
+        "synthetic_origin": sum(1 for c in claims if c.get("synthetic_origin") is True),
         "direct_citation_rate": round(direct / total, 3) if total else None,
         "direct_citation_rate_by_quality": direct_by_quality,
         "span_status_distribution": dict(_span_status_dist),
@@ -694,6 +705,22 @@ def _compute_signals(
                 "message": f"{claims['unsupported']} claim(s) have no direct or page-level source evidence",
             }
         )
+    if claims.get("quarantined", 0) > 0:
+        signals.append(
+            {
+                "code": "quarantined-claims",
+                "severity": "warning",
+                "message": f"{claims['quarantined']} claim(s) depend on weak, synthetic, deprecated, or unverified sources",
+            }
+        )
+    if claims.get("blocked", 0) > 0:
+        signals.append(
+            {
+                "code": "blocked-claims",
+                "severity": "error",
+                "message": f"{claims['blocked']} claim(s) depend on revoked, do-not-use, or adversarial sources",
+            }
+        )
 
     if answers["revalidation_required"] > 0:
         signals.append(
@@ -904,6 +931,13 @@ def print_summary(scorecard: dict) -> None:
             f"{cl.get('direct', 0)} direct, {cl.get('inherited', 0)} inherited, "
             f"{cl.get('unsupported', 0)} unsupported "
             f"({cl['direct_citation_rate']:.0%} direct)"
+        )
+    if cl.get("by_admission_status"):
+        print(
+            "  admission status: "
+            + ", ".join(
+                f"{k}:{v}" for k, v in sorted((cl.get("by_admission_status") or {}).items())
+            )
         )
     _sac = cl.get("source_section_anchor_coverage")
     _lsbc = cl.get("long_source_bare_citation_count", 0)

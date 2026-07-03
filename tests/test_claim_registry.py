@@ -24,8 +24,47 @@ def _make_concept(tmp_path: Path, stem: str, body: str, claim_quality: str = "su
 
 def _patch_cr(cr_mod, tmp_path: Path) -> None:
     """Point claim_registry at the tmp vault."""
-    cr_mod.CONFIG = type("C", (), {"concepts_dir": tmp_path / "notes" / "Concepts"})()
+    cr_mod.CONFIG = type(
+        "C",
+        (),
+        {
+            "concepts_dir": tmp_path / "notes" / "Concepts",
+            "summaries_dir": tmp_path / "notes" / "Sources",
+        },
+    )()
     cr_mod.ROOT = tmp_path
+
+
+def _make_source(
+    tmp_path: Path,
+    source_id: str,
+    *,
+    evidence_strength: str = "primary-doc",
+    source_kind: str = "official-doc",
+    source_status: str = "active",
+    verification_state: str | None = None,
+    adversarial_content: bool | None = None,
+) -> Path:
+    sources = tmp_path / "notes" / "Sources"
+    sources.mkdir(parents=True, exist_ok=True)
+    path = sources / f"{source_id}.md"
+    lines = [
+        "---",
+        f"source_id: {source_id}",
+        "title: Test Source",
+        "source_url: https://example.com/source",
+        f"source_kind: {source_kind}",
+        f"evidence_strength: {evidence_strength}",
+        f"source_status: {source_status}",
+        'ingested_at: "2026-01-01"',
+    ]
+    if verification_state is not None:
+        lines.append(f"verification_state: {verification_state}")
+    if adversarial_content is not None:
+        lines.append(f"adversarial_content: {str(adversarial_content).lower()}")
+    lines.extend(["---", "", "## Summary", "", "Content."])
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
 
 
 def test_no_claims_section_returns_empty(tmp_path):
@@ -140,6 +179,46 @@ def test_source_anchor_fields_are_parsed(tmp_path):
     assert anchor["commit"] == "abc123"
     assert claim["quote_or_anchor"] == "path=src/app.py&L10=L20&commit=abc123"
     assert claim["span_status"] == "anchored"
+
+
+def test_claim_admission_status_quarantines_model_generated_sources(tmp_path):
+    import claim_registry as cr
+
+    _make_source(
+        tmp_path,
+        "src-1122334455",
+        evidence_strength="model-generated",
+        source_kind="imported-model-report",
+        verification_state="needs_primary_sources",
+    )
+    body = "## Key Claims\n\n- Synthetic lead claim ([[Sources/src-1122334455|source]]).\n"
+    path = _make_concept(tmp_path, "Synthetic_Lead", body)
+    _patch_cr(cr, tmp_path)
+    claim = cr.extract_claims_from_concept(path)[0]
+
+    assert claim["admission_status"] == "quarantine"
+    assert claim["synthetic_origin"] is True
+    assert "evidence-strength:model-generated" in claim["admission_reasons"]
+    assert "verification-state:needs_primary_sources" in claim["admission_reasons"]
+
+
+def test_claim_admission_status_blocks_revoked_or_adversarial_sources(tmp_path):
+    import claim_registry as cr
+
+    _make_source(
+        tmp_path,
+        "src-1122334455",
+        source_status="revoked",
+        adversarial_content=True,
+    )
+    body = "## Key Claims\n\n- Blocked claim ([[Sources/src-1122334455|source]]).\n"
+    path = _make_concept(tmp_path, "Blocked", body)
+    _patch_cr(cr, tmp_path)
+    claim = cr.extract_claims_from_concept(path)[0]
+
+    assert claim["admission_status"] == "blocked"
+    assert "source-status:revoked" in claim["admission_reasons"]
+    assert "adversarial-content" in claim["admission_reasons"]
 
 
 def test_claim_id_ignores_added_citation(tmp_path):

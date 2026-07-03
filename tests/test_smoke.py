@@ -24,6 +24,12 @@ def test_validate_exits_zero():
     assert result.returncode == 0, f"validate failed:\n{result.stderr}"
 
 
+def test_add_help_exits_zero():
+    result = _run(["add", "--help"])
+    assert result.returncode == 0, f"add --help failed:\n{result.stderr}"
+    assert "Ingest one URL" in result.stdout
+
+
 def test_validate_strict_exits_zero():
     result = _run(["validate", "--strict"])
     assert result.returncode == 0, f"validate --strict failed:\n{result.stderr}"

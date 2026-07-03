@@ -303,6 +303,50 @@ def test_claim_direct_citation_metrics(tmp_path):
     assert "unsupported-claims" in codes
 
 
+def test_claim_admission_metrics_trigger_health_signals(tmp_path):
+    import vault_scorecard as vs
+
+    dirs = _make_dirs(tmp_path)
+    _patch_vs(vs, dirs)
+    claims_path = dirs["root"] / "data" / "claims.json"
+    claims_path.parent.mkdir(parents=True, exist_ok=True)
+    claims_path.write_text(
+        json.dumps(
+            {
+                "claims": [
+                    {
+                        "id": "clm-1",
+                        "claim_quality": "provisional",
+                        "source_ids": ["src-1111111111"],
+                        "evidence_status": "direct",
+                        "admission_status": "quarantine",
+                        "synthetic_origin": True,
+                    },
+                    {
+                        "id": "clm-2",
+                        "claim_quality": "supported",
+                        "source_ids": ["src-2222222222"],
+                        "evidence_status": "direct",
+                        "admission_status": "blocked",
+                        "synthetic_origin": False,
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    sc = vs.compute_scorecard()
+    assert sc["claims"]["by_admission_status"]["quarantine"] == 1
+    assert sc["claims"]["by_admission_status"]["blocked"] == 1
+    assert sc["claims"]["quarantined"] == 1
+    assert sc["claims"]["blocked"] == 1
+    assert sc["claims"]["synthetic_origin"] == 1
+    codes = {s["code"] for s in sc["health_signals"]}
+    assert "quarantined-claims" in codes
+    assert "blocked-claims" in codes
+
+
 def test_conflicting_no_oq_detected(tmp_path):
     import vault_scorecard as vs
 

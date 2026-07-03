@@ -4,6 +4,7 @@ import argparse
 
 from utils import ROOT
 from kb_commands import (
+    run_add_source,
     run_claim_search,
     run_backfill_answer_quality,
     run_backfill_concept_quality,
@@ -96,6 +97,15 @@ def main() -> None:
         "--branch", help="Optional branch override for GitHub repository URLs in the input list."
     )
     p_ingest.add_argument("--fail-fast", action="store_true")
+
+    p_add = sub.add_parser(
+        "add",
+        help="Ingest one URL, GitHub repo URL, or local file directly.",
+        description="Ingest one URL, GitHub repo URL, or local file directly.",
+    )
+    p_add.add_argument("source")
+    p_add.add_argument("--branch", help="Optional branch override for GitHub repository URLs.")
+    p_add.add_argument("--fail-fast", action="store_true")
 
     p_ingest_github = sub.add_parser("ingest-github")
     p_ingest_github.add_argument("--repo", required=True)
@@ -388,6 +398,17 @@ def main() -> None:
     )
     p_scorecard.add_argument("--dry-run", action="store_true", help="Run without mutating files.")
 
+    p_audit_kb = sub.add_parser(
+        "audit-kb",
+        help="Run the epistemic audit scorecard and write data/scorecard.json.",
+    )
+    p_audit_kb.add_argument("--output", help="Override output path.")
+    p_audit_kb.add_argument("--format", choices=["text", "json"], default="text")
+    p_audit_kb.add_argument(
+        "--check", action="store_true", help="Fail if scorecard is out of sync."
+    )
+    p_audit_kb.add_argument("--dry-run", action="store_true", help="Run without mutating files.")
+
     p_stale_impact = sub.add_parser(
         "stale-impact", help="Report concept pages and answers flagged for revalidation."
     )
@@ -436,6 +457,8 @@ def main() -> None:
 
     if args.command == "ingest":
         run_fetch(args.input, branch=args.branch, fail_fast=args.fail_fast)
+    elif args.command == "add":
+        run_add_source(args.source, branch=args.branch, fail_fast=args.fail_fast)
     elif args.command == "ingest-github":
         run_ingest_github(args.repo, args.branch)
         if args.compile_agent:
@@ -554,7 +577,7 @@ def main() -> None:
         run_extract_contradictions(check=args.check, dry_run=args.dry_run)
     elif args.command == "contradiction-search":
         run_contradiction_search(args.query, limit=args.limit, fmt=args.format)
-    elif args.command == "scorecard":
+    elif args.command in {"scorecard", "audit-kb"}:
         run_scorecard(output=args.output, fmt=args.format, check=args.check, dry_run=args.dry_run)
     elif args.command == "stale-impact":
         run_stale_impact(fmt=args.format)
