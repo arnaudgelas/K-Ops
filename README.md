@@ -92,6 +92,32 @@ validation. Agents should own interpretation, synthesis, and prose. Recent
 hardening work moves more context from Python into prompts instead of asking
 agents to rediscover it by hand.
 
+### Direction: governed claim graph
+
+The current repo is file-native: Markdown is the human workspace and JSON files
+are the machine-readable audit layer. The intended direction is stricter than
+"RAG over notes":
+
+```text
+Source -> SourceSpan -> Claim -> Entity -> Relation
+       -> Contradiction -> ValidationEvent -> ContextPackage -> AnswerMemo
+```
+
+That target model matters because a research system has to answer questions
+that a summary vault cannot answer reliably:
+
+- was this claim true at the time it was stated?
+- which source span supports it?
+- where does it apply, and where does it not apply?
+- what contradicts or supersedes it?
+- who or what validated it?
+- what answers or decisions depend on it?
+- is it allowed to support a consequential recommendation?
+
+Until that canonical claim graph is implemented, treat concept pages as curated
+working surfaces and the registries as audit surfaces, not as proof that every
+claim has been independently verified.
+
 ### Implemented vs planned
 
 Implemented today:
@@ -112,6 +138,8 @@ Planned, not implemented as a production feature:
 - persistent SQLite/FTS index
 - quote-span claim verification against raw evidence
 - automatic content-hash stale cascade on refresh
+- bitemporal claim history and validation events
+- consequence thresholds for high-impact answers
 - supervised concept merge, rename, and distillation tools
 
 ---
@@ -150,12 +178,34 @@ Current limits:
 - citation presence is checked more strongly than citation entailment
 - quote-span verification against raw text is not yet implemented
 - content hash changes do not yet trigger a full automatic invalidation cascade
+- contradiction records do not yet distinguish direct conflict, temporal
+  supersession, scope mismatch, terminology conflict, or synthetic contamination
 - concept pages can still accumulate duplicate or stale claims without a
   supervised distillation pass
+- retrieval is still lexical/BM25-first; graph traversal, embeddings,
+  reranking, and query routing are roadmap items
 - agent runs still require human review before consequential use
 
 Treat K-Ops as a governed research-workflow substrate, not as an autonomous
 truth oracle.
+
+## Admission Rule
+
+Do not treat ingestion as progress by itself. A new source only becomes useful
+after it has passed through admission, decomposition, linking, contradiction
+review, and evaluation.
+
+For serious use, operate with three zones:
+
+- **Raw intake:** fetched material in `data/raw/`; preserved, but not trusted.
+- **Quarantine:** weak, synthetic, ambiguous, stale, or low-authority material;
+  visible to operators, but not allowed to support high-consequence answers.
+- **Curated vault:** source summaries, concept pages, claims, and answers that
+  have passed the current lint/schema/scorecard gates and human review.
+
+The practical discipline is simple: curation capacity should determine
+ingestion volume. If you cannot validate, link, and evaluate the material, do
+not keep adding more.
 
 ---
 
@@ -483,6 +533,21 @@ If you are refreshing an existing vault, use this instead:
 ```bash
 uv run python scripts/kb.py refresh --agent codex
 ```
+
+For daily or weekly production use, prefer an epistemic workflow over a
+continuous collector:
+
+1. Add sources to intake.
+2. Normalize and hash sources.
+3. Compile source summaries.
+4. Extract candidate claims and contradictions.
+5. Run lint, schema validation, and scorecard.
+6. Review quarantined or weak claims before promoting them.
+7. Fix stale, orphaned, duplicate, and unsupported knowledge.
+8. Ask or render only after the vault is clean enough for the consequence level.
+
+The repository is intentionally conservative here. More ingestion without
+admission control creates epistemic debt.
 
 ---
 

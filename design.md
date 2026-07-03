@@ -34,6 +34,49 @@ The curated vault remains Markdown-first so it can be opened directly in
 Obsidian and reviewed with normal Git tooling. Machine-readable JSON files are
 derived audit surfaces unless explicitly documented otherwise.
 
+## Target Canonical Model
+
+The long-term design should not make the Obsidian vault the silent source of
+truth. Markdown should be the human-readable projection of a governed claim
+model.
+
+Target object chain:
+
+```text
+Source
+SourceSpan
+Claim
+Entity
+Relation
+Contradiction
+ValidationEvent
+ContextPackage
+AnswerMemo
+```
+
+Minimum production-grade claim fields:
+
+- stable claim ID
+- normalized statement
+- claim type
+- source span or quote anchor
+- acquisition mode
+- provenance chain
+- epistemic tier
+- governance regime
+- scope
+- valid time
+- system time
+- contradiction status
+- decay class
+- dependency edges
+- validation events
+
+The current extracted claim registry is a useful audit surface, but it is not
+yet this canonical model. The design should evolve toward evented claim state:
+created, promoted, demoted, contradicted, superseded, merged, deprecated,
+validated, and retired.
+
 ## Implemented Control Points
 
 ### Source Intake
@@ -105,6 +148,27 @@ This lets weak, synthetic, deprecated, revoked, missing, or adversarial sources
 surface in `data/claims.json` and `data/scorecard.json`, not only in lint
 messages.
 
+### Evaluation Surface
+
+Unit tests protect code behavior. They do not measure whether the knowledge
+base is epistemically healthy.
+
+The evaluation layer should become a product surface with stable metrics for:
+
+- retrieval recall
+- context precision
+- citation accuracy
+- claim faithfulness
+- contradiction surfacing
+- stale-source refusal
+- coverage of important concepts
+- single-source dependency risk
+- unsupported answer rate
+
+Deterministic retrieval benchmarks should run in CI. LLM-judged faithfulness
+and citation-entailment checks can run as slower audits, but their outputs
+should still be stored as versioned evaluation records.
+
 ### Atomic State Writes
 
 Shared utility writes use temp files plus `os.replace()` for JSON and text
@@ -135,10 +199,41 @@ Current checks are weaker for truth:
 - citation presence is not the same as citation support
 - quote-span verification against raw evidence is not implemented
 - LLM-written summaries and concept claims still need human review
+- answer memos are validated for provenance shape, not full sentence-level
+  entailment
 
 The next correctness step is quote-anchored claim verification: require claims
 to carry a source span or short quote and verify that the quote exists in raw
 or normalized evidence before promotion.
+
+## Staleness and Contradictions
+
+Staleness is source-specific:
+
+- a GitHub repository changes by commit
+- a regulation changes by amendment
+- a paper changes by version
+- a blog post or vendor doc may change silently
+- a benchmark result can expire when models, datasets, or tooling change
+
+The desired behavior is not only "mark source stale." It is dependency impact:
+which source summaries, claims, concepts, answer memos, and rendered outputs
+depend on the changed source?
+
+Contradictions also need typed handling. A generic conflict bucket is too weak.
+The taxonomy should distinguish:
+
+- direct contradiction
+- temporal supersession
+- scope mismatch
+- terminology conflict
+- interpretation dispute
+- evidence-quality conflict
+- synthetic contamination
+
+This is especially important when model-generated reports are imported as
+leads. Synthetic origin must survive extraction so repeated model output does
+not become mistaken for independent corroboration.
 
 ## Security Model
 
@@ -168,6 +263,7 @@ Desired direction:
 5. Fail loudly when provenance fields are missing.
 6. Keep generated audit artifacts reproducible.
 7. Preserve Git review as the final safety rail.
+8. Gate high-consequence answers behind stronger evidence thresholds.
 
 ## Near-Term Roadmap
 
@@ -177,6 +273,9 @@ Desired direction:
 - Compare stored content hashes during refresh and mark dependent notes stale.
 - Make source review flags blocking in compile workflows.
 - Add pre/post agent-run Git checkpoints or branches.
+- Add an epistemic audit command that reports unsupported claims, stale claims,
+  orphan concepts, duplicate sources, weak high-centrality claims, and
+  contradiction backlog as fixable work items.
 
 ### P1: Daily Collection
 
@@ -184,6 +283,8 @@ Desired direction:
   report.
 - Add RSS/bookmark import adapters.
 - Connect unanswered questions and missing topics to source suggestions.
+- Add source-specific freshness policies for GitHub, papers, regulations,
+  official docs, vendor docs, and benchmarks.
 
 ### P2: Knowledge Maintenance
 
@@ -191,12 +292,26 @@ Desired direction:
 - Add `rename-concept` and `merge-concepts` with link rewrites and redirect
   stubs.
 - Add claim-level deduplication and multi-source claim merging.
+- Add validation commands for promote, demote, challenge, merge, supersede, and
+  retire.
 
 ### P3: Scale
 
 - Persist retrieval indexes instead of rebuilding them per query.
 - Consider SQLite + FTS5 behind the current retrieval API.
 - Record scorecard history as JSONL and report deltas.
+- Add hybrid retrieval: exact lookup, BM25, embeddings, graph traversal,
+  reranking, and query routing.
+
+### P4: Consequence Gating
+
+- Define thresholds for exploratory, recommendation, decision, and autonomous
+  action use.
+- Prevent low-tier or quarantined claims from supporting high-consequence
+  outputs.
+- Require context-package manifests for important answers, including included
+  claims, excluded claims, gaps, stale flags, contradictions, and source
+  manifests.
 
 ## RVF and MCP Status
 
