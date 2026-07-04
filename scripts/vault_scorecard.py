@@ -435,6 +435,53 @@ def _score_contradictions() -> dict:
     }
 
 
+def _score_graph_topology() -> dict:
+    """Compute graph-topology health metrics from vault_graph.json."""
+    graph_path = ROOT / "data" / "graph" / "vault_graph.json"
+    if not graph_path.exists():
+        return {"available": False}
+    try:
+        G = json.loads(graph_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {"available": False}
+
+    nodes = G.get("nodes", [])
+    edges = G.get("edges", [])
+
+    in_deg: dict[str, int] = {}
+    out_deg: dict[str, int] = {}
+    for n in nodes:
+        in_deg[n["id"]] = 0
+        out_deg[n["id"]] = 0
+    for e in edges:
+        out_deg[e["source"]] = out_deg.get(e["source"], 0) + 1
+        in_deg[e["target"]] = in_deg.get(e["target"], 0) + 1
+
+    src_nodes = [n for n in nodes if n.get("kind") == "source"]
+    con_nodes = [n for n in nodes if n.get("kind") == "concept"]
+    ans_nodes = [n for n in nodes if n.get("kind") == "answer"]
+    contra_nodes = [n for n in nodes if n.get("kind") == "contradiction"]
+
+    orphaned_sources = sum(1 for n in src_nodes if in_deg.get(n["id"], 0) == 0)
+    isolated_concepts = sum(
+        1 for n in con_nodes
+        if in_deg.get(n["id"], 0) + out_deg.get(n["id"], 0) == 0
+    )
+    isolated_answers = sum(1 for n in ans_nodes if out_deg.get(n["id"], 0) == 0)
+
+    return {
+        "available": True,
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "source_count": len(src_nodes),
+        "orphaned_sources": orphaned_sources,
+        "orphaned_source_rate": round(orphaned_sources / max(len(src_nodes), 1), 3),
+        "isolated_concepts": isolated_concepts,
+        "isolated_answers": isolated_answers,
+        "contradiction_nodes": len(contra_nodes),
+    }
+
+
 def _score_schema_compliance() -> dict:
     """Count schema violations across source notes, concept pages, and answer memos."""
     try:
@@ -633,6 +680,7 @@ def _compute_signals(
     answers: dict,
     contradictions: dict | None = None,
     probes: dict | None = None,
+    graph_topo: dict | None = None,
 ) -> list[dict]:
     signals: list[dict] = []
 
@@ -731,6 +779,42 @@ def _compute_signals(
             }
         )
 
+    if graph_topo and graph_topo.get("available"):
+        orphan_rate = graph_topo.get("orphaned_source_rate", 0)
+        if orphan_rate > 0.5:
+            signals.append(
+                {
+                    "code": "orphaned-sources",
+                    "severity": "warning",
+                    "message": (
+                        f"{graph_topo['orphaned_sources']} source(s) ({orphan_rate:.0%}) have no inbound"
+                        " citations — run build-graph after adding inline citations"
+                    ),
+                }
+            )
+        if graph_topo.get("isolated_concepts", 0) > 0:
+            signals.append(
+                {
+                    "code": "isolated-concepts",
+                    "severity": "warning",
+                    "message": (
+                        f"{graph_topo['isolated_concepts']} concept(s) have no graph connections"
+                        " — add Related Concepts wikilinks"
+                    ),
+                }
+            )
+        if graph_topo.get("isolated_answers", 0) > 0:
+            signals.append(
+                {
+                    "code": "isolated-answers",
+                    "severity": "info",
+                    "message": (
+                        f"{graph_topo['isolated_answers']} answer(s) have no outbound concept links"
+                        " — add Vault Updates section or archive"
+                    ),
+                }
+            )
+
     if contradictions and contradictions.get("undocumented", 0) > 0:
         signals.append(
             {
@@ -774,7 +858,8 @@ def compute_scorecard() -> dict:
     research = _score_research()
     eval_runs = _score_eval_runs()
     schema_compliance = _score_schema_compliance()
-    signals = _compute_signals(concepts, sources, claims, answers, contradictions, probes)
+    graph_topo = _score_graph_topology()
+    signals = _compute_signals(concepts, sources, claims, answers, contradictions, probes, graph_topo)
     # Add schema-drift health signal
     err_count = schema_compliance.get("error_count", 0)
     if err_count > 200:
@@ -831,6 +916,7 @@ def compute_scorecard() -> dict:
         "research": research,
         "contradictions": contradictions,
         "schema_compliance": schema_compliance,
+        "graph_topology": graph_topo,
         "eval": eval_runs,
         "health_signals": signals,
     }
