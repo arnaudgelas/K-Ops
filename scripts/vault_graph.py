@@ -804,6 +804,158 @@ def run(
         print("Vault graph and reports are up to date.")
 
 
+def graph_audit(graph: dict | None = None) -> dict:
+    """Detect structural antipatterns in the vault knowledge graph.
+
+    Returns a dict with keys:
+      - antipatterns: list of findings, each with code/severity/message/examples
+      - stats: raw degree statistics used for thresholds
+
+    Only flags antipatterns that are:
+      (a) measurable from the graph structure, and
+      (b) not already covered by a scorecard signal.
+
+    Deliberately excluded:
+      - 'claims with degree 1' — after direct-citation work, degree-1 is the correct
+        state for single-cited claims; use the 'unsupported-claims' signal instead.
+      - 'tags dominating centrality' — tags are metadata, not graph nodes; centrality
+        is unmeasurable; the BM25 retrieval deweighting already handles this.
+      - 'reports with no claim links' — research reports are not vault nodes;
+        use the 'isolated-answers' signal for answer nodes instead.
+      - 'degree-1 concepts → shallow splitting' — indistinguishable from legitimate
+        stubs without pairwise source-overlap analysis.
+    """
+    import math
+
+    if graph is None:
+        graph = load_graph()
+
+    nodes = graph.get("nodes", [])
+    edges = graph.get("edges", [])
+
+    in_deg: dict[str, int] = {n["id"]: 0 for n in nodes}
+    out_deg: dict[str, int] = {n["id"]: 0 for n in nodes}
+    for e in edges:
+        out_deg[e["source"]] = out_deg.get(e["source"], 0) + 1
+        in_deg[e["target"]] = in_deg.get(e["target"], 0) + 1
+
+    total_deg: dict[str, int] = {
+        nid: in_deg.get(nid, 0) + out_deg.get(nid, 0) for nid in in_deg
+    }
+    id_to_node: dict[str, dict] = {n["id"]: n for n in nodes}
+
+    # ── per-kind degree lists ────────────────────────────────────────────
+    concept_nodes = [n for n in nodes if n.get("kind") == "concept"]
+    contra_nodes  = [n for n in nodes if n.get("kind") == "contradiction"]
+
+    findings: list[dict] = []
+
+    # ── 1. HUB OUTLIER ──────────────────────────────────────────────────
+    # A concept whose degree is > mean + 2.5σ is a candidate for splitting.
+    # Threshold is relative so it scales with vault size.
+    if len(concept_nodes) >= 5:
+        degs = [total_deg.get(n["id"], 0) for n in concept_nodes]
+        mean = sum(degs) / len(degs)
+        variance = sum((d - mean) ** 2 for d in degs) / len(degs)
+        sigma = math.sqrt(variance)
+        threshold = mean + 2.5 * sigma
+        outliers = [
+            n for n in concept_nodes
+            if total_deg.get(n["id"], 0) > threshold
+        ]
+        if outliers:
+            findings.append({
+                "code": "hub-outlier",
+                "severity": "warning",
+                "message": (
+                    f"{len(outliers)} concept(s) have degree > {threshold:.0f} "
+                    f"(mean={mean:.1f}, σ={sigma:.1f}) — candidates for splitting "
+                    f"or subordinating into child pages"
+                ),
+                "examples": [
+                    {"id": n["id"], "title": n.get("title", ""), "degree": total_deg[n["id"]]}
+                    for n in sorted(outliers, key=lambda n: -total_deg[n["id"]])[:5]
+                ],
+                "threshold": round(threshold, 1),
+            })
+
+    # ── 2. SINGLE-SOURCE DEPENDENCY ─────────────────────────────────────
+    # A concept where every supported_by edge from its claims points to the
+    # same one source. One retraction or deprecation breaks the entire concept.
+    concept_to_support_srcs: dict[str, set[str]] = {}
+    for e in edges:
+        if e.get("relation") != "supported_by":
+            continue
+        claim_nid = e["source"]
+        src_nid   = e["target"]
+        claim_node = id_to_node.get(claim_nid, {})
+        concept_id = claim_node.get("concept_id") or claim_node.get("frontmatter", {}).get("concept")
+        if concept_id:
+            if not concept_id.startswith("concept:"):
+                concept_id = f"concept:{concept_id}"
+            concept_to_support_srcs.setdefault(concept_id, set()).add(src_nid)
+
+    single_src_concepts = [
+        cid for cid, srcs in concept_to_support_srcs.items()
+        if len(srcs) == 1 and id_to_node.get(cid)
+    ]
+    if single_src_concepts:
+        findings.append({
+            "code": "single-source-dependency",
+            "severity": "warning",
+            "message": (
+                f"{len(single_src_concepts)} concept(s) have all claims grounded in "
+                f"a single source — one retraction or deprecation makes the entire "
+                f"concept unsupported"
+            ),
+            "examples": [
+                {
+                    "id": cid,
+                    "title": id_to_node[cid].get("title", ""),
+                    "source": next(iter(concept_to_support_srcs[cid])),
+                }
+                for cid in single_src_concepts[:5]
+                if id_to_node.get(cid)
+            ],
+        })
+
+    # ── 3. VAGUE CONTRADICTION ──────────────────────────────────────────
+    # A contradiction node with degree > 4 is accumulating too many connections
+    # to be a specific, actionable conflict. Degree 2 is ideal (the two claims).
+    # Degree 3 adds the concept link. Beyond that, the contradiction is a catch-all.
+    vague_contras = [
+        n for n in contra_nodes
+        if total_deg.get(n["id"], 0) > 4
+    ]
+    if vague_contras:
+        findings.append({
+            "code": "vague-contradiction",
+            "severity": "warning",
+            "message": (
+                f"{len(vague_contras)} contradiction node(s) have degree > 4 — "
+                f"likely a catch-all conflict category rather than a specific, "
+                f"actionable claim-pair contradiction"
+            ),
+            "examples": [
+                {"id": n["id"], "title": n.get("title", ""), "degree": total_deg[n["id"]]}
+                for n in sorted(vague_contras, key=lambda n: -total_deg[n["id"]])[:5]
+            ],
+        })
+
+    # ── stats block ──────────────────────────────────────────────────────
+    concept_degs = [total_deg.get(n["id"], 0) for n in concept_nodes]
+    stats: dict = {
+        "total_nodes": len(nodes),
+        "total_edges": len(edges),
+        "concept_degree_mean": round(sum(concept_degs) / max(len(concept_degs), 1), 1),
+        "concept_degree_max": max(concept_degs) if concept_degs else 0,
+        "contradiction_count": len(contra_nodes),
+        "single_source_dependency_count": len(single_src_concepts),
+    }
+
+    return {"antipatterns": findings, "stats": stats}
+
+
 def main() -> None:
     import argparse
 

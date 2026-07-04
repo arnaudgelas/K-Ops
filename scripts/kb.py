@@ -12,6 +12,7 @@ from kb_commands import (
     run_backfill_source_notes,
     run_bootstrap,
     run_build_graph,
+    run_graph_audit,
     run_clear_stale_flags,
     run_contradiction_search,
     run_export_index,
@@ -268,6 +269,16 @@ def main() -> None:
     p_suggest.add_argument("--limit", type=int, default=50)
     p_suggest.add_argument("--format", choices=["json", "text"], default="json")
     p_suggest.add_argument("--output", help="Write JSON output to this path.")
+
+    p_graph_audit = sub.add_parser(
+        "graph-audit",
+        help="Detect structural antipatterns in the vault graph (hub outliers, "
+             "single-source dependencies, vague contradictions).",
+    )
+    p_graph_audit.add_argument(
+        "--format", choices=["text", "json"], default="text",
+        help="Output format (default: text).",
+    )
 
     p_build_graph = sub.add_parser("build-graph")
     p_build_graph.add_argument("--output")
@@ -532,6 +543,8 @@ def main() -> None:
             fmt=args.format,
             output=args.output,
         )
+    elif args.command == "graph-audit":
+        run_graph_audit(fmt=args.format)
     elif args.command == "build-graph":
         run_build_graph(
             output=args.output,

@@ -437,6 +437,37 @@ def run_build_graph(
     )
 
 
+def run_graph_audit(fmt: str = "text") -> None:
+    from vault_graph import graph_audit, load_graph
+
+    report = graph_audit(load_graph())
+    findings = report["antipatterns"]
+    stats = report["stats"]
+
+    if fmt == "json":
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return
+
+    print(f"Graph audit  ({stats['total_nodes']} nodes, {stats['total_edges']} edges)")
+    print(f"Concept degree: mean={stats['concept_degree_mean']}  max={stats['concept_degree_max']}")
+    print()
+    if not findings:
+        print("No antipatterns detected.")
+        return
+    for f in findings:
+        severity = f["severity"].upper()
+        print(f"[{severity}] {f['code']}")
+        print(f"  {f['message']}")
+        for ex in f.get("examples", []):
+            parts = [ex.get("title") or ex.get("id", "")]
+            if "degree" in ex:
+                parts.append(f"deg={ex['degree']}")
+            if "source" in ex:
+                parts.append(f"src={ex['source']}")
+            print(f"    • {' | '.join(str(p) for p in parts)}")
+        print()
+
+
 def run_search_graph(query: str, limit: int = 10, scope: str = "all", fmt: str = "json") -> None:
     results = search_graph(load_graph(), query, limit=limit, scope=scope)
     if fmt == "json":
