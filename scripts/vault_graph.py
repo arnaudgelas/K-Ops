@@ -9,6 +9,7 @@ from collections import Counter, deque
 from pathlib import Path
 from typing import Iterable
 
+from claim_registry import claim_stable_id as _claim_stable_id
 from utils import CONFIG, ROOT, ensure_dir, parse_frontmatter
 
 
@@ -314,6 +315,9 @@ def build_nodes_and_edges() -> dict:
         nodes.append(node)
         node_map[node["id"]] = node
 
+    # Maps clm-xxx hash IDs (from claim_registry) to positional graph node IDs
+    claim_hash_to_graph_id: dict[str, str] = {}
+
     for path in sorted(CONFIG.concepts_dir.glob("*.md")):
         frontmatter, body = read_note(path)
         add_node("concept", path, frontmatter, body)
@@ -324,6 +328,9 @@ def build_nodes_and_edges() -> dict:
             evidence_sources = extract_section_links(body, EVIDENCE_SECTION_RE)
             for index, claim_text in enumerate(claim_texts, start=1):
                 node = claim_node(path, frontmatter, body, claim_text, index)
+                hash_id = _claim_stable_id(path.stem, claim_text)
+                node["claim_hash_id"] = hash_id
+                claim_hash_to_graph_id[hash_id] = node["id"]
                 nodes.append(node)
                 node_map[node["id"]] = node
                 edges.append(
@@ -370,33 +377,6 @@ def build_nodes_and_edges() -> dict:
         if frontmatter.get("type") != "answer":
             continue
         add_node("answer", path, frontmatter, body)
-
-    _CONTRA_PATH = ROOT / "data" / "contradictions.json"
-    if _CONTRA_PATH.exists():
-        try:
-            contra_payload = json.loads(_CONTRA_PATH.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            contra_payload = {}
-        for rec in contra_payload.get("contradictions", []):
-            cid = str(rec.get("id", ""))
-            if not cid:
-                continue
-            contra_nid = f"contradiction:{cid}"
-            contra_node = {
-                "id": contra_nid,
-                "kind": "contradiction",
-                "title": (rec.get("open_question") or cid)[:120],
-                "concept": rec.get("concept"),
-                "documented": rec.get("documented", False),
-                "tags": ["kb/contradiction"],
-                "status": "documented" if rec.get("documented") else "open",
-                "scope": "contradiction",
-                "retention_score": 1.0,
-                "retention_tier": "keep",
-                "search_text": rec.get("open_question") or "",
-            }
-            nodes.append(contra_node)
-            node_map[contra_nid] = contra_node
 
     def add_edge(
         source: str, target: str, relation: str, section: str, weight: float = 1.0
@@ -474,24 +454,50 @@ def build_nodes_and_edges() -> dict:
             stem = linked.split("/", 1)[1] if "/" in linked else linked
             add_edge(index_id, node_id(target_kind, stem), "links_to", "Links")
 
+    _CONTRA_PATH = ROOT / "data" / "contradictions.json"
     if _CONTRA_PATH.exists():
         try:
-            contra_payload2 = json.loads(_CONTRA_PATH.read_text(encoding="utf-8"))
+            contra_payload = json.loads(_CONTRA_PATH.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            contra_payload2 = {}
-        for rec in contra_payload2.get("contradictions", []):
+            contra_payload = {}
+        for rec in contra_payload.get("contradictions", []):
             cid = str(rec.get("id", ""))
             if not cid:
                 continue
             contra_nid = f"contradiction:{cid}"
-            concept_stem = rec.get("concept")
-            if concept_stem:
+            contra_node = {
+                "id": contra_nid,
+                "kind": "contradiction",
+                "title": (rec.get("open_question") or cid)[:120],
+                "concept": rec.get("concept"),
+                "documented": rec.get("documented", False),
+                "tags": ["kb/contradiction"],
+                "status": "documented" if rec.get("documented") else "open",
+                "scope": "contradiction",
+                "retention_score": 1.0,
+                "retention_tier": "keep",
+                "search_text": rec.get("open_question") or "",
+            }
+            nodes.append(contra_node)
+            node_map[contra_nid] = contra_node
+            # Edge to owning concept
+            if rec.get("concept"):
                 add_edge(
                     contra_nid,
-                    node_id("concept", concept_stem),
+                    node_id("concept", rec["concept"]),
                     "involves_concept",
                     "Contradictions",
                 )
+            # Edges to conflicting claims (resolved via claim_hash_to_graph_id)
+            for clm_hash_id in rec.get("claim_ids", [])[:2]:
+                graph_claim_id = claim_hash_to_graph_id.get(clm_hash_id)
+                if graph_claim_id:
+                    add_edge(
+                        contra_nid,
+                        graph_claim_id,
+                        "conflicts_with",
+                        "Contradictions",
+                    )
 
     return {
         "project": CONFIG.project_name,
