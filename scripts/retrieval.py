@@ -33,6 +33,14 @@ from utils import CONFIG, ROOT, parse_frontmatter  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
+_STRUCTURAL_TAG_PREFIXES = ("kb/",)
+
+
+def _filter_tags_for_retrieval(tags: list[str]) -> list[str]:
+    """Remove structural/type tags that would inflate BM25 scores via high-frequency matches."""
+    return [t for t in tags if not any(t.startswith(p) for p in _STRUCTURAL_TAG_PREFIXES)]
+
+
 def _tokenize(text: str) -> list[str]:
     """Lowercase and split on whitespace + punctuation."""
     return [tok for tok in re.split(r"[\W_]+", text.lower()) if tok]
@@ -305,10 +313,21 @@ class VaultIndex:
         self._index_claims()
         self._index_source_sections()
 
-        # Build BM25 corpus from all records
-        self._corpus = [
-            _tokenize(r.get("search_text") or r.get("title") or "") for r in self._records
-        ]
+        # Build BM25 corpus from all records.
+        # Structural tags (kb/* prefixes) are stripped from each record's tag list before
+        # tokenising so they don't inflate BM25 scores via high-frequency matches.
+        def _record_search_text(r: dict) -> str:
+            base = r.get("search_text") or r.get("title") or ""
+            fm = r.get("frontmatter") or {}
+            raw_tags = fm.get("tags") or []
+            if isinstance(raw_tags, list):
+                content_tags = _filter_tags_for_retrieval(raw_tags)
+                if content_tags:
+                    base = base + "\n" + " ".join(content_tags)
+            return base
+
+        self._corpus = [_record_search_text(r) for r in self._records]
+        self._corpus = [_tokenize(text) for text in self._corpus]
         self._bm25 = _BM25(self._corpus)
         self._built = True
 
