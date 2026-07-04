@@ -58,6 +58,9 @@ ANSWER_LINK_RE = DualLinkPattern(
     r"\[[^\]]*\]\((?:\.\./)*(\bAnswers/[^)#\n]+)\.md(?:#[^)]*)?\))"
 )
 BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S.*?)\s*$")
+INLINE_SOURCE_CITE_RE = re.compile(
+    r"\[\[Sources/[^|\]#\n]+/(src-[0-9a-f]{10})(?:#[^|\]\n]*)?\|"
+)
 
 
 def read_note(path: Path) -> tuple[dict, str]:
@@ -341,15 +344,16 @@ def build_nodes_and_edges() -> dict:
                         "weight": 1.0,
                     }
                 )
-                for linked_source in evidence_sources:
-                    target = node_id("source", linked_source)
+                inline_srcs = INLINE_SOURCE_CITE_RE.findall(claim_text)
+                effective_srcs = inline_srcs if inline_srcs else evidence_sources
+                for src_id in effective_srcs:
                     edges.append(
                         {
                             "source": node["id"],
-                            "target": target,
+                            "target": node_id("source", src_id),
                             "relation": "supported_by",
-                            "section": "Evidence / Source Basis",
-                            "weight": 1.0,
+                            "section": "Key Claims" if inline_srcs else "Evidence / Source Basis",
+                            "weight": 1.0 if inline_srcs else 0.5,
                         }
                     )
 
@@ -366,6 +370,33 @@ def build_nodes_and_edges() -> dict:
         if frontmatter.get("type") != "answer":
             continue
         add_node("answer", path, frontmatter, body)
+
+    _CONTRA_PATH = ROOT / "data" / "contradictions.json"
+    if _CONTRA_PATH.exists():
+        try:
+            contra_payload = json.loads(_CONTRA_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            contra_payload = {}
+        for rec in contra_payload.get("contradictions", []):
+            cid = str(rec.get("id", ""))
+            if not cid:
+                continue
+            contra_nid = f"contradiction:{cid}"
+            contra_node = {
+                "id": contra_nid,
+                "kind": "contradiction",
+                "title": (rec.get("open_question") or cid)[:120],
+                "concept": rec.get("concept"),
+                "documented": rec.get("documented", False),
+                "tags": ["kb/contradiction"],
+                "status": "documented" if rec.get("documented") else "open",
+                "scope": "contradiction",
+                "retention_score": 1.0,
+                "retention_tier": "keep",
+                "search_text": rec.get("open_question") or "",
+            }
+            nodes.append(contra_node)
+            node_map[contra_nid] = contra_node
 
     def add_edge(
         source: str, target: str, relation: str, section: str, weight: float = 1.0
@@ -442,6 +473,25 @@ def build_nodes_and_edges() -> dict:
                 target_kind = "answer"
             stem = linked.split("/", 1)[1] if "/" in linked else linked
             add_edge(index_id, node_id(target_kind, stem), "links_to", "Links")
+
+    if _CONTRA_PATH.exists():
+        try:
+            contra_payload2 = json.loads(_CONTRA_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            contra_payload2 = {}
+        for rec in contra_payload2.get("contradictions", []):
+            cid = str(rec.get("id", ""))
+            if not cid:
+                continue
+            contra_nid = f"contradiction:{cid}"
+            concept_stem = rec.get("concept")
+            if concept_stem:
+                add_edge(
+                    contra_nid,
+                    node_id("concept", concept_stem),
+                    "involves_concept",
+                    "Contradictions",
+                )
 
     return {
         "project": CONFIG.project_name,
