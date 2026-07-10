@@ -70,7 +70,9 @@ def _clean_tmp(max_age_days: int = 7) -> None:
     print(f"Cleaned {removed} file(s) from .tmp/ (older than {max_age_days} days)")
 
 
-def run_maintenance(agent: str | None = None, clean_tmp: bool = False) -> None:
+def run_maintenance(
+    agent: str | None = None, clean_tmp: bool = False, check_drift: bool = False
+) -> None:
     if clean_tmp:
         _clean_tmp()
     if agent:
@@ -84,6 +86,12 @@ def run_maintenance(agent: str | None = None, clean_tmp: bool = False) -> None:
     run_build_graph()
     run_extract_claims()
     run_extract_contradictions()
+    if check_drift:
+        # Network-heavy (one git ls-remote per GitHub source); off by default.
+        from check_source_drift import check as _check_drift, _print_report as _drift_report
+
+        results, _ = _check_drift(flag=True, only=None)
+        _drift_report(results, flagged=True)
     run_scorecard()
     run_lint(fix_backlinks=True)
 
@@ -273,10 +281,12 @@ def main() -> None:
     p_graph_audit = sub.add_parser(
         "graph-audit",
         help="Detect structural antipatterns in the vault graph (hub outliers, "
-             "single-source dependencies, vague contradictions).",
+        "single-source dependencies, vague contradictions).",
     )
     p_graph_audit.add_argument(
-        "--format", choices=["text", "json"], default="text",
+        "--format",
+        choices=["text", "json"],
+        default="text",
         help="Output format (default: text).",
     )
 
@@ -442,6 +452,11 @@ def main() -> None:
         action="store_true",
         help="Delete rendered prompt snapshots in .tmp/ older than 7 days.",
     )
+    p_maintain.add_argument(
+        "--check-drift",
+        action="store_true",
+        help="Also flag GitHub sources whose upstream has drifted (network-heavy).",
+    )
 
     sub.add_parser(
         "generate-probes", help="Generate diagnostic questions (probes) from source summaries."
@@ -462,6 +477,15 @@ def main() -> None:
         "--check",
         action="store_true",
         help="Runs index generation in memory and fails if files differ.",
+    )
+
+    p_drift = sub.add_parser(
+        "check-drift", help="Detect upstream git drift for GitHub-repo-snapshot sources."
+    )
+    p_drift.add_argument("--flag", action="store_true", help="Write drift flags to notes.")
+    p_drift.add_argument("--json", action="store_true", help="Emit JSON instead of a table.")
+    p_drift.add_argument(
+        "--source", nargs="+", metavar="SRC_ID", help="Limit the check to these source ids."
     )
 
     args = parser.parse_args()
@@ -597,7 +621,7 @@ def main() -> None:
     elif args.command == "clear-stale-flags":
         run_clear_stale_flags(dry_run=args.dry_run)
     elif args.command == "maintenance":
-        run_maintenance(agent=args.agent, clean_tmp=args.clean_tmp)
+        run_maintenance(agent=args.agent, clean_tmp=args.clean_tmp, check_drift=args.check_drift)
     elif args.command == "generate-probes":
         run_generate_probes()
     elif args.command == "evaluate":
@@ -609,6 +633,18 @@ def main() -> None:
         )
     elif args.command == "lint":
         run_lint(strict=args.strict, fix_backlinks=args.fix_backlinks, check=args.check)
+    elif args.command == "check-drift":
+        import sys as _sys
+        from check_source_drift import check as _check, _print_report as _report
+
+        results, code = _check(flag=args.flag, only=set(args.source) if args.source else None)
+        if args.json:
+            import json as _json
+
+            print(_json.dumps({"results": results, "flagged": args.flag}, indent=2))
+        else:
+            _report(results, flagged=args.flag)
+        _sys.exit(code)
 
 
 if __name__ == "__main__":

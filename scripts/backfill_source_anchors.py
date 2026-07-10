@@ -2,9 +2,11 @@
 
 Strategy:
 - github_repo_snapshot: fill commit from repo_manifest.json, mark partial-anchor.
-- url/file/web-page/website/article/preprint: extract heading from normalized.md via
-  fuzzy keyword match, mark heading-anchor.
-- PDF/arxiv-paper: mark missing-pdf-anchor.
+- All source kinds with extracted text: find a verbatim supporting span in
+  normalized.md (or the best raw text fallback) and store char offsets + quote.
+- url/file/web-page/website/article/preprint: retain heading fallback when no
+  reliable verbatim span is found.
+- PDF/arxiv-paper without extracted text: mark missing-pdf-anchor.
 - Claims with no source_anchors get them created from source_ids.
 """
 
@@ -12,6 +14,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -26,10 +29,15 @@ PATH_RE = re.compile(
     r"|Dockerfile|Makefile|LICENSE|README(?:\.md)?"
     r")"
 )
+QUOTE_PATH_RE = re.compile(r"(?:^|\n)-?\s*Path:\s*`([^`]+)`")
 
 GITHUB_KINDS = {"github_repo_snapshot", "github-repo-snapshot"}
 PDF_KINDS = {"paper-pdf", "arxiv-paper", "preprint"}
 TEXT_KINDS = {"url", "file", "web-page", "website", "article", "blog", "document", "repo"}
+SPAN_SOURCE_KINDS = GITHUB_KINDS | PDF_KINDS | TEXT_KINDS | {""}
+MAX_QUOTE_CHARS = 900
+MIN_SPAN_SCORE = 4.0
+MIN_CLAIM_WORD_COVERAGE = 0.18
 STOPWORDS = {
     "that",
     "this",
@@ -75,14 +83,22 @@ STOPWORDS = {
 }
 
 
-def _load_repo_manifest(src_id: str) -> dict:
-    path = RAW_DIR / src_id / "repo_manifest.json"
+def _read_json(path: Path) -> dict:
     if path.exists():
         try:
             return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
-            pass
+            return {}
     return {}
+
+
+def _load_repo_manifest(src_id: str) -> dict:
+    path = RAW_DIR / src_id / "repo_manifest.json"
+    return _read_json(path)
+
+
+def _load_raw_metadata(src_id: str) -> dict:
+    return _read_json(RAW_DIR / src_id / "metadata.json")
 
 
 def _load_normalized_headings(src_id: str) -> list[str]:
@@ -125,6 +141,182 @@ def _claim_words(claim_text: str) -> set[str]:
         for w in re.findall(r"[a-zA-Z]{4,}", claim_text or "")
         if w.lower() not in STOPWORDS
     }
+
+
+def _normalize_match_text(value: str) -> str:
+    """Normalize text for candidate scoring without changing stored quotes."""
+    value = unicodedata.normalize("NFKC", value or "").lower()
+    value = value.replace("’", "'").replace("‘", "'")
+    value = value.replace("“", '"').replace("”", '"')
+    value = re.sub(r"[\u2010-\u2015]", "-", value)
+    return value
+
+
+def _claim_terms(claim_text: str) -> list[str]:
+    normalized = _normalize_match_text(claim_text)
+    return [w for w in re.findall(r"[a-z0-9][a-z0-9_+-]{2,}", normalized) if w not in STOPWORDS]
+
+
+def _source_text_path(src_id: str, src_info: dict) -> Path | None:
+    metadata = _load_raw_metadata(src_id)
+    candidates: list[str] = []
+    for key in ("normalized_path", "original_path"):
+        value = metadata.get(key) or src_info.get(key)
+        if value:
+            candidates.append(value)
+
+    raw_root = RAW_DIR / src_id
+    candidates.extend(
+        [
+            str(raw_root / "normalized.md"),
+            str(raw_root / "original.md"),
+        ]
+    )
+    candidates.extend(str(path) for path in sorted(raw_root.glob("original.*")))
+
+    for candidate in candidates:
+        path = Path(candidate)
+        if not path.is_absolute():
+            path = ROOT / path
+        if path.exists() and path.is_file():
+            return path
+    return None
+
+
+def _load_source_text(src_id: str, src_info: dict) -> tuple[str, str | None]:
+    path = _source_text_path(src_id, src_info)
+    if path is None:
+        return "", None
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore"), str(path.relative_to(ROOT))
+    except Exception:
+        return "", str(path)
+
+
+def _iter_sentence_spans(text: str, start: int, end: int):
+    segment = text[start:end]
+    cursor = 0
+    for match in re.finditer(r"[^.!?\n]+(?:[.!?]+|$)", segment):
+        raw = match.group(0)
+        if not raw.strip():
+            continue
+        leading = len(raw) - len(raw.lstrip())
+        trailing = len(raw.rstrip())
+        span_start = start + match.start() + leading
+        span_end = start + match.start() + trailing
+        if span_end > span_start:
+            yield span_start, span_end
+        cursor = match.end()
+    if cursor == 0 and segment.strip():
+        leading = len(segment) - len(segment.lstrip())
+        trailing = len(segment.rstrip())
+        yield start + leading, start + trailing
+
+
+def _iter_candidate_spans(text: str):
+    """Yield exact source-text spans suitable for quotes."""
+    for match in re.finditer(r"\S[\s\S]*?(?=\n\s*\n|\Z)", text):
+        raw = match.group(0)
+        leading = len(raw) - len(raw.lstrip())
+        trailing = len(raw.rstrip())
+        start = match.start() + leading
+        end = match.start() + trailing
+        if end <= start:
+            continue
+
+        if end - start <= MAX_QUOTE_CHARS:
+            yield start, end
+            continue
+
+        line_spans = []
+        for line_match in re.finditer(r"[^\n]+", text[start:end]):
+            line = line_match.group(0)
+            if not line.strip():
+                continue
+            line_start = start + line_match.start() + len(line) - len(line.lstrip())
+            line_end = start + line_match.start() + len(line.rstrip())
+            if line_end > line_start:
+                line_spans.append((line_start, line_end))
+
+        if line_spans and max(e - s for s, e in line_spans) <= MAX_QUOTE_CHARS:
+            yield from line_spans
+        else:
+            yield from _iter_sentence_spans(text, start, end)
+
+
+def _score_span(claim_text: str, quote: str) -> tuple[float, float]:
+    claim_terms = _claim_terms(claim_text)
+    if not claim_terms:
+        return 0.0, 0.0
+    quote_norm = _normalize_match_text(quote)
+    quote_terms = set(_claim_terms(quote))
+    claim_term_set = set(claim_terms)
+    overlap = claim_term_set & quote_terms
+    coverage = len(overlap) / max(len(claim_term_set), 1)
+
+    score = float(len(overlap))
+    for term in overlap:
+        if re.search(rf"\b{re.escape(term)}\b", quote_norm):
+            score += 0.15
+    if any(ch.isdigit() for ch in quote) and any(ch.isdigit() for ch in claim_text):
+        score += 0.75
+    if any(ch in quote for ch in "`/_.-") and any(ch in claim_text for ch in "`/_.-"):
+        score += 0.5
+    if len(quote) > MAX_QUOTE_CHARS:
+        score -= 2.0
+    return score, coverage
+
+
+def _find_verbatim_span(claim_text: str, source_text: str) -> dict | None:
+    """Select a source span, then return exact offsets and quote.
+
+    Selection is heuristic, but the returned quote is always a verbatim slice of
+    source_text and can be mechanically verified with char_start/char_end.
+    """
+    if not claim_text or not source_text:
+        return None
+
+    claim = claim_text.strip()
+    exact_pos = source_text.find(claim)
+    if exact_pos >= 0:
+        return {
+            "char_start": exact_pos,
+            "char_end": exact_pos + len(claim),
+            "quote": source_text[exact_pos : exact_pos + len(claim)],
+            "extraction_confidence": "exact-claim",
+        }
+
+    best: tuple[float, float, int, int] | None = None
+    for start, end in _iter_candidate_spans(source_text):
+        quote = source_text[start:end].strip()
+        if len(quote) < 24:
+            continue
+        score, coverage = _score_span(claim_text, quote)
+        if score < MIN_SPAN_SCORE or coverage < MIN_CLAIM_WORD_COVERAGE:
+            continue
+        candidate = (score, coverage, start, end)
+        if best is None or candidate[:2] > best[:2]:
+            best = candidate
+
+    if best is None:
+        return None
+
+    score, coverage, start, end = best
+    quote = source_text[start:end]
+    confidence = "verbatim-high" if coverage >= 0.35 and score >= 7 else "verbatim-medium"
+    return {
+        "char_start": start,
+        "char_end": end,
+        "quote": quote,
+        "extraction_confidence": confidence,
+    }
+
+
+def _extract_path_from_quote(quote: str | None) -> str | None:
+    if not quote:
+        return None
+    match = QUOTE_PATH_RE.search(quote)
+    return match.group(1) if match else None
 
 
 def _tokenize_path(path: str) -> set[str]:
@@ -190,6 +382,9 @@ def _score_repo_candidate(claim_text: str, candidate_path: str, candidate_contex
 
 def _serialize_anchor_fields(anchor: dict) -> str | None:
     parts: list[str] = []
+    if anchor.get("char_start") is not None and anchor.get("char_end") is not None:
+        parts.append(f"char_start={anchor['char_start']}")
+        parts.append(f"char_end={anchor['char_end']}")
     if anchor.get("section"):
         parts.append(f"section={anchor['section']}")
     if anchor.get("page") is not None:
@@ -198,6 +393,8 @@ def _serialize_anchor_fields(anchor: dict) -> str | None:
         parts.append(f"paragraph={anchor['paragraph']}")
     if anchor.get("path"):
         parts.append(f"path={anchor['path']}")
+    if anchor.get("source_text_path"):
+        parts.append(f"source_text_path={anchor['source_text_path']}")
     if anchor.get("commit"):
         parts.append(f"commit={anchor['commit']}")
     if anchor.get("line_start") is not None:
@@ -217,6 +414,9 @@ def _make_blank_anchor(src_id: str) -> dict:
         "section": None,
         "paragraph": None,
         "quote": None,
+        "char_start": None,
+        "char_end": None,
+        "source_text_path": None,
         "path": None,
         "line_start": None,
         "line_end": None,
@@ -231,6 +431,7 @@ def backfill(claims_data: dict, registry: list[dict]) -> dict:
     # Cache for manifests and headings (avoid re-reading per claim)
     manifest_cache: dict[str, dict] = {}
     headings_cache: dict[str, list[str]] = {}
+    text_cache: dict[str, tuple[str, str | None]] = {}
     source_note_cache: dict[str, str] = {}
     repo_path_cache: dict[str, list[tuple[str, str]]] = {}
 
@@ -251,6 +452,39 @@ def backfill(claims_data: dict, registry: list[dict]) -> dict:
                 continue
             src_info = reg_by_id.get(src_id, {})
             kind = src_info.get("kind", "")
+
+            if kind in SPAN_SOURCE_KINDS:
+                if src_id not in text_cache:
+                    text_cache[src_id] = _load_source_text(src_id, src_info)
+                source_text, source_text_path = text_cache[src_id]
+
+                existing_quote = sa.get("quote")
+                if existing_quote and source_text:
+                    quote_start = source_text.find(existing_quote)
+                    if quote_start >= 0:
+                        sa["char_start"] = quote_start
+                        sa["char_end"] = quote_start + len(existing_quote)
+                        sa["extraction_confidence"] = (
+                            sa.get("extraction_confidence") or "existing-verbatim"
+                        )
+                        if source_text_path:
+                            sa["source_text_path"] = source_text_path
+                        quote_path = _extract_path_from_quote(existing_quote)
+                        if quote_path:
+                            sa["path"] = quote_path
+                elif not existing_quote and source_text:
+                    span = _find_verbatim_span(claim_text, source_text)
+                    if span:
+                        sa["char_start"] = span["char_start"]
+                        sa["char_end"] = span["char_end"]
+                        sa["quote"] = span["quote"]
+                        sa["extraction_confidence"] = span["extraction_confidence"]
+                        if source_text_path:
+                            sa["source_text_path"] = source_text_path
+                        quote_path = _extract_path_from_quote(span["quote"])
+                        if quote_path:
+                            sa["path"] = quote_path
+                        sa["anchor"] = _serialize_anchor_fields(sa)
 
             if kind in GITHUB_KINDS:
                 # Load manifest
@@ -285,7 +519,9 @@ def backfill(claims_data: dict, registry: list[dict]) -> dict:
                     # Commit/path set; span_status determined below from has_commit
 
             elif kind in PDF_KINDS:
-                # Cannot parse PDF; mark appropriately
+                # Span matching above handles PDFs/arXiv sources with extracted
+                # normalized text. Sources without extracted text are handled by
+                # the claim-level missing-pdf-anchor status below.
                 # span_status handled at claim level
                 pass
 
@@ -301,8 +537,28 @@ def backfill(claims_data: dict, registry: list[dict]) -> dict:
                 if not sa.get("anchor"):
                     sa["anchor"] = _serialize_anchor_fields(sa)
 
+            if (
+                sa.get("quote")
+                and sa.get("char_start") is not None
+                and sa.get("char_end") is not None
+            ):
+                sa["anchor"] = _serialize_anchor_fields(sa)
+
         # Determine span_status for this claim
         # Check per-anchor after processing
+        has_exact_span = any(
+            sa.get("quote") and sa.get("char_start") is not None and sa.get("char_end") is not None
+            for sa in claim["source_anchors"]
+        )
+        all_exact_span = (
+            all(
+                sa.get("quote")
+                and sa.get("char_start") is not None
+                and sa.get("char_end") is not None
+                for sa in claim["source_anchors"]
+            )
+            and claim["source_anchors"]
+        )
         has_commit = any(sa.get("commit") for sa in claim["source_anchors"])
         has_section = any(sa.get("section") for sa in claim["source_anchors"])
         has_path = any(sa.get("path") for sa in claim["source_anchors"])
@@ -315,7 +571,11 @@ def backfill(claims_data: dict, registry: list[dict]) -> dict:
             and claim["source_anchors"]
         )
 
-        if has_commit and has_path and has_section:
+        if all_exact_span:
+            claim["span_status"] = "exact-span"
+        elif has_exact_span:
+            claim["span_status"] = "partial-span"
+        elif has_commit and has_path and has_section:
             claim["span_status"] = "partial-anchor"
         elif has_commit and has_path:
             claim["span_status"] = "partial-anchor"
