@@ -14,13 +14,13 @@ Run higher-stakes topics as resumable, tiered research threads outside the curat
 - An external model report should be imported as a lead, not treated as authority.
 
 ## Core Flow
-1. **Start a run**: `uv run python scripts/kb.py research-start --topic "<text>" --tier <fast|standard|deep>`.
-2. **Check status**: `uv run python scripts/kb.py research-status [topic|all]`.
-3. **Collect sources**: `uv run python scripts/kb.py research-collect --agent <codex|claude|gemini> --topic "<topic>"` (runs collect prompt).
-4. **Adversarial review**: `uv run python scripts/kb.py research-review --agent <codex|claude|gemini> --topic "<topic>"` (runs review prompt).
-5. **Draft report**: `uv run python scripts/kb.py research-report --agent <codex|claude|gemini> --topic "<topic>"` (runs report prompt).
-6. **Import external reports**: `uv run python scripts/kb.py research-import --topic "<topic>" --path <file> --provider <provider> --origin <origin>`.
-7. **Archive completed run**: `uv run python scripts/kb.py research-archive --topic "<topic>"` (after phase shows `done`).
+1. **Start a run**: `uv run kops research-start --topic "<text>" --tier <fast|standard|deep>`.
+2. **Check status**: `uv run kops research-status [topic|all]`.
+3. **Collect sources**: `uv run kops research-collect --agent <codex|claude|gemini> --topic "<topic>"` (runs collect prompt).
+4. **Adversarial review**: `uv run kops research-review --agent <codex|claude|gemini> --topic "<topic>"` (runs review prompt).
+5. **Draft report**: `uv run kops research-report --agent <codex|claude|gemini> --topic "<topic>"` (runs report prompt).
+6. **Import external reports**: `uv run kops research-import --topic "<topic>" --path <file> --provider <provider> --origin <origin>`.
+7. **Archive completed run**: `uv run kops research-archive --topic "<topic>"` (after phase shows `done`).
 
 ## Companion Skills
 - `research-collect`

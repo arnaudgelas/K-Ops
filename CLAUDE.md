@@ -59,7 +59,7 @@ Use the skills in `skills/` when relevant:
 ## Reference notes
 - `notes/Runbooks/Agent_Workflow_Quick_Reference.md`
 - `notes/Concepts/Workflow_Pattern_Inventory.md`
-- `scripts/kb.py bootstrap --target <dir>`
+- `kops bootstrap --target <dir>`
 
 ## Obsidian conventions
 - Use Obsidian-style wikilinks for internal note links when editing curated notes.

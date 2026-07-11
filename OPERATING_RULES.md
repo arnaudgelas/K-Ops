@@ -190,7 +190,7 @@ Source notes and the claims they support degrade over time. Apply these threshol
 | Product homepages / pricing pages | 3 months | Pricing, features, and URLs change without notice |
 
 **Workflow:**
-1. Run `uv run python scripts/kb.py stale-impact` monthly to surface concept pages citing sources older than their threshold.
+1. Run `uv run kops stale-impact` monthly to surface concept pages citing sources older than their threshold.
 2. For each flagged page, re-fetch the source (`ingest`), update the source summary, and recompile the concept page.
 3. Run `clear-stale-flags` once the page is updated.
 
@@ -201,7 +201,7 @@ Source notes and the claims they support degrade over time. Apply these threshol
 - `notes/Runbooks/Agent_Workflow_Quick_Reference.md`
 - `notes/Runbooks/Large_Source_Hierarchy.md`
 - `notes/Concepts/Workflow_Pattern_Inventory.md`
-- `scripts/kb.py bootstrap --target <dir>`
+- `kops bootstrap --target <dir>`
 
 ## Obsidian Conventions
 

@@ -5,10 +5,10 @@ This repository is an Obsidian-aligned living research vault for agentic coding 
 Canonical rules: see `OPERATING_RULES.md`. This file adds only Gemini-specific overrides.
 
 ## Gemini-Specific Notes
-- Use `uv run python scripts/kb.py compile --agent gemini` for wiki compilation passes.
-- Use `uv run python scripts/kb.py heal --agent gemini` for structural repair.
-- Use `uv run python scripts/kb.py validate` to confirm config before running workflows.
-- Use `uv run python scripts/install_agent_assets.py --agent gemini` to sync skills to the Gemini runtime directory.
+- Use `uv run kops compile --agent gemini` for wiki compilation passes.
+- Use `uv run kops heal --agent gemini` for structural repair.
+- Use `uv run kops validate` to confirm config before running workflows.
+- Use `uv run kops install-agent-assets --agent gemini` to sync skills to the Gemini runtime directory.
 - Grounding via Google Search is available — prefer vault-first answers, use web grounding only for missing evidence.
 
 ## Reference Notes

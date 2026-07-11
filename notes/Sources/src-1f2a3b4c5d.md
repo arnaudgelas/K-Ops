@@ -15,7 +15,7 @@ tags:
 
 ## Summary
 
-This source summary captures the repo's workflow command map and the canonical command order described in the quick reference and reflected in `scripts/kb.py`.
+This source summary captures the repo's workflow command map and the canonical command order described in the quick reference and reflected in `kops/kb.py`.
 
 ## Key Claims
 
@@ -24,7 +24,7 @@ This source summary captures the repo's workflow command map and the canonical c
 
 ## Evidence Notes
 
-- Derived from `notes/Runbooks/Agent_Workflow_Quick_Reference.md` and `scripts/kb.py`.
+- Derived from `notes/Runbooks/Agent_Workflow_Quick_Reference.md` and `kops/kb.py`.
 
 ## Related Concepts
 

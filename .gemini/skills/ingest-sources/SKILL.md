@@ -9,7 +9,7 @@ description: Review newly ingested raw sources and draft or update source summar
 Turn already-fetched raw source folders into structured source summary notes that the vault compiler can use.
 
 ## Context
-Mechanical fetching and normalization is handled by `scripts/ingest_sources.py` via `kb.py ingest`.
+Mechanical fetching and normalization is handled by `kops/ingest_sources.py` via `kb.py ingest`.
 This skill covers the agent-driven step that follows: reading normalized content and writing or updating source summaries.
 
 ## Inputs

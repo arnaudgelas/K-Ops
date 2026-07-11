@@ -13,12 +13,12 @@ Web fetch policy:
 
 ## Seed retrieval context
 
-Not precomputed in generated slash-command mode. Run `uv run python scripts/search_vault.py "$ARGUMENTS" --top 10` before answering.
+Not precomputed in generated slash-command mode. Run `uv run python -m kops.search_vault "$ARGUMENTS" --top 10` before answering.
 
 You may run follow-up local searches with:
 
 ```bash
-uv run python scripts/search_vault.py "<query>" --top 10
+uv run python -m kops.search_vault "<query>" --top 10
 ```
 
 Use the seed results as starting points, not as proof by themselves. Open the linked concept/source files before making substantive claims.
@@ -36,7 +36,7 @@ Read `notes/Answers/<timestamped-memo>.md` first. If the answer section no longe
 Work through these steps in order. Stop reading when you have enough to answer confidently - do not read everything.
 
 1. Start with the seed retrieval context above. Open the most relevant result paths first.
-2. Query the vault using programmatic retrieval (`uv run python scripts/search_vault.py "<query>"`) if the seed results are weak or you need more relevant paths. Do not rely on manual scanning of lists or directory files.
+2. Query the vault using programmatic retrieval (`uv run python -m kops.search_vault "<query>"`) if the seed results are weak or you need more relevant paths. Do not rely on manual scanning of lists or directory files.
 3. Read `notes/Home.md` if you need the broader topic map / atlases, or read `notes/Indexes/Flat_Concept_Index.md` if you specifically need the flat concept index.
 4. Read those concept pages. Note every `source_id` cited in their `## Evidence / Source Basis` sections.
 5. If the concept pages are thin or the question requires deeper evidence, read the source summaries for those source_ids from `notes/Sources/`.

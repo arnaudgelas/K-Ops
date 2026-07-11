@@ -39,7 +39,7 @@ briefing → source-collection → findings → contrarian-review → report-dra
 ### Start a new research run
 
 ```bash
-uv run python scripts/kb.py research-start --topic "Your topic" --tier standard
+uv run kops research-start --topic "Your topic" --tier standard
 ```
 
 Creates files in:
@@ -50,13 +50,13 @@ Creates files in:
 ### Check status of all active runs
 
 ```bash
-uv run python scripts/kb.py research-status
+uv run kops research-status
 ```
 
 ### Source collection phase
 
 ```bash
-uv run python scripts/kb.py research-collect --agent claude --topic "Your topic"
+uv run kops research-collect --agent claude --topic "Your topic"
 ```
 
 Agent reads the brief and existing sources, fetches new evidence, writes to `research/findings/`.
@@ -64,7 +64,7 @@ Agent reads the brief and existing sources, fetches new evidence, writes to `res
 ### Contrarian review phase
 
 ```bash
-uv run python scripts/kb.py research-review --agent claude --topic "Your topic"
+uv run kops research-review --agent claude --topic "Your topic"
 ```
 
 Requires findings to exist. Agent challenges claims, writes to `research/notes/<slug>-contrarian-review.md`.
@@ -72,7 +72,7 @@ Requires findings to exist. Agent challenges claims, writes to `research/notes/<
 ### Report drafting phase
 
 ```bash
-uv run python scripts/kb.py research-report --agent claude --topic "Your topic"
+uv run kops research-report --agent claude --topic "Your topic"
 ```
 
 Requires both findings and contrarian review. Writes to `research/reports/`.
@@ -81,7 +81,7 @@ Pass `--allow-missing-review` to skip the review requirement (not recommended).
 ### Import an external AI-generated report
 
 ```bash
-uv run python scripts/kb.py research-import \
+uv run kops research-import \
   --topic "Your topic" \
   --path /path/to/report.md \
   --provider gemini \
@@ -94,7 +94,7 @@ Extracted citations are created as stub source notes for subsequent fetching.
 ### Archive a completed run
 
 ```bash
-uv run python scripts/kb.py research-archive --topic "Your topic"
+uv run kops research-archive --topic "Your topic"
 ```
 
 Only works when phase is `done`. Moves all research files to `research/archive/<slug>/`.

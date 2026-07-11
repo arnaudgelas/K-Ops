@@ -3,7 +3,7 @@
 Status: **Proposal / not started**
 Owner: Arnaud Gelas
 Last updated: 2026-07-04
-Related: [design.md](design.md), `scripts/claim_registry.py`, `scripts/contradiction_registry.py`, `scripts/vault_graph.py`, `research/evals/`
+Related: [design.md](design.md), `kops/claim_registry.py`, `kops/contradiction_registry.py`, `kops/vault_graph.py`, `research/evals/`
 
 ---
 
@@ -66,7 +66,7 @@ Build the cheap capability in-house; **no Hyper-Extract dependency**. Can procee
 | ID | Task | Priority | Depends on | Acceptance criteria |
 |----|------|----------|-----------|---------------------|
 | T2.1 | Define Pydantic schemas for `EntityCandidate` and `RelationCandidate` (binary). | P1 | — | Schemas in `scripts/` with tests. |
-| T2.2 | Implement a native typed-extraction pass using K-Ops's existing provider layer + structured-output mode. ~100 LOC target. | P1 | T2.1 | `scripts/kb.py extract-structure --backend native` emits entity/relation candidates. |
+| T2.2 | Implement a native typed-extraction pass using K-Ops's existing provider layer + structured-output mode. ~100 LOC target. | P1 | T2.1 | `kops extract-structure --backend native` emits entity/relation candidates. |
 | T2.3 | Establish this native output as the **baseline** for K2 comparison. | P1 | T2.2, T1.3 | Baseline precision/recall recorded in eval set. |
 
 ### Phase 3 — Out-of-process Hyper-Extract oracle (P1)
@@ -77,7 +77,7 @@ Only build if Phase 1 verdict = proceed. Scope limited by C3.
 |----|------|----------|-----------|---------------------|
 | T3.1 | Wrap the isolated Hyper-Extract CLI behind a subprocess call that writes to `data/extractions/hyperextract/<source-id>/raw.json`. No in-process import. | P1 | T1.5 | Subprocess invocation from K-Ops; JSON files produced; K-Ops deps unchanged. |
 | T3.2 | Restrict invocation to hyperedge + temporal templates only. | P1 | T3.1 | CLI rejects/omits flat-entity-only templates by config. |
-| T3.3 | Add `scripts/kb.py extract-structure --backend hyperextract --template ...` dispatching to T3.1. | P1 | T3.1 | Command runs end-to-end producing raw JSON. |
+| T3.3 | Add `kops extract-structure --backend hyperextract --template ...` dispatching to T3.1. | P1 | T3.1 | Command runs end-to-end producing raw JSON. |
 
 ### Phase 4 — Adapter & candidate governance (P1)
 

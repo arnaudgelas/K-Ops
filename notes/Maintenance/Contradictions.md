@@ -9,4 +9,4 @@ tags:
 
 *No contradictions logged yet.*
 
-<!-- Auto-populated by: uv run python scripts/kb.py extract-contradictions -->
+<!-- Auto-populated by: uv run kops extract-contradictions -->

@@ -186,7 +186,7 @@ Planned, not implemented as a production feature:
 - progressive disclosure directory listings (`index.md` files) auto-generated at all folder levels
 - prompt templates and role-based skills for ingestion, compilation, healing, Q&A, rendering, and research
 - machine-readable claim and contradiction registries plus a vault scorecard
-- a Python CLI in `scripts/kb.py` that orchestrates the workflow with Codex CLI, Claude Code, or Gemini CLI
+- a Python CLI in `kops/kb.py` that orchestrates the workflow with Codex CLI, Claude Code, or Gemini CLI
 - repo-root `.obsidian/` settings so the repository can be opened directly in Obsidian
 
 ## Trust Model and Limits
@@ -324,9 +324,9 @@ If the command name differs on your machine, set the override variables above.
 For daily capture, add one URL, GitHub repository, or local file directly:
 
 ```bash
-uv run python scripts/kb.py add https://example.com/article
-uv run python scripts/kb.py add https://github.com/owner/repo
-uv run python scripts/kb.py add ./papers/interesting-paper.pdf
+uv run kops add https://example.com/article
+uv run kops add https://github.com/owner/repo
+uv run kops add ./papers/interesting-paper.pdf
 ```
 
 For batch capture, use a newline-delimited input file:
@@ -348,7 +348,7 @@ https://github.com/owner/repo
 ### 2. Ingest a batch
 
 ```bash
-uv run python scripts/kb.py ingest --input examples/links.txt
+uv run kops ingest --input examples/links.txt
 ```
 
 The ingest flow automatically routes:
@@ -368,20 +368,20 @@ Both `add` and `ingest` create:
 If you want to force a branch for GitHub repository URLs in the input list:
 
 ```bash
-uv run python scripts/kb.py ingest --input examples/links.txt --branch main
+uv run kops ingest --input examples/links.txt --branch main
 ```
 
 ### 3. Compile the vault
 
 ```bash
-uv run python scripts/kb.py compile --agent codex
+uv run kops compile --agent codex
 ```
 
 or:
 
 ```bash
-uv run python scripts/kb.py compile --agent claude
-uv run python scripts/kb.py compile --agent gemini
+uv run kops compile --agent claude
+uv run kops compile --agent gemini
 ```
 
 This writes `.tmp/compile_plan.json`, uses `templates/compile_prompt.md`, and
@@ -395,7 +395,7 @@ updates:
 ### 4. Ask a question
 
 ```bash
-uv run python scripts/kb.py ask --agent codex --question "What are the main claims and open questions?"
+uv run kops ask --agent codex --question "What are the main claims and open questions?"
 ```
 
 This seeds the Q&A prompt with local retrieval results and writes a timestamped
@@ -405,8 +405,8 @@ required provenance fields such as `retrieval_path` empty.
 ### 5. Heal and lint
 
 ```bash
-uv run python scripts/kb.py heal --agent claude
-uv run python scripts/kb.py lint
+uv run kops heal --agent claude
+uv run kops lint
 ```
 
 `heal` surfaces contradictions, unsupported claims, and weak structure. `lint` checks vault consistency and backlink integrity.
@@ -414,11 +414,11 @@ uv run python scripts/kb.py lint
 ### 6. Validate and inspect quality
 
 ```bash
-uv run python scripts/kb.py validate
-uv run python scripts/kb.py install-agent-assets --agent all --scope project
-uv run python scripts/kb.py extract-claims
-uv run python scripts/kb.py extract-contradictions
-uv run python scripts/kb.py scorecard
+uv run kops validate
+uv run kops install-agent-assets --agent all --scope project
+uv run kops extract-claims
+uv run kops extract-contradictions
+uv run kops scorecard
 ```
 
 `validate` confirms the vault paths load. The registry commands rebuild the machine-readable claim and contradiction layers, and `scorecard` summarizes health drift.
@@ -426,13 +426,13 @@ uv run python scripts/kb.py scorecard
 `audit-kb` is an alias for the scorecard audit surface:
 
 ```bash
-uv run python scripts/kb.py audit-kb
+uv run kops audit-kb
 ```
 
 ### 7. Render output
 
 ```bash
-uv run python scripts/kb.py render --agent codex --format memo --prompt "Write a 1-page executive memo"
+uv run kops render --agent codex --format memo --prompt "Write a 1-page executive memo"
 ```
 
 Supported render formats:
@@ -447,22 +447,22 @@ Rendered outputs are written under `outputs/`.
 ### 8. Install CLI runtime assets
 
 ```bash
-uv run python scripts/kb.py install-agent-assets --agent all --scope project
+uv run kops install-agent-assets --agent all --scope project
 ```
 
 This syncs the repo's Codex skills, Claude Code agents and commands, and Gemini CLI commands/context into the selected runtime locations.
 
 ### 9. Use agent-native entries
 
-After installing runtime assets, you can run the same loop from Claude Code, Codex, or Gemini instead of only through `scripts/kb.py`. If you are already inside one of those tools, just say what you want:
+After installing runtime assets, you can run the same loop from Claude Code, Codex, or Gemini instead of only through `kops/kb.py`. If you are already inside one of those tools, just say what you want:
 
 | Workflow | Just say (with Claude-code, Codex, or Gemini) | Python CLI |
 |---|---|---|
-| Ingest source | `ingest this source` | `uv run python scripts/kb.py ingest --input examples/links.txt` |
-| Consolidate vault | `consolidate the vault` | `uv run python scripts/kb.py compile --agent <codex\|claude\|gemini>` |
-| Ask question | `answer this question from the vault: ...` | `uv run python scripts/kb.py ask --agent <agent> --question "..."` |
-| Heal vault | `heal the vault` | `uv run python scripts/kb.py heal --agent <agent>` |
-| Render output | `render this as a memo: ...` | `uv run python scripts/kb.py render --agent <agent> --format memo --prompt "..."` |
+| Ingest source | `ingest this source` | `uv run kops ingest --input examples/links.txt` |
+| Consolidate vault | `consolidate the vault` | `uv run kops compile --agent <codex\|claude\|gemini>` |
+| Ask question | `answer this question from the vault: ...` | `uv run kops ask --agent <agent> --question "..."` |
+| Heal vault | `heal the vault` | `uv run kops heal --agent <agent>` |
+| Render output | `render this as a memo: ...` | `uv run kops render --agent <agent> --format memo --prompt "..."` |
 
 Use the Python CLI for mechanical fetching and registry updates. Use the agent-native entries when you are already inside Claude Code, Codex, or Gemini and want that runtime to perform the source-summary, Q&A, healing, consolidation, or rendering pass.
 
@@ -488,7 +488,7 @@ Use the Python CLI for mechanical fetching and registry updates. Use the agent-n
 - `ask --agent <...> --question <text>`: generate an answer memo from the vault
 - `heal --agent <...>`: run the healing prompt
 - `render --agent <...> --format <memo|slides|outline|report> --prompt <text>`: generate an output artifact
-- `uv run python scripts/generate_indexes.py`: regenerate Source Atlas, Topic Atlas, and OKF directory indexes
+- `uv run python -m kops.generate_indexes`: regenerate Source Atlas, Topic Atlas, and OKF directory indexes
 
 
 ### Maintenance
@@ -552,17 +552,17 @@ Imported model-generated reports are treated as leads, not authority. They are c
 
 ```bash
 uv sync
-uv run python scripts/kb.py ingest --input examples/links.txt
-uv run python scripts/kb.py compile --agent codex
-uv run python scripts/kb.py ask --agent codex --question "Compare the approaches and identify unresolved issues"
-uv run python scripts/kb.py heal --agent codex
-uv run python scripts/kb.py lint
+uv run kops ingest --input examples/links.txt
+uv run kops compile --agent codex
+uv run kops ask --agent codex --question "Compare the approaches and identify unresolved issues"
+uv run kops heal --agent codex
+uv run kops lint
 ```
 
 If you are refreshing an existing vault, use this instead:
 
 ```bash
-uv run python scripts/kb.py refresh --agent codex
+uv run kops refresh --agent codex
 ```
 
 For daily or weekly production use, prefer an epistemic workflow over a
@@ -629,7 +629,7 @@ K-Ops/
 
 ## Notes
 
-- The orchestrator lives in `scripts/kb.py`.
+- The orchestrator lives in `kops/kb.py`.
 - Most synthesis work is delegated to the selected agent CLI.
 - GitHub repo ingestion creates a markdown snapshot with links back to the repository and extracted key concepts, architectural decisions, and a small set of high-signal files across the repository tree.
 - Open the repo root in Obsidian to browse the curated note graph directly.

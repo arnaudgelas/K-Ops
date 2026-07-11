@@ -100,7 +100,7 @@ render --agent <name> --format <memo|outline|slides|report> --prompt "<text>"
 
 ## Evidence / Source Basis
 
-- [[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]] — source summary for the workflow quick reference and `scripts/kb.py` command inventory that underpins this page.
+- [[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]] — source summary for the workflow quick reference and `kops/kb.py` command inventory that underpins this page.
 
 ## Related Concepts
 

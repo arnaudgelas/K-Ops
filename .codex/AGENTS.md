@@ -30,7 +30,7 @@ Goal: convert the current vault into memos, briefings, slide outlines, diagrams,
 - `notes/TODO.md` tracks gaps and healing tasks
 - `notes/Runbooks/Agent_Workflow_Quick_Reference.md` is the compact operator map for cross-CLI workflows
 - `research/` holds resumable research-run artifacts and stays separate from curated vault notes
-- `scripts/kb.py bootstrap --target <dir>` creates a new blank starter vault with the same file structure and tooling
+- `kops bootstrap --target <dir>` creates a new blank starter vault with the same file structure and tooling
 
 ## Behavioral Guardrails
 - Prefer modifying a small number of files with high signal.
@@ -39,7 +39,7 @@ Goal: convert the current vault into memos, briefings, slide outlines, diagrams,
 - When uncertain, mark uncertainty explicitly.
 
 ## Codex-Specific Notes
-- Use `uv run python scripts/install_agent_assets.py` to sync canonical skills/templates to the Codex runtime directory.
-- Use `uv run python scripts/kb.py validate` to confirm config loads before running workflows.
-- Prefer `uv run python scripts/kb.py compile --agent codex` when you want Codex to do the compilation pass.
-- Use `uv run python scripts/kb.py extract-claims`, `extract-contradictions`, and `scorecard` to keep the machine-readable quality layer current.
+- Use `uv run kops install-agent-assets` to sync canonical skills/templates to the Codex runtime directory.
+- Use `uv run kops validate` to confirm config loads before running workflows.
+- Prefer `uv run kops compile --agent codex` when you want Codex to do the compilation pass.
+- Use `uv run kops extract-claims`, `extract-contradictions`, and `scorecard` to keep the machine-readable quality layer current.

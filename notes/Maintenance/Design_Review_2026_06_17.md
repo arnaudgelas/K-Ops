@@ -27,7 +27,7 @@ Example: the compile task in `SKILL.md` requires a "Compile Log Requirement" sec
 
 ### CRIT-2 — Triplication of skills across `.claude/`, `.codex/`, `.gemini/` makes drift inevitable
 
-Every skill exists three times. OPERATING_RULES.md is the single-source contract, but skills are copy-pasted into three directories. The `install-agent-assets` command presumably syncs them, but `scripts/install_agent_assets.py` is not documented and it's unclear which direction the sync flows (skills/ → runtime dirs, or runtime dirs → skills/). Any edit to ingest-sources SKILL.md requires 3 identical changes.
+Every skill exists three times. OPERATING_RULES.md is the single-source contract, but skills are copy-pasted into three directories. The `install-agent-assets` command presumably syncs them, but `kops/install_agent_assets.py` is not documented and it's unclear which direction the sync flows (skills/ → runtime dirs, or runtime dirs → skills/). Any edit to ingest-sources SKILL.md requires 3 identical changes.
 
 **Recommendation:** Maintain skills in one canonical location (e.g., `skills/` at root). `install-agent-assets` should be the authoritative sync script and its behavior must be documented in the runbook. Add a lint check that all three runtime skill files are byte-identical to the canonical source.
 
