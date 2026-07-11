@@ -367,6 +367,20 @@ def _score_claims() -> dict:
         round(_section_anchored_claims / _v2_backed_claims, 3) if _v2_backed_claims else None
     )
 
+    # Quote-span verification: read the versioned audit artifact if present.
+    # This is truth-bearing (the quote was found in the source), unlike span_status
+    # which only records that an anchor string was written.
+    _span_verification = {"verified": 0, "failed": 0, "unverifiable": 0, "absent": 0}
+    _quote_verification_rate = None
+    _span_verif_path = ROOT / "data" / "span_verification.json"
+    if _span_verif_path.exists():
+        try:
+            _sv = json.loads(_span_verif_path.read_text(encoding="utf-8"))
+            _span_verification = _sv.get("summary", _span_verification)
+            _quote_verification_rate = _sv.get("quote_verification_rate")
+        except (OSError, json.JSONDecodeError):
+            pass
+
     return {
         "total": total,
         "by_quality": dict(quality_counter),
@@ -383,6 +397,8 @@ def _score_claims() -> dict:
         "direct_citation_rate": round(direct / total, 3) if total else None,
         "direct_citation_rate_by_quality": direct_by_quality,
         "span_status_distribution": dict(_span_status_dist),
+        "span_verification": _span_verification,
+        "quote_verification_rate": _quote_verification_rate,
         "anchor_coverage_by_source_kind": _anchor_coverage,
         "source_section_anchor_coverage": _section_anchor_coverage,
         "long_source_bare_citation_count": _long_source_bare_count,
@@ -766,6 +782,23 @@ def _compute_signals(
                 "code": "blocked-claims",
                 "severity": "error",
                 "message": f"{claims['blocked']} claim(s) depend on revoked, do-not-use, or adversarial sources",
+            }
+        )
+    _span_verif = claims.get("span_verification") or {}
+    if _span_verif.get("failed", 0) > 0:
+        signals.append(
+            {
+                "code": "failed-quote-spans",
+                "severity": "error",
+                "message": f"{_span_verif['failed']} claim(s) cite a quote that does not appear in the source — run 'verify-spans' and fix the anchor or the claim",
+            }
+        )
+    if _span_verif.get("unverifiable", 0) > 0:
+        signals.append(
+            {
+                "code": "unverifiable-quote-spans",
+                "severity": "warning",
+                "message": f"{_span_verif['unverifiable']} claim(s) carry a quote whose source text could not be resolved on disk",
             }
         )
 

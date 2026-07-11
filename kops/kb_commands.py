@@ -30,6 +30,7 @@ from kops.kb_quality import (
     run_contradiction_search as run_contradiction_search,
     run_extract_claims as run_extract_claims,
     run_extract_contradictions as run_extract_contradictions,
+    run_verify_spans as run_verify_spans,
     run_lint as run_lint,
     run_scorecard as run_scorecard,
     run_stale_impact as run_stale_impact,

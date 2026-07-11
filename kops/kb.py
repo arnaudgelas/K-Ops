@@ -52,6 +52,7 @@ def run_maintenance(
         run_build_graph,
         run_extract_claims,
         run_extract_contradictions,
+        run_verify_spans,
         run_scorecard,
         run_lint,
     )
@@ -70,6 +71,7 @@ def run_maintenance(
     run_build_graph()
     run_extract_claims()
     run_extract_contradictions()
+    run_verify_spans()
     if check_drift:
         # Network-heavy (one git ls-remote per GitHub source); off by default.
         from kops.check_source_drift import check as _check_drift, _print_report as _drift_report
@@ -391,6 +393,19 @@ def main() -> None:
         "--dry-run", action="store_true", help="Run without mutating files."
     )
 
+    p_verify_spans = sub.add_parser(
+        "verify-spans",
+        help="Verify each claim's cited quote exists in its source; write data/span_verification.json.",
+    )
+    p_verify_spans.add_argument(
+        "--check",
+        action="store_true",
+        help="Fail if any claim cites a quote absent from its source.",
+    )
+    p_verify_spans.add_argument(
+        "--dry-run", action="store_true", help="Run without mutating files."
+    )
+
     p_contradiction_search = sub.add_parser(
         "contradiction-search", help="Search the contradiction registry by keyword."
     )
@@ -498,6 +513,7 @@ def main() -> None:
         run_export_vault,
         run_extract_claims,
         run_extract_contradictions,
+        run_verify_spans,
         run_fetch,
         run_ingest_github,
         run_lint,
@@ -654,6 +670,8 @@ def main() -> None:
         run_claim_search(args.query, limit=args.limit, fmt=args.format)
     elif args.command == "extract-contradictions":
         run_extract_contradictions(check=args.check, dry_run=args.dry_run)
+    elif args.command == "verify-spans":
+        run_verify_spans(check=args.check, dry_run=args.dry_run)
     elif args.command == "contradiction-search":
         run_contradiction_search(args.query, limit=args.limit, fmt=args.format)
     elif args.command in {"scorecard", "audit-kb"}:

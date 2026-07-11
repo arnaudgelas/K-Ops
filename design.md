@@ -228,14 +228,21 @@ Current checks are strong for structure:
 Current checks are weaker for truth:
 
 - citation presence is not the same as citation support
-- quote-span verification against raw evidence is not implemented
+- quote-span verification checks a quote *exists* in the source, not that it
+  *entails* the claim; entailment still needs an LLM judge
+- claims without a `quote=` anchor are still only presence-checked
 - LLM-written summaries and concept claims still need human review
 - answer memos are validated for provenance shape, not full sentence-level
   entailment
 
-The next correctness step is quote-anchored claim verification: require claims
-to carry a source span or short quote and verify that the quote exists in raw
-or normalized evidence before promotion.
+Quote-existence verification is implemented (`kops/span_verify.py`,
+`verify-spans`): every claim anchor carrying a `quote=` is checked against the
+resolved source text (verbatim, whitespace/punctuation-folded, or across an
+ellipsis bridge). A quote absent from its source makes the claim `failed` and
+raises an error-severity scorecard signal; `verify-spans --check` exits non-zero.
+This is deterministic and fails closed. The next correctness step is
+citation *entailment*: an LLM judge that decides whether a verified quote
+actually supports the claim, stored as a versioned, lower-trust evaluation record.
 
 ## Staleness and Contradictions
 
@@ -300,7 +307,9 @@ Desired direction:
 
 ### P0: Trust and Safety
 
-- Add quote-span verification for claims.
+- ~~Add quote-span verification for claims.~~ **Done** — deterministic quote
+  *existence* verification (`verify-spans`). Remaining: LLM-judged citation
+  *entailment* over verified quotes.
 - Compare stored content hashes during refresh and mark dependent notes stale.
 - Make source review flags blocking in compile workflows.
 - Add pre/post agent-run Git checkpoints or branches.

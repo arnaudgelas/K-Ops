@@ -50,6 +50,7 @@ Compact command map for the K-Ops vault.
 |---|---|---|
 | `extract-contradictions` | After compile — rebuild `data/contradictions.json` | One record per Open Questions bullet; undocumented if section missing |
 | `contradiction-search` | Looking for conflict records by keyword | Accepts `--query`, `--limit`, `--format` |
+| `verify-spans` | After extract-claims — check quote anchors | Verifies each `quote=` anchor exists in its source; writes `data/span_verification.json`; `--check` fails closed on a mismatch |
 
 ## Quality & Evaluation Commands
 
@@ -94,10 +95,11 @@ Compact command map for the K-Ops vault.
 2. `compile`
 3. `extract-claims`
 4. `extract-contradictions`
-5. `ask` (optional)
-6. `heal`
-7. `lint`
-8. `scorecard` (optional — review health signals)
+5. `verify-spans` (checks quote anchors; run before scorecard so signals show)
+6. `ask` (optional)
+7. `heal`
+8. `lint`
+9. `scorecard` (optional — review health signals)
 
 For deep research: see [[Research_Workflow|Research Workflow Runbook]].
 

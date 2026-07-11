@@ -1,6 +1,6 @@
 {
   "project": "K-Ops",
-  "generated_at": "2026-07-11T10:26:50",
+  "generated_at": "2026-07-11T23:27:04",
   "eval_pass_rate": null,
   "catastrophic_failure_count": 0,
   "concepts": {
@@ -71,6 +71,13 @@
     "span_status_distribution": {
       "missing": 3
     },
+    "span_verification": {
+      "verified": 0,
+      "failed": 0,
+      "unverifiable": 0,
+      "absent": 3
+    },
+    "quote_verification_rate": null,
     "anchor_coverage_by_source_kind": {
       "unknown": 0.0
     },

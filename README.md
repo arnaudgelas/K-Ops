@@ -156,6 +156,8 @@ Implemented today:
 - Obsidian-compatible Markdown vault under `notes/`
 - OKF-style progressive `index.md` files for bundle traversal
 - source registry, claim registry, contradiction registry, and scorecard
+- deterministic quote-span verification (`verify-spans`): checks each claim's
+  cited quote actually appears in its source, fails closed on a mismatch
 - exact lookup and BM25 retrieval over sources, concepts, claims, and sections
 - deterministic compile plans written to `.tmp/compile_plan.json`
 - answer memo schema checks after `ask`
@@ -167,7 +169,8 @@ Planned, not implemented as a production feature:
 - RVF binary capsule export
 - MCP serving over a compiled RVF capsule
 - persistent SQLite/FTS index
-- quote-span claim verification against raw evidence
+- LLM-judged citation *entailment* (whether a verified quote actually supports
+  the claim, beyond merely existing in the source)
 - automatic content-hash stale cascade on refresh
 - bitemporal claim history and validation events
 - consequence thresholds for high-impact answers
@@ -199,6 +202,9 @@ Current guarantees:
 - raw evidence under `data/raw/` is preserved
 - source metadata includes stable IDs and content hashes
 - concept claims can be required to carry inline source links
+- claims carrying a `quote=` anchor are verified to actually appear in their
+  source (`verify-spans`); a fabricated quote fails closed and raises an error
+  signal in the scorecard
 - model-generated and weak sources can be quarantined at claim-registry level
 - answer memos must provide valid `retrieval_path` and `fetch_required`
 - lint/schema/scorecard checks expose unsupported, stale, conflicting, or weak
@@ -206,8 +212,11 @@ Current guarantees:
 
 Current limits:
 
-- citation presence is checked more strongly than citation entailment
-- quote-span verification against raw text is not yet implemented
+- quote **existence** is verified (the quote is really in the source) but not
+  quote **entailment** (that the quote supports the claim) — entailment needs an
+  LLM judge and is not yet implemented
+- claims that cite a source but carry no `quote=` anchor are checked for citation
+  presence, not for support
 - content hash changes do not yet trigger a full automatic invalidation cascade
 - contradiction records do not yet distinguish direct conflict, temporal
   supersession, scope mismatch, terminology conflict, or synthetic contamination

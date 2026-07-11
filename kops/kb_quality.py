@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from kops.claim_registry import load_claims, run as run_claim_registry, search_claims
+from kops.span_verify import run as run_span_verify
 from kops.contradiction_registry import (
     load_contradictions,
     run as run_contradiction_registry,
@@ -81,6 +82,10 @@ def run_claim_search(query: str, limit: int = 20, fmt: str = "text") -> None:
 
 def run_extract_contradictions(check: bool = False, dry_run: bool = False) -> None:
     run_contradiction_registry(check=check, dry_run=dry_run)
+
+
+def run_verify_spans(check: bool = False, dry_run: bool = False) -> None:
+    run_span_verify(check=check, dry_run=dry_run)
 
 
 def run_contradiction_search(query: str, limit: int = 20, fmt: str = "text") -> None:
