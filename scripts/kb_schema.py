@@ -16,10 +16,10 @@ from typing import Any
 
 import yaml
 
-from utils import ROOT
+from utils import ROOT, CODE_ROOT
 
 
-_SCHEMA_PATH = ROOT / "config" / "schema.yaml"
+_SCHEMA_PATH = CODE_ROOT / "config" / "schema.yaml"  # code asset, not vault data
 _CANONICAL_SOURCE_ID_RE = re.compile(r"^src-[0-9a-f]{10}$")
 
 # Maps registry `kind` values to schema `source_kind` enum values

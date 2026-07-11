@@ -18,7 +18,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
+from kb_paths import ROOT  # noqa: E402
 RAW_DIR = ROOT / "data" / "raw"
 
 # Heuristic patterns

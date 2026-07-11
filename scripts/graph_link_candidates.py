@@ -29,7 +29,7 @@ from collections import defaultdict
 from pathlib import Path
 
 # ── locate repo root and import vault utilities ──────────────────────────────
-ROOT = Path(__file__).resolve().parent.parent
+from kb_paths import ROOT  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from vault_graph import build_nodes_and_edges, GRAPH_PATH  # noqa: E402

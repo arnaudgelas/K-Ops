@@ -1,6 +1,19 @@
 from __future__ import annotations
 
 import argparse
+import os as _os
+import sys as _sys
+
+# Resolve --vault BEFORE importing modules that read the vault root at import
+# time (utils/kb_paths compute ROOT on import). Env var wins if already set.
+if "KB_HOME" not in _os.environ:
+    for _i, _arg in enumerate(_sys.argv[1:], start=1):
+        if _arg == "--vault" and _i + 1 < len(_sys.argv):
+            _os.environ["KB_HOME"] = _sys.argv[_i + 1]
+            break
+        if _arg.startswith("--vault="):
+            _os.environ["KB_HOME"] = _arg.split("=", 1)[1]
+            break
 
 from utils import ROOT
 from kb_commands import (
@@ -98,6 +111,11 @@ def run_maintenance(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Living research vault workflow")
+    parser.add_argument(
+        "--vault",
+        metavar="DIR",
+        help="Vault root directory (overrides KB_HOME; handled before subcommand dispatch).",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_ingest = sub.add_parser("ingest")

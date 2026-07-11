@@ -25,13 +25,12 @@ import json
 import re
 import sys
 from collections import defaultdict, deque
-from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-ROOT = Path(__file__).resolve().parents[1]
+from kb_paths import ROOT  # noqa: E402
 RAW_DIR = ROOT / "data" / "raw"
 SCRATCH_DIR = ROOT / "research" / "scratch" / "large-source"
 

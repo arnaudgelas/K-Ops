@@ -17,7 +17,7 @@ import re
 import unicodedata
 from pathlib import Path
 
-ROOT = Path(__file__).parent.parent
+from kb_paths import ROOT  # noqa: E402
 CLAIMS_PATH = ROOT / "data" / "claims.json"
 REGISTRY_PATH = ROOT / "data" / "registry.json"
 RAW_DIR = ROOT / "data" / "raw"

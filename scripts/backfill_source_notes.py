@@ -7,7 +7,7 @@ from pathlib import Path
 
 from utils import resolve_content_path
 
-ROOT = Path(__file__).resolve().parent.parent
+from kb_paths import ROOT  # noqa: E402
 REGISTRY_PATH = ROOT / "data" / "registry.json"
 SOURCES_DIR = ROOT / "notes" / "Sources"
 

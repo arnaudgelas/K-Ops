@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 from utils import parse_frontmatter, dump_frontmatter
 
 
-ROOT = Path(__file__).resolve().parent.parent
+from kb_paths import ROOT  # noqa: E402
 ANSWERS_DIR = ROOT / "notes" / "Answers"
 
 

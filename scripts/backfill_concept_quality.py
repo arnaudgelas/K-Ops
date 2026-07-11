@@ -3,12 +3,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from pathlib import Path
 
 from utils import parse_frontmatter, dump_frontmatter
 
 
-ROOT = Path(__file__).resolve().parent.parent
+from kb_paths import ROOT  # noqa: E402
 CONCEPTS_DIR = ROOT / "notes" / "Concepts"
 SOURCES_DIR = ROOT / "notes" / "Sources"
 

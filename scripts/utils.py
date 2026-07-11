@@ -15,6 +15,8 @@ from typing import Any
 
 import yaml
 
+from kb_paths import CODE_ROOT, ROOT, kb_home  # noqa: F401  (re-exported for callers)
+
 # Monkey-patch Path.glob and Path.rglob to ignore OKF reserved index.md and log.md files
 _original_glob = Path.glob
 _original_rglob = Path.rglob
@@ -43,7 +45,6 @@ def _filtered_rglob(self, pattern, *args, **kwargs):
 Path.glob = _filtered_glob
 Path.rglob = _filtered_rglob
 
-ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = Path(os.environ.get("KB_CONFIG_PATH", str(ROOT / "config" / "kb_config.yaml")))
 
 
