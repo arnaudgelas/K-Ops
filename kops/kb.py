@@ -16,56 +16,12 @@ if "KB_HOME" not in _os.environ:
             break
 
 from kops.utils import ROOT
-from kops.kb_commands import (
-    run_add_source,
-    run_claim_search,
-    run_backfill_answer_quality,
-    run_backfill_concept_quality,
-    run_backfill_source_metadata,
-    run_backfill_source_notes,
-    run_bootstrap,
-    run_build_graph,
-    run_graph_audit,
-    run_clear_stale_flags,
-    run_contradiction_search,
-    run_export_index,
-    run_export_vault,
-    run_extract_claims,
-    run_extract_contradictions,
-    run_fetch,
-    run_ingest_github,
-    run_lint,
-    run_install_agent_assets,
-    run_normalize_github_sources,
-    run_refresh_sources,
-    run_fetch_queue,
-    run_generate_source_registry,
-    run_migrate_source_fields,
-    run_normalize_frontmatter_cmd,
-    run_render_manifest,
-    run_retention_report,
-    run_search_graph,
-    run_traverse_graph,
-    run_scorecard,
-    run_stale_impact,
-    run_suggest_links,
-    run_validate_config,
-    cmd_claim_map,
-    run_generate_probes,
-    run_evaluate,
-    run_compile_large_source,
-)
-from kops.kb_runtime import cmd_ask, cmd_compile, cmd_heal, cmd_render
-from kops.research_workflow import (
-    RESEARCH_TIERS,
-    cmd_research_archive,
-    cmd_research_collect,
-    cmd_research_import,
-    cmd_research_report,
-    cmd_research_review,
-    cmd_research_start,
-    cmd_research_status,
-)
+
+# Only config-free imports at module top: building the arg parser must not pull
+# in the command layer (which eagerly loads the vault config), so `kops --help`
+# works outside a vault. The command imports are deferred into main() and
+# run_maintenance(), after argparse has had its chance to handle --help.
+from kops.research_tiers import RESEARCH_TIERS
 
 
 def _clean_tmp(max_age_days: int = 7) -> None:
@@ -86,6 +42,21 @@ def _clean_tmp(max_age_days: int = 7) -> None:
 def run_maintenance(
     agent: str | None = None, clean_tmp: bool = False, check_drift: bool = False
 ) -> None:
+    from kops.kb_commands import (
+        run_refresh_sources,
+        run_normalize_github_sources,
+        run_backfill_source_notes,
+        run_backfill_source_metadata,
+        run_backfill_concept_quality,
+        run_backfill_answer_quality,
+        run_build_graph,
+        run_extract_claims,
+        run_extract_contradictions,
+        run_scorecard,
+        run_lint,
+    )
+    from kops.kb_runtime import cmd_compile
+
     if clean_tmp:
         _clean_tmp()
     if agent:
@@ -507,6 +478,59 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    # Deferred until after argparse: importing the command layer eagerly loads the
+    # vault config, so keeping these out of module scope lets `kops --help` and
+    # argparse errors work without a vault present.
+    from kops.kb_commands import (
+        run_add_source,
+        run_claim_search,
+        run_backfill_answer_quality,
+        run_backfill_concept_quality,
+        run_backfill_source_metadata,
+        run_backfill_source_notes,
+        run_bootstrap,
+        run_build_graph,
+        run_graph_audit,
+        run_clear_stale_flags,
+        run_contradiction_search,
+        run_export_index,
+        run_export_vault,
+        run_extract_claims,
+        run_extract_contradictions,
+        run_fetch,
+        run_ingest_github,
+        run_lint,
+        run_install_agent_assets,
+        run_normalize_github_sources,
+        run_refresh_sources,
+        run_fetch_queue,
+        run_generate_source_registry,
+        run_migrate_source_fields,
+        run_normalize_frontmatter_cmd,
+        run_render_manifest,
+        run_retention_report,
+        run_search_graph,
+        run_traverse_graph,
+        run_scorecard,
+        run_stale_impact,
+        run_suggest_links,
+        run_validate_config,
+        cmd_claim_map,
+        run_generate_probes,
+        run_evaluate,
+        run_compile_large_source,
+    )
+    from kops.kb_runtime import cmd_ask, cmd_compile, cmd_heal, cmd_render
+    from kops.research_workflow import (
+        cmd_research_archive,
+        cmd_research_collect,
+        cmd_research_import,
+        cmd_research_report,
+        cmd_research_review,
+        cmd_research_start,
+        cmd_research_status,
+    )
 
     if args.command == "ingest":
         run_fetch(args.input, branch=args.branch, fail_fast=args.fail_fast)

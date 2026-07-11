@@ -42,7 +42,7 @@ RESEARCH_PHASES = {
     "done",
     "blocked",
 }
-RESEARCH_TIERS = {"fast", "standard", "deep"}
+from kops.research_tiers import RESEARCH_TIERS  # noqa: E402  (re-exported for callers)
 
 
 def research_slug(text: str) -> str:
