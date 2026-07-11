@@ -187,36 +187,167 @@ def generate_source_registry_content():
     return "\n".join(lines) + "\n"
 
 
-def generate_updated_home_content(concepts):
-    home_text = CONFIG.home_note.read_text(encoding="utf-8")
+def generate_flat_concept_index_content(concepts):
     sorted_concepts = sorted(concepts, key=lambda x: x["title"])
     date_str = datetime.date.today().strftime("%Y-%m-%d")
     count = len(sorted_concepts)
 
-    new_header = f"## All Concepts *(auto-generated {date_str} — {count} pages)*"
-    bullets = [f"- [[Concepts/{c['stem']}|{c['title']}]]" for c in sorted_concepts]
+    lines = [
+        "---",
+        'title: "Flat Concept Index"',
+        "type: index",
+        "tags:",
+        "  - kb/index",
+        "---",
+        "# Flat Concept Index",
+        "",
+        "## What It Is",
+        "",
+        "This page is a flat alphabetical index of all concept pages in the vault.",
+        "",
+        f"## All Concepts *(auto-generated {date_str} — {count} pages)*",
+        "",
+    ]
+    for c in sorted_concepts:
+        lines.append(f"- [[Concepts/{c['stem']}|{c['title']}]]")
+    lines.append("")
+    return "\n".join(lines)
 
-    # Clean up the human presentation of Home.md by putting all concepts in a details/summary wrapper
-    new_section = (
-        new_header
-        + "\n\n<details>\n<summary>Expand Flat Concept List</summary>\n\n"
-        + "\n".join(bullets)
-        + "\n</details>\n"
-    )
 
-    match = re.search(r"(?mi)^##\s+All Concepts\b", home_text)
-    if not match:
-        raise ValueError("Could not find ## All Concepts section in Home.md")
-    start_idx = match.start()
+def generate_updated_home_content(concepts, sources=None):
+    if sources is None:
+        sources = get_sources_data()
 
-    remainder = home_text[start_idx + len(match.group(0)) :]
-    next_heading_match = re.search(r"(?m)^\s*##\s", remainder)
-    if next_heading_match:
-        end_idx = start_idx + len(match.group(0)) + next_heading_match.start()
+    total_concepts = len(concepts)
+    total_sources = len(sources)
+
+    total_answers = 0
+    try:
+        total_answers = len([p for p in CONFIG.answers_dir.glob("*.md") if p.name != "index.md"])
+    except Exception:
+        pass
+
+    date_str = datetime.date.today().strftime("%Y-%m-%d")
+
+    # 1. Recent Concept Stubs (claim_quality: provisional OR evidence_status: seed)
+    stubs = []
+    for c in concepts:
+        fm = c["frontmatter"]
+        if fm.get("claim_quality") == "provisional" or fm.get("evidence_status") == "seed":
+            stubs.append(
+                f"- [[Concepts/{c['stem']}|{c['title']}]] (quality: {fm.get('claim_quality', 'provisional')} / status: {fm.get('evidence_status', 'seed')})"
+            )
+
+    if stubs:
+        concept_stubs_str = "\n".join(stubs[:10])
     else:
-        end_idx = len(home_text)
+        concept_stubs_str = "*No concept stubs currently found.*"
 
-    return home_text[:start_idx] + new_section + home_text[end_idx:]
+    # 2. Contradictions
+    contradictions_list = []
+    contr_path = CONFIG.vault_dir.parent / "data" / "contradictions.json"
+    if contr_path.exists():
+        try:
+            import json
+
+            contr_data = json.loads(contr_path.read_text(encoding="utf-8"))
+            for ctr in contr_data.get("contradictions", []):
+                concept = ctr.get("concept", "Unknown")
+                oq = ctr.get("open_question", "")
+                cid = ctr.get("id", "")
+                contradictions_list.append(f"- [[Concepts/{concept}|{concept}]]: {oq} ({cid})")
+        except Exception:
+            pass
+
+    if contradictions_list:
+        contradictions_str = "\n".join(contradictions_list[:10])
+    else:
+        contradictions_str = "*No active contradictions logged.*"
+
+    # 3. Open TODOs
+    todos_list = []
+    if CONFIG.todo_note.exists():
+        todo_text = CONFIG.todo_note.read_text(encoding="utf-8")
+        _, todo_body = parse_frontmatter(todo_text)
+        for line in todo_body.splitlines():
+            line_stripped = line.strip()
+            if line_stripped.startswith("-") or line_stripped.startswith("*"):
+                todos_list.append(line_stripped)
+
+    if todos_list:
+        todos_str = "\n".join(todos_list[:10])
+    else:
+        todos_str = "*No open TODOs found.*"
+
+    # 4. Recent Answers
+    recent_answers_content = ""
+    if CONFIG.home_note.exists():
+        home_text = CONFIG.home_note.read_text(encoding="utf-8")
+        section_re = re.compile(r"## Recent Answers\s*\n(.*?)(?=\n## |\Z)", re.DOTALL)
+        match = section_re.search(home_text)
+        if match:
+            recent_answers_content = match.group(1).strip()
+
+    if not recent_answers_content:
+        recent_answers_content = "*No recent answers logged yet.*"
+
+    lines = [
+        "---",
+        'title: "Home"',
+        "type: home",
+        "tags:",
+        "  - kb/home",
+        "---",
+        "# Home",
+        "",
+        "Welcome to the **K-Ops** Knowledge Base. This is the central entry point for the agentic research vault.",
+        "",
+        "## Metrics & Metadata",
+        "",
+        "| Metric | Value |",
+        "| --- | --- |",
+        f"| **Total Concepts** | {total_concepts} |",
+        f"| **Total Sources** | {total_sources} |",
+        f"| **Total Answers** | {total_answers} |",
+        f"| **Last Compiled** | {date_str} |",
+        "",
+        "## Navigation",
+        "",
+        "- **Atlases & Indexes**:",
+        "  - [[Indexes/Vault_Dashboard|Vault Dashboard]] — Complete dashboard of the vault",
+        "  - [[Indexes/Topic_Atlas|Topic Atlas]] — Concepts clustered by tag",
+        "  - [[Indexes/Source_Atlas|Source Atlas]] — Sources grouped by year, kind, and strength",
+        "  - [[Indexes/Source_Registry|Source Registry]] — Flat index of all sources",
+        "  - [[Indexes/Flat_Concept_Index|Flat Concept Index]] — Flat list of all concepts",
+        "  - [[Indexes/Workflow_Atlas|Workflow Atlas]] — Active research and runbooks",
+        "- **Operating Rules**:",
+        "  - [[../OPERATING_RULES.md|Operating Rules]] — Repository contract and behavioral guardrails",
+        "- **Runbooks**:",
+        "  - [[Runbooks/Agent_Workflow_Quick_Reference|Agent Workflow Quick Reference]] — Compact operator map",
+        "  - [[Runbooks/Research_Workflow|Research Workflow]] — Deep research execution pipeline",
+        "  - [[Runbooks/Obsidian_Plugin_Setup|Obsidian Plugin Setup]] — Obsidian setup instructions",
+        "  - [[TODO|TODO]] — Open tasks and maintenance queues",
+        "",
+        "## Active Maintenance Queues",
+        "",
+        "### Recent Concept Stubs",
+        "",
+        concept_stubs_str,
+        "",
+        "### Contradictions",
+        "",
+        contradictions_str,
+        "",
+        "### Open TODOs",
+        "",
+        todos_str,
+        "",
+        "## Recent Answers",
+        "",
+        recent_answers_content,
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def get_author_org(fm):
@@ -258,6 +389,132 @@ def format_sources_list(src_list, limit_details=10):
         )
     else:
         return "\n".join(lines)
+
+
+def generate_title_index_content(sources):
+    # Alphabetical grouping by title
+    alpha_groups = {}
+    for src in sources:
+        title = src["frontmatter"].get("title") or ""
+        title = title.strip()
+        if not title:
+            title = src["source_id"]
+        first_char = title[0].upper() if title else "#"
+        if not first_char.isalpha():
+            first_char = "#"
+        alpha_groups.setdefault(first_char, []).append(src)
+
+    sorted_letters = sorted(alpha_groups.keys())
+    if "#" in sorted_letters:
+        sorted_letters.remove("#")
+        sorted_letters.append("#")
+
+    lines = [
+        "---",
+        'title: "Source Title Index"',
+        "type: index",
+        "tags:",
+        "  - kb/index",
+        "---",
+        "# Source Title Index",
+        "",
+        "Browse sources alphabetically by title.",
+        "",
+        " | ".join([f"[[#Section {letter}|{letter}]]" for letter in sorted_letters]),
+        "",
+    ]
+
+    for letter in sorted_letters:
+        lines.append(f"### Section {letter}")
+        lines.append("")
+        lines.append(format_sources_list(alpha_groups[letter]))
+        lines.append("")
+
+    lines.append("## Backlinks")
+    lines.append("")
+    lines.append("- [[Vault_Dashboard]]")
+    lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def generate_author_index_content(sources):
+    # Author/Organization grouping
+    author_groups = {}
+    for src in sources:
+        names = get_author_org(src["frontmatter"])
+        if not names:
+            names = ["Unknown / Unspecified"]
+        for name in names:
+            author_groups.setdefault(name, []).append(src)
+
+    sorted_authors = sorted(
+        [(name, srcs) for name, srcs in author_groups.items() if name != "Unknown / Unspecified"],
+        key=lambda x: (-len(x[1]), x[0]),
+    )
+    if "Unknown / Unspecified" in author_groups:
+        sorted_authors.append(("Unknown / Unspecified", author_groups["Unknown / Unspecified"]))
+
+    lines = [
+        "---",
+        'title: "Author Index"',
+        "type: index",
+        "tags:",
+        "  - kb/index",
+        "---",
+        "# Author Index",
+        "",
+        "Browse sources by author and organization.",
+        "",
+    ]
+
+    for name, srcs in sorted_authors:
+        lines.append(f"### {name} ({len(srcs)} sources)")
+        lines.append("")
+        lines.append(format_sources_list(srcs))
+        lines.append("")
+
+    lines.append("## Backlinks")
+    lines.append("")
+    lines.append("- [[Vault_Dashboard]]")
+    lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def generate_year_index_content(sources):
+    # Publication Year grouping
+    year_groups = {}
+    for src in sources:
+        year = get_year(src["frontmatter"])
+        year_groups.setdefault(year, []).append(src)
+
+    lines = [
+        "---",
+        'title: "Publication Year Index"',
+        "type: index",
+        "tags:",
+        "  - kb/index",
+        "---",
+        "# Publication Year Index",
+        "",
+        "Browse sources by publication year (newest first).",
+        "",
+    ]
+
+    for year in sorted(year_groups.keys(), reverse=True):
+        srcs = year_groups[year]
+        lines.append(f"### {year} ({len(srcs)} sources)")
+        lines.append("")
+        lines.append(format_sources_list(srcs))
+        lines.append("")
+
+    lines.append("## Backlinks")
+    lines.append("")
+    lines.append("- [[Vault_Dashboard]]")
+    lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def generate_vault_dashboard_content(sources, concepts):
@@ -359,6 +616,7 @@ def generate_vault_dashboard_content(sources, concepts):
         "- [[Indexes/Source_Atlas|Source Atlas]] — Grouped by year, kind, and evidence strength",
         "- [[Indexes/Topic_Atlas|Topic Atlas]] — Concept clusters grouped by tag",
         "- [[Indexes/Source_Registry|Source Registry]] — Flat tabular list of all sources",
+        "- [[Indexes/Flat_Concept_Index|Flat Concept Index]] — Flat alphabetical index of all concepts",
         "- [[Indexes/Workflow_Atlas|Workflow Atlas]] — Active research and runbooks",
         "- [[TODO|TODO]] — Open tasks and maintenance queues",
         "",
@@ -579,10 +837,34 @@ def main():
     source_registry_path.write_text(source_registry_content, encoding="utf-8")
     print(f"Updated {source_registry_path}")
 
-    # 4. Home Concepts
-    home_content = generate_updated_home_content(concepts)
+    # 4. Home note
+    home_content = generate_updated_home_content(concepts, sources)
     CONFIG.home_note.write_text(home_content, encoding="utf-8")
     print(f"Updated {CONFIG.home_note}")
+
+    # 4.b Flat Concept Index
+    flat_concept_index_path = CONFIG.indexes_dir / "Flat_Concept_Index.md"
+    flat_concept_index_content = generate_flat_concept_index_content(concepts)
+    flat_concept_index_path.write_text(flat_concept_index_content, encoding="utf-8")
+    print(f"Updated {flat_concept_index_path}")
+
+    # 4.c Title Index
+    title_index_path = CONFIG.indexes_dir / "Title_Index.md"
+    title_index_content = generate_title_index_content(sources)
+    title_index_path.write_text(title_index_content, encoding="utf-8")
+    print(f"Updated {title_index_path}")
+
+    # 4.d Author Index
+    author_index_path = CONFIG.indexes_dir / "Author_Index.md"
+    author_index_content = generate_author_index_content(sources)
+    author_index_path.write_text(author_index_content, encoding="utf-8")
+    print(f"Updated {author_index_path}")
+
+    # 4.e Year Index
+    year_index_path = CONFIG.indexes_dir / "Year_Index.md"
+    year_index_content = generate_year_index_content(sources)
+    year_index_path.write_text(year_index_content, encoding="utf-8")
+    print(f"Updated {year_index_path}")
 
     # 5. Vault Dashboard
     vault_dashboard_path = CONFIG.indexes_dir / "Vault_Dashboard.md"

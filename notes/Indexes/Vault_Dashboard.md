@@ -13,6 +13,7 @@ Welcome to the human-oriented search and discovery interface for the living rese
 - [[Indexes/Source_Atlas|Source Atlas]] — Grouped by year, kind, and evidence strength
 - [[Indexes/Topic_Atlas|Topic Atlas]] — Concept clusters grouped by tag
 - [[Indexes/Source_Registry|Source Registry]] — Flat tabular list of all sources
+- [[Indexes/Flat_Concept_Index|Flat Concept Index]] — Flat alphabetical index of all concepts
 - [[Indexes/Workflow_Atlas|Workflow Atlas]] — Active research and runbooks
 - [[TODO|TODO]] — Open tasks and maintenance queues
 
@@ -21,7 +22,7 @@ These are the most stale or aging sources in the vault, sorted by their retentio
 
 | Source ID | Title | Retention Score | Tier | Age (Days) |
 |---|---|---|---|---|
-| [[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]] | Agent Workflow Quick Reference Summary | 0.9943 | fresh | 3 |
+| [[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]] | Agent Workflow Quick Reference Summary | 0.9518 | fresh | 26 |
 
 ## Browse by Source Title (Alphabetical Index)
 

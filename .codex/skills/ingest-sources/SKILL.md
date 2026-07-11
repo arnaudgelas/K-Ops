@@ -61,6 +61,29 @@ Sections (in this order, all required):
 - `## Related Concepts` (Required by linter)
 - `## Backlinks`
 
+### Large source variant
+
+When `data/raw/<source_id>/large_source_manifest.json` exists AND the normalized source content exceeds 20 KB, the agent MUST use the large-source section schema instead of the flat schema above.
+
+Required sections in order:
+1. `## Document Summary` — 1-3 paragraph synthesis of the full source (main thesis, audience, scope). Machine-owned.
+2. `## Section Evidence Map` — contains `###` subsections, one per high-signal manifest node. Only render: top-level nodes (level ≤ 1) plus child nodes that have claims, contradictions, or table/figure type. Machine-owned.
+   - Each `###` heading must use the manifest node's `title` field verbatim (strip any "type: " prefix).
+   - Each subsection may contain a `#### Key Claims` block with inline citations anchored to the section heading.
+   - Parent nodes must not restate child claim bullets verbatim — parent Key Claims are for cross-section synthesis only.
+3. `## Key Claims` — top-level cross-document claims only; must not duplicate bullets from Section Evidence Map.
+4. `## Candidate concepts`
+5. `## Open questions`
+6. `## Reliability notes` (required by linter)
+7. `## Related Concepts` (required by linter)
+8. `## Backlinks`
+
+Citation anchor format for section-level citations:
+`[[Sources/<subdir>/<source_id>#<heading-anchor>|<source_id>#<heading-anchor>]]`
+where `<heading-anchor>` is the Obsidian anchor derivation: lowercase, spaces → hyphens, punctuation removed.
+
+If the note would exceed 60 KB, add `source_summary_too_large: true` and `truncated_at_section: "<last section rendered>"` to frontmatter, stop rendering, and append a TODO entry in `notes/TODO.md`.
+
 ## Safe behavior
 - Prefer updating an existing note over creating a duplicate.
 - Keep the summary anchored in the raw capture and registry metadata.

@@ -9,7 +9,7 @@ description: Answer questions from the vault, then file durable insights back in
 Produce useful answers without letting knowledge disappear into chat.
 
 ## Workflow
-1. Read `notes/Home.md`.
+1. Read `notes/Home.md` or `notes/Indexes/Flat_Concept_Index.md`, and run `search_vault.py` programmatically.
 2. Classify the query using `notes/Runbooks/Query_Planner.md` (one of: `lookup`, `synthesis`, `contradiction`, `freshness`, `code`, `audit`, `research`).
 3. Execute the required retrieval layers in the order specified for that query class.
 4. Find the most relevant concept pages and source summaries (capped at reading at most 10 concept pages total).

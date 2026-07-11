@@ -60,6 +60,20 @@ Set `claim_quality` in frontmatter based on citation coverage and conflicts:
 - `conflicting` — contradiction exists in `data/contradictions.json`
 - `stale` — flagged stale
 
+## Large source note contract
+
+See `notes/Runbooks/Large_Source_Hierarchy.md` for the normative spec. The following rules are binding during compile:
+
+1. **Human-owned sections in large source notes.** `## Document Summary` and `## Section Evidence Map` written by the ingest-sources skill (or by a human) are treated as human-owned. Compile must not rewrite their prose. Compile may append new `###` subsections to `## Section Evidence Map` when new nodes appear in the manifest, but must not alter existing subsection prose.
+
+2. **Append-only for new manifest nodes.** If the manifest gains new nodes since the last ingest, compile may append new `### <section_title>` blocks to `## Section Evidence Map`. Existing blocks are read-only (same rule as `## Open Questions`).
+
+3. **60 KB warning.** Before writing a large source note, check the projected output size. If it would exceed 60 KB (61 440 bytes), emit a compile log entry:
+   ```
+   [source-note-too-large] <source_id>: <size> bytes
+   ```
+   Add `source_summary_too_large: true` to the note's frontmatter. Do not truncate silently.
+
 ## Compile Log Requirement
 Every compilation run must produce a compile log entry before the skill is considered complete.
 Write or append a brief log to `research/scratch/compile-YYYYMMDD.md` (use today's date) containing:

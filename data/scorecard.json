@@ -1,6 +1,6 @@
 {
   "project": "K-Ops",
-  "generated_at": "2026-07-03T21:39:39",
+  "generated_at": "2026-07-11T10:26:50",
   "eval_pass_rate": null,
   "catastrophic_failure_count": 0,
   "concepts": {
@@ -20,9 +20,9 @@
     "partial_source_dependencies": 0
   },
   "indexes": {
-    "total": 4,
+    "total": 5,
     "by_type": {
-      "index": 4
+      "index": 5
     }
   },
   "sources": {
@@ -117,6 +117,9 @@
   "schema_compliance": {
     "error_count": 0,
     "missing_fields": {}
+  },
+  "graph_topology": {
+    "available": false
   },
   "eval": {
     "latest_run": null,

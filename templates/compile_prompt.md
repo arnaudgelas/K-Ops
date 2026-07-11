@@ -21,7 +21,8 @@ Before writing anything:
 Read these files before touching anything else:
 - `config/kb_config.yaml` - project name and path configuration
 - `data/registry.json` - source inventory (source_id, url, raw_path, source_kind)
-- `notes/Home.md` - existing concept map and navigation structure
+- `notes/Home.md` - existing navigation structure and active maintenance queues
+- `notes/Indexes/Flat_Concept_Index.md` - flat alphabetical index of all concepts (if needed)
 
 Do not read every file in `notes/Concepts/` upfront. Read concept pages on demand when you need to decide whether a theme already exists.
 
@@ -293,7 +294,7 @@ evidence_status: <evidence_status>
 
 ## Step 4 - Update Home, TODO, and Compile Log
 
-- Update `notes/Home.md` to reference any new concept pages added.
+- If new concept pages were added, they will be auto-indexed in `notes/Indexes/Flat_Concept_Index.md` during index generation (no manual update to Home.md is required).
 - If sources contradicted existing vault claims or introduced unresolved gaps, append entries to `notes/TODO.md`.
 - **Compile Log Requirement**: You MUST write or append a compile log entry to `research/scratch/compile-YYYYMMDD.md` (using today's date). If the file exists, append with a timestamp. Include:
   - Sources processed (list of source IDs read)
@@ -322,7 +323,7 @@ Stop when all of the following are true:
 - [ ] Every new concept page uses the schema above with all required sections.
 - [ ] Every Key Claims bullet has at least one inline `([[Sources/...]])` citation or is marked `(unverified)`.
 - [ ] No concept page has `claim_quality: conflicting` without an `## Open Questions` section.
-- [ ] `notes/Home.md` references any new concept pages.
+- [ ] Run `generate_indexes.py` to auto-index any new concept pages in `notes/Indexes/Flat_Concept_Index.md`.
 - [ ] A compile log has been written/appended to `research/scratch/compile-YYYYMMDD.md`.
 - [ ] No source note > 60 KB without a compile-log warning entry citing the source_id and note size (code: `source-note-too-large`).
 

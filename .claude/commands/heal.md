@@ -80,8 +80,8 @@ For each source summary, check and fix:
 ### Pass 3 - Home and navigation
 
 After both directory passes:
-- Verify `notes/Home.md` links to all concept pages that exist. Add missing links under the appropriate section.
-- Do not reorganize or rewrite `notes/Home.md` - append missing links only.
+- Do not add flat lists of concept pages to `notes/Home.md` or `notes/Indexes/Flat_Concept_Index.md` — these are managed automatically by programmatic scripts.
+- Ensure the key navigation files are clean and present.
 
 ---
 
@@ -94,7 +94,7 @@ Stop after completing all three passes. Do not loop back.
 - [ ] Concept pages: all `conflicting` pages have `## Open Questions`.
 - [ ] Source summaries: all have `evidence_strength`, `source_id`, `source_kind`, and `source_status`.
 - [ ] Source summaries: PDF and imported report constraints are validated and fixed.
-- [ ] `notes/Home.md`: references all existing concept pages.
+- [ ] `notes/Home.md` has been refocused on flow and navigation.
 - [ ] `notes/TODO.md`: pages needing human review are recorded.
 
 Print a short heal report: N pages touched, N links fixed, N scaffolds added, N items added to TODO.

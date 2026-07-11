@@ -2055,6 +2055,7 @@ def lint_vault(
                 generate_topic_atlas_content,
                 generate_source_registry_content,
                 generate_updated_home_content,
+                generate_flat_concept_index_content,
                 generate_vault_dashboard_content,
             )
 
@@ -2107,13 +2108,28 @@ def lint_vault(
                 )
 
             # Check Home Concepts
-            generated_home = generate_updated_home_content(concepts)
+            generated_home = generate_updated_home_content(concepts, sources)
             if not HOME_PATH.exists() or HOME_PATH.read_text(encoding="utf-8") != generated_home:
                 findings.append(
                     Finding(
                         "error",
                         "index-out-of-sync",
                         "Home.md (concept list) is out of sync or missing. Run generate_indexes.py to fix.",
+                    )
+                )
+
+            # Check Flat Concept Index
+            flat_concept_index_path = INDEXES_DIR / "Flat_Concept_Index.md"
+            generated_flat_concept_index = generate_flat_concept_index_content(concepts)
+            if (
+                not flat_concept_index_path.exists()
+                or flat_concept_index_path.read_text(encoding="utf-8") != generated_flat_concept_index
+            ):
+                findings.append(
+                    Finding(
+                        "error",
+                        "index-out-of-sync",
+                        "Flat_Concept_Index.md is out of sync or missing. Run generate_indexes.py to fix.",
                     )
                 )
 

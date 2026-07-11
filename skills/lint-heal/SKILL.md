@@ -27,7 +27,7 @@ Continuously improve vault quality and ensure structural integrity.
 - Fix missing or mismatched reciprocal semantic edge predicates.
 - Move uncertain or unverified claims into Open Questions.
 - Update `notes/TODO.md` for unresolved items or pages needing human revalidation.
-- Re-link orphan concept pages in `notes/Home.md`.
+- Ensure orphan concept pages are handled or reported in `notes/TODO.md` (indexing is handled programmatically).
 
 ## Do not
 - Rewrite established knowledge or claims.
