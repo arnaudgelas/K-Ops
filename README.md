@@ -281,31 +281,54 @@ export KB_GEMINI_CMD="gemini"
 
 ## Setup
 
-### 1. Install `uv`
+There are two ways to use K-Ops: **install the `kops` CLI** and run it against
+your own vault, or **clone the repo** to develop the tooling itself.
+
+### Install `uv`
 
 If `uv` is not already installed:
 
 ```bash
 brew install uv
-```
-
-or:
-
-```bash
+# or
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### 2. Sync the environment
+### Option A — Install the `kops` CLI (run it against any vault)
+
+Install the packaged CLI once, then point it at any vault. Only the tooling is
+installed — your vault stays a plain folder of Markdown, and no private data ever
+lives with the code.
 
 ```bash
-uv sync
+uv tool install --from git+https://github.com/arnaudgelas/K-Ops kops
 ```
 
-This project uses `uv` for dependency management. Use `uv sync` and `uv run`.
-Do not rely on `pip install .` as the primary interface; the CLI is currently
-designed as a repo-local tool.
+Run it from inside a vault (it walks up to find `config/kb_config.yaml`), or
+target one explicitly with `--vault`:
 
-### 3. Verify an agent CLI
+```bash
+cd ~/my-vault && kops compile --agent codex
+kops --vault ~/my-vault validate        # from anywhere
+```
+
+`kops --help` works without a vault. Bundled assets (validation schema, prompt
+templates, skills) ship inside the wheel, so no source checkout is needed.
+
+### Option B — Develop the tooling (work on K-Ops itself)
+
+Clone the repo and use `uv` for an editable dev environment:
+
+```bash
+uv sync                # install deps + kops in editable mode
+uv run kops --help     # run the CLI from the checkout
+uv run pytest          # run the test suite
+```
+
+Command examples in this README use the `uv run kops ...` (dev) form. With
+Option A installed, drop the `uv run` prefix and just use `kops ...`.
+
+### Verify an agent CLI
 
 The workflow expects one of these commands to be available:
 
@@ -613,9 +636,8 @@ K-Ops/
 │   └── index.md
 ├── outputs/
 ├── research/
-├── scripts/
-├── skills/
-├── templates/
+├── kops/                  # installable tooling package (Python modules + bundled skills/, templates/, schema.yaml)
+├── config/                # kb_config.yaml — vault configuration
 ├── .obsidian/
 ├── AGENTS.md
 ├── CLAUDE.md
