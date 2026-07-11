@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
     strict=True,
 )
 def test_install_agent_assets_round_trip():
-    from install_agent_assets import install_agent_assets
+    from kops.install_agent_assets import install_agent_assets
 
     with tempfile.TemporaryDirectory(prefix="kb-install-assets-") as tmp:
         project_root = Path(tmp) / "project"

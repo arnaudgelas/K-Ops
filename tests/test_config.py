@@ -22,7 +22,7 @@ def write_config(tmp_path: Path, content: str) -> Path:
 
 def reload_config(config_path: Path):
     """Clear lru_cache and reload config from the given path."""
-    import utils
+    import kops.utils as utils
 
     utils.load_config.cache_clear()
     old = os.environ.get("KB_CONFIG_PATH")

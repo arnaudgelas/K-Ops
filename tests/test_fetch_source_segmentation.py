@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from fetch_sources import segment_source  # noqa: E402
+from kops.fetch_sources import segment_source  # noqa: E402
 
 
 def test_segment_source_confidence_field():

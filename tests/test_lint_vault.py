@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import lint_vault  # noqa: E402
+import kops.lint_vault as lint_vault  # noqa: E402
 
 
 class LintVaultTests(unittest.TestCase):

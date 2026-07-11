@@ -26,27 +26,27 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["scripts"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
 
 [tool.pyright]
 pythonVersion = "3.11"
-extraPaths = ["scripts"]
+extraPaths = ["."]
 typeCheckingMode = "off"
 
 [tool.mypy]
-files = ["scripts", "tests"]
+files = ["kops", "tests"]
 ignore_errors = true
 python_version = "3.11"
 
 [project.scripts]
-k-ops = "scripts.kb:main"
-format = "scripts.format:main"
+kops = "kops.kb:main"
+format = "kops.format:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["scripts"]
+packages = ["kops"]
 
 [tool.uv]
 package = true

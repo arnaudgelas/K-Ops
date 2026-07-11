@@ -29,7 +29,7 @@ def test_qa_golden_yaml_has_required_shape():
 @pytest.mark.xfail(reason="eval-check subcommand not yet implemented in kb.py", strict=True)
 def test_eval_check_command_passes():
     result = subprocess.run(
-        [sys.executable, "scripts/kb.py", "eval-check"],
+        [sys.executable, "-m", "kops.kb", "eval-check"],
         cwd=ROOT,
         check=True,
         capture_output=True,
@@ -41,7 +41,7 @@ def test_eval_check_command_passes():
 @pytest.mark.xfail(reason="eval-setup subcommand not yet implemented in kb.py", strict=True)
 def test_eval_setup_is_idempotent():
     result = subprocess.run(
-        [sys.executable, "scripts/kb.py", "eval-setup"],
+        [sys.executable, "-m", "kops.kb", "eval-setup"],
         cwd=ROOT,
         check=True,
         capture_output=True,

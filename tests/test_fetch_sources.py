@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from fetch_sources import clean_article_text, extract_html_text, strip_tracking_parameters  # noqa: E402
+from kops.fetch_sources import clean_article_text, extract_html_text, strip_tracking_parameters  # noqa: E402
 
 
 class FetchSourcesTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class FetchSourcesTests(unittest.TestCase):
         import tempfile
         import shutil
         import json
-        from fetch_sources import ingest_one
+        from kops.fetch_sources import ingest_one
 
         # Create a large text file (so normalized_content becomes exactly 15,000 chars with newline)
         large_content = "A" * 14999
@@ -83,7 +83,7 @@ class FetchSourcesTests(unittest.TestCase):
             tmp_path.unlink(missing_ok=True)
 
     def test_extract_html_bibliographic_metadata(self) -> None:
-        from fetch_sources import extract_html_bibliographic_metadata
+        from kops.fetch_sources import extract_html_bibliographic_metadata
 
         html = """
         <html>
@@ -108,7 +108,7 @@ class FetchSourcesTests(unittest.TestCase):
 
     def test_process_large_source_html_diagnostics(self) -> None:
         import shutil
-        from fetch_sources import process_large_source
+        from kops.fetch_sources import process_large_source
 
         large_content = "A" * 12000
         html = f"""

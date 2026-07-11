@@ -2,8 +2,8 @@
 
 import json
 
-import check_public_safe
-import kb_paths
+import kops.check_public_safe as check_public_safe
+import kops.kb_paths as kb_paths
 
 
 # --- kb_home() precedence ---------------------------------------------------

@@ -5,8 +5,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import check_source_drift  # noqa: E402,F401
-from check_source_drift import _upstream_head  # noqa: E402
+import kops.check_source_drift as check_source_drift  # noqa: E402,F401
+from kops.check_source_drift import _upstream_head  # noqa: E402
 
 
 class _FakeCompleted:

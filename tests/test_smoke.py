@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(
-        [sys.executable, "scripts/kb.py"] + args,
+        [sys.executable, "-m", "kops.kb"] + args,
         cwd=ROOT,
         capture_output=True,
         text=True,

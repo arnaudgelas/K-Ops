@@ -68,7 +68,7 @@ def _make_source(
 
 
 def test_no_claims_section_returns_empty(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     path = _make_concept(tmp_path, "Empty", "## What It Is\n\nNothing yet.\n")
     _patch_cr(cr, tmp_path)
@@ -77,7 +77,7 @@ def test_no_claims_section_returns_empty(tmp_path):
 
 
 def test_extracts_bullets_from_key_claims(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     body = (
         "## Key Claims\n\n"
@@ -97,7 +97,7 @@ def test_extracts_bullets_from_key_claims(tmp_path):
 
 
 def test_claim_ids_are_stable(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     body = "## Key Claims\n\n- Stable claim.\n"
     path = _make_concept(tmp_path, "Stable", body)
@@ -109,7 +109,7 @@ def test_claim_ids_are_stable(tmp_path):
 
 
 def test_claim_ids_differ_for_different_text(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     id_a = cr.claim_stable_id("Concept", "Claim A.")
     id_b = cr.claim_stable_id("Concept", "Claim B.")
@@ -117,7 +117,7 @@ def test_claim_ids_differ_for_different_text(tmp_path):
 
 
 def test_claim_ids_differ_for_same_text_different_concept(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     id_a = cr.claim_stable_id("Concept_A", "Same text.")
     id_b = cr.claim_stable_id("Concept_B", "Same text.")
@@ -125,7 +125,7 @@ def test_claim_ids_differ_for_same_text_different_concept(tmp_path):
 
 
 def test_extracts_source_ids_from_evidence_section(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     body = (
         "## Key Claims\n\n- A claim.\n\n"
@@ -141,7 +141,7 @@ def test_extracts_source_ids_from_evidence_section(tmp_path):
 
 
 def test_distinguishes_inline_and_page_inherited_sources(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     body = (
         "## Key Claims\n\n"
@@ -165,7 +165,7 @@ def test_distinguishes_inline_and_page_inherited_sources(tmp_path):
 
 
 def test_source_anchor_fields_are_parsed(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     body = "## Key Claims\n\n- Code claim src-1122334455#path=src/app.py&L10=L20&commit=abc123.\n"
     path = _make_concept(tmp_path, "Anchors", body)
@@ -182,7 +182,7 @@ def test_source_anchor_fields_are_parsed(tmp_path):
 
 
 def test_claim_admission_status_quarantines_model_generated_sources(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     _make_source(
         tmp_path,
@@ -203,7 +203,7 @@ def test_claim_admission_status_quarantines_model_generated_sources(tmp_path):
 
 
 def test_claim_admission_status_blocks_revoked_or_adversarial_sources(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     _make_source(
         tmp_path,
@@ -222,7 +222,7 @@ def test_claim_admission_status_blocks_revoked_or_adversarial_sources(tmp_path):
 
 
 def test_claim_id_ignores_added_citation(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     id_without_cite = cr.claim_stable_id("Concept", cr.normalize_claim_text("Same claim."))
     id_with_cite = cr.claim_stable_id(
@@ -233,7 +233,7 @@ def test_claim_id_ignores_added_citation(tmp_path):
 
 
 def test_search_claims_finds_match(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     claims = [
         {
@@ -261,7 +261,7 @@ def test_search_claims_finds_match(tmp_path):
 
 
 def test_search_claims_no_match_returns_empty(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     claims = [
         {
@@ -279,7 +279,7 @@ def test_search_claims_no_match_returns_empty(tmp_path):
 
 
 def test_search_claims_empty_query_returns_all(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     claims = [
         {
@@ -298,7 +298,7 @@ def test_search_claims_empty_query_returns_all(tmp_path):
 
 
 def test_extract_all_claims_multiple_concepts(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     body_a = "## Key Claims\n\n- A1.\n- A2.\n"
     body_b = "## Key Claims\n\n- B1.\n"
@@ -314,7 +314,7 @@ def test_extract_all_claims_multiple_concepts(tmp_path):
 
 
 def test_run_writes_claims_json(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     body = "## Key Claims\n\n- Written claim.\n"
     _make_concept(tmp_path, "Written", body)
@@ -328,7 +328,7 @@ def test_run_writes_claims_json(tmp_path):
 
 
 def test_run_is_idempotent(tmp_path):
-    import claim_registry as cr
+    import kops.claim_registry as cr
 
     body = "## Key Claims\n\n- Idempotent claim.\n"
     _make_concept(tmp_path, "Idem", body)

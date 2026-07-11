@@ -54,7 +54,7 @@ def _patch_cr(cr_mod, dirs: dict) -> None:
 
 
 def test_empty_vault_returns_empty(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
@@ -63,7 +63,7 @@ def test_empty_vault_returns_empty(tmp_path):
 
 
 def test_non_conflicting_concept_excluded(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
@@ -73,7 +73,7 @@ def test_non_conflicting_concept_excluded(tmp_path):
 
 
 def test_conflicting_with_oq_produces_one_record_per_bullet(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
@@ -93,7 +93,7 @@ def test_conflicting_with_oq_produces_one_record_per_bullet(tmp_path):
 
 
 def test_conflicting_without_oq_produces_undocumented_record(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
@@ -106,7 +106,7 @@ def test_conflicting_without_oq_produces_undocumented_record(tmp_path):
 
 
 def test_stable_id_is_deterministic(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     id1 = cr.contradiction_stable_id("ConceptA", "Source X disagrees with Y")
     id2 = cr.contradiction_stable_id("ConceptA", "Source X disagrees with Y")
@@ -116,7 +116,7 @@ def test_stable_id_is_deterministic(tmp_path):
 
 
 def test_different_oq_bullets_produce_different_ids(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     id1 = cr.contradiction_stable_id("Concept", "Bullet one")
     id2 = cr.contradiction_stable_id("Concept", "Bullet two")
@@ -124,7 +124,7 @@ def test_different_oq_bullets_produce_different_ids(tmp_path):
 
 
 def test_source_ids_linked_from_evidence_section(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
@@ -140,7 +140,7 @@ def test_source_ids_linked_from_evidence_section(tmp_path):
 
 
 def test_claim_ids_linked_from_claims_json(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
@@ -165,7 +165,7 @@ def test_claim_ids_linked_from_claims_json(tmp_path):
 
 
 def test_run_writes_contradictions_json(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
@@ -180,7 +180,7 @@ def test_run_writes_contradictions_json(tmp_path):
 
 
 def test_run_is_idempotent(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
@@ -193,7 +193,7 @@ def test_run_is_idempotent(tmp_path):
 
 
 def test_load_contradictions_falls_back_to_extract(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)
@@ -204,7 +204,7 @@ def test_load_contradictions_falls_back_to_extract(tmp_path):
 
 
 def test_search_matches_by_keyword(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     recs = [
         {
@@ -226,7 +226,7 @@ def test_search_matches_by_keyword(tmp_path):
 
 
 def test_search_empty_query_returns_all(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     recs = [
         {"id": "ctr-a", "concept": "X", "open_question": "something", "documented": True},
@@ -237,7 +237,7 @@ def test_search_empty_query_returns_all(tmp_path):
 
 
 def test_undocumented_count_in_run_output(tmp_path):
-    import contradiction_registry as cr
+    import kops.contradiction_registry as cr
 
     dirs = _make_dirs(tmp_path)
     _patch_cr(cr, dirs)

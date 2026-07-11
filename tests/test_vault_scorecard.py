@@ -80,7 +80,7 @@ def _patch_vs(vs_mod, dirs: dict) -> None:
 
 
 def test_empty_vault_returns_zeros(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -93,7 +93,7 @@ def test_empty_vault_returns_zeros(tmp_path):
 
 
 def test_scorecard_includes_contradictions_domain(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -130,7 +130,7 @@ def test_scorecard_includes_contradictions_domain(tmp_path):
 
 
 def test_undocumented_contradiction_triggers_health_signal(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -164,7 +164,7 @@ def test_undocumented_contradiction_triggers_health_signal(tmp_path):
 
 
 def test_concept_quality_counts(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -178,7 +178,7 @@ def test_concept_quality_counts(tmp_path):
 
 
 def test_unsupported_concept_detected(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -188,7 +188,7 @@ def test_unsupported_concept_detected(tmp_path):
 
 
 def test_supported_concept_with_evidence(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -203,7 +203,7 @@ def test_supported_concept_with_evidence(tmp_path):
 
 
 def test_source_strength_distribution(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -218,7 +218,7 @@ def test_source_strength_distribution(tmp_path):
 
 
 def test_stub_fraction_computed(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -230,7 +230,7 @@ def test_stub_fraction_computed(tmp_path):
 
 
 def test_answer_provenance_counted(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -242,7 +242,7 @@ def test_answer_provenance_counted(tmp_path):
 
 
 def test_inline_citation_rate(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -259,7 +259,7 @@ def test_inline_citation_rate(tmp_path):
 
 
 def test_claim_direct_citation_metrics(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -304,7 +304,7 @@ def test_claim_direct_citation_metrics(tmp_path):
 
 
 def test_claim_admission_metrics_trigger_health_signals(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -348,7 +348,7 @@ def test_claim_admission_metrics_trigger_health_signals(tmp_path):
 
 
 def test_conflicting_no_oq_detected(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -358,7 +358,7 @@ def test_conflicting_no_oq_detected(tmp_path):
 
 
 def test_conflicting_with_oq_not_flagged(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -369,7 +369,7 @@ def test_conflicting_with_oq_not_flagged(tmp_path):
 
 
 def test_health_signal_high_stub_fraction(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -382,7 +382,7 @@ def test_health_signal_high_stub_fraction(tmp_path):
 
 
 def test_run_writes_scorecard_json(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)
@@ -395,7 +395,7 @@ def test_run_writes_scorecard_json(tmp_path):
 
 
 def test_run_is_idempotent(tmp_path):
-    import vault_scorecard as vs
+    import kops.vault_scorecard as vs
 
     dirs = _make_dirs(tmp_path)
     _patch_vs(vs, dirs)

@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from backfill_source_anchors import _find_verbatim_span, _serialize_anchor_fields  # noqa: E402
+from kops.backfill_source_anchors import _find_verbatim_span, _serialize_anchor_fields  # noqa: E402
 
 
 def test_find_verbatim_span_round_trips_exact_claim_text():

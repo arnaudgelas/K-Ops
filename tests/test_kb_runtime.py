@@ -9,8 +9,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import kb_runtime  # noqa: E402
-import retrieval  # noqa: E402
+import kops.kb_runtime as kb_runtime  # noqa: E402
+import kops.retrieval as retrieval  # noqa: E402
 
 
 class _FakeVaultIndex:

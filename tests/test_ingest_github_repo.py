@@ -9,13 +9,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from ingest_github_repo import (  # noqa: E402
+from kops.ingest_github_repo import (  # noqa: E402
     collect_candidate_files,
     detect_project_signals,
     render_snapshot_markdown,
     summarize_files,
 )
-from kb_schema import Validator  # noqa: E402
+from kops.kb_schema import Validator  # noqa: E402
 
 
 def _run_git(args: list[str], cwd: Path) -> None:

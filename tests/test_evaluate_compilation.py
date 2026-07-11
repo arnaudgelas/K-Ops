@@ -3,8 +3,8 @@ import sys
 
 # Add scripts directory to path to allow importing utils
 sys.path.append(str(Path(__file__).resolve().parent.parent / "scripts"))
-from utils import parse_frontmatter
-from feedback_loop import update_concept_file, parse_sections, parse_gaps_section
+from kops.utils import parse_frontmatter
+from kops.feedback_loop import update_concept_file, parse_sections, parse_gaps_section
 
 
 def test_parse_sections():
@@ -59,7 +59,7 @@ Definition here.
     concept_file.write_text(initial_content, encoding="utf-8")
 
     # Mock ROOT in feedback_loop
-    monkeypatch.setattr("feedback_loop.ROOT", tmp_path)
+    monkeypatch.setattr("kops.feedback_loop.ROOT", tmp_path)
 
     failed_probes = [
         {
@@ -110,7 +110,7 @@ Definition here.
 """
     concept_file.write_text(initial_content, encoding="utf-8")
 
-    monkeypatch.setattr("feedback_loop.ROOT", tmp_path)
+    monkeypatch.setattr("kops.feedback_loop.ROOT", tmp_path)
 
     # Send no failed probes, and failed probe ID in passed list to clear it
     failed_probes = []

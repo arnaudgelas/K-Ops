@@ -24,13 +24,13 @@ jobs:
         run: uv run pytest
 
       - name: Check Python style
-        run: uv run ruff check scripts tests
+        run: uv run ruff check kops tests
 
       - name: Check Python formatting
-        run: uv run ruff format --check scripts tests
+        run: uv run ruff format --check kops tests
 
       - name: Check agent asset drift
-        run: uv run python scripts/install_agent_assets.py --dry-run
+        run: uv run python -m kops.install_agent_assets --dry-run
 
       - name: Check no unsubstituted placeholders in installed commands
         run: |
@@ -40,13 +40,13 @@ jobs:
           fi
 
       - name: Public-safety tripwire (no private corpus)
-        run: uv run python scripts/check_public_safe.py
+        run: uv run python -m kops.check_public_safe
 
       - name: Validate config (strict)
-        run: uv run python scripts/kb.py validate --strict
+        run: uv run python -m kops.kb validate --strict
 
       - name: Lint vault (strict)
-        run: uv run python scripts/lint_vault.py --strict
+        run: uv run python -m kops.lint_vault --strict
 
       - name: Check broken wikilinks
         run: |

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parent.parent / "scripts"))
-from utils import ROOT, parse_frontmatter
+from kops.utils import ROOT, parse_frontmatter
 
 VALID_TYPES = {"factual", "comparison", "contradiction", "edge-case", "temporal"}
 REQUIRED_FIELDS = {"concept", "source_id", "type", "question", "expected_answer", "id"}

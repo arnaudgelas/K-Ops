@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from claim_registry import claim_stable_id, normalize_claim_text  # noqa: E402
+from kops.claim_registry import claim_stable_id, normalize_claim_text  # noqa: E402
 
 CLAIMS_PATH = ROOT / "data" / "claims.json"
 _WIKILINK_RE = re.compile(
