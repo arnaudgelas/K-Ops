@@ -71,3 +71,28 @@ jobs:
               sys.exit(1)
           print(f'Wikilink check: 0 broken')
           "
+
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+      - name: Build wheel
+        run: uv build --wheel
+      - name: Install wheel into a clean env and prove data is bundled + CLI runs
+        run: |
+          python3 -m venv /tmp/kops-ci-env
+          /tmp/kops-ci-env/bin/pip install --quiet dist/*.whl
+          /tmp/kops-ci-env/bin/python -c "
+          from kops.kb_schema import _load_schema
+          import importlib.resources as r
+          assert _load_schema(), 'schema.yaml not bundled in wheel'
+          assert r.files('kops').joinpath('templates', 'ask_prompt.md').read_text(), 'templates not bundled'
+          assert (r.files('kops') / 'skills' / 'compile-wiki' / 'SKILL.md').read_text(), 'skills not bundled'
+          print('wheel smoke: schema + templates + skills bundled and importable from site-packages')
+          "
+          # console entry point runs against the checkout (which is a vault) from the installed wheel
+          /tmp/kops-ci-env/bin/kops --vault "$PWD" --help

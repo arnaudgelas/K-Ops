@@ -6,8 +6,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-SKILLS_DIR = ROOT / "skills"
-TEMPLATES_DIR = ROOT / "templates"
+PKG_DIR = Path(__file__).resolve().parent
+SKILLS_DIR = PKG_DIR / "skills"
+TEMPLATES_DIR = PKG_DIR / "templates"
 CLAUDE_AGENTS_DIR = ROOT / ".claude" / "agents"
 CLAUDE_MEMORY = ROOT / "CLAUDE.md"
 AGENTS_MEMORY = ROOT / "AGENTS.md"

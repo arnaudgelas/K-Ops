@@ -10,7 +10,7 @@ from kops.utils import ensure_dir, slugify
 
 
 ROOT = Path(__file__).resolve().parent.parent
-MACHINERY_DIRS = ("kops", "templates", "skills")
+MACHINERY_DIRS = ("kops",)  # templates/ and skills/ now live inside the kops package
 GITIGNORE_SOURCE = ROOT / ".gitignore"
 
 

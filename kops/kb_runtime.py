@@ -6,8 +6,9 @@ import re
 import subprocess
 from pathlib import Path
 
+import importlib.resources
+
 from kops.utils import (
-    CODE_ROOT,
     CONFIG,
     ROOT,
     detect_agent_command,
@@ -25,7 +26,11 @@ VAULT_UPDATES_RE = re.compile(r"## Vault Updates\s+(.*?)(?:\n## |\Z)", re.DOTALL
 
 
 def build_prompt(template_name: str, **kwargs: str) -> Path:
-    template = (CODE_ROOT / "templates" / template_name).read_text(encoding="utf-8")  # code asset
+    template = (
+        importlib.resources.files("kops")
+        .joinpath("templates", template_name)
+        .read_text(encoding="utf-8")
+    )
     rendered = template.format(**kwargs)
     prompt_path = ROOT / ".tmp" / f"{template_name}.{now_stamp()}.md"
     ensure_dir(prompt_path.parent)

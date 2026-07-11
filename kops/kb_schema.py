@@ -16,10 +16,12 @@ from typing import Any
 
 import yaml
 
-from kops.utils import ROOT, CODE_ROOT
+import importlib.resources
+
+from kops.utils import ROOT
 
 
-_SCHEMA_PATH = CODE_ROOT / "config" / "schema.yaml"  # code asset, not vault data
+# schema.yaml ships as package data; loaded via importlib.resources in _load_schema()
 _CANONICAL_SOURCE_ID_RE = re.compile(r"^src-[0-9a-f]{10}$")
 
 # Maps registry `kind` values to schema `source_kind` enum values
@@ -59,7 +61,10 @@ def normalize_source_kind(raw: str) -> str:
 
 
 def _load_schema() -> dict:
-    return yaml.safe_load(_SCHEMA_PATH.read_text(encoding="utf-8"))
+    schema_text = (
+        importlib.resources.files("kops").joinpath("schema.yaml").read_text(encoding="utf-8")
+    )
+    return yaml.safe_load(schema_text)
 
 
 class ValidationIssue:
