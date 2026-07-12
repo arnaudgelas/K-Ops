@@ -549,10 +549,13 @@ Use the Python CLI for mechanical fetching and registry updates. Use the agent-n
 - `claim-search --query <text>`: search the claim registry
 - `extract-contradictions`: rebuild `data/contradictions.json`
 - `contradiction-search --query <text>`: search contradiction records
+- `verify-spans`: check each claim's `quote=` anchor actually appears in its source; writes `data/span_verification.json`; `--check` fails closed on a mismatch
 - `scorecard`: compute `data/scorecard.json`
 - `audit-kb`: run the scorecard audit under an explicit audit command name
+- `review-queue`: one prioritised list of everything needing human review (failed spans, blocked/quarantined/unsupported claims, undocumented contradictions, flagged sources, unreviewed probes, gaps); `--severity`, `--format`
 - `stale-impact`: list notes flagged for revalidation
 - `clear-stale-flags`: remove `revalidation_required` flags
+- `retract <source-id> --reason <text>`: revoke a bad source, map its blast radius, flag dependents for revalidation, and re-block dependent claims; `--dry-run`, `--status`, `--format` (flags/reports only — never rewrites claims)
 - `validate`: confirm the vault config and required paths load
 - `maintenance`: run the full mechanical maintenance pass
 - `bootstrap --target <dir>`: create a new blank starter knowledge base with the same scripts, templates, and note structure
@@ -567,6 +570,7 @@ Use the Python CLI for mechanical fetching and registry updates. Use the agent-n
 - `export-index`: export a structured vault manifest
 - `export-index --format csv`: write the manifest as CSV
 - `build-graph`: build the vault graph and retention report
+- `community-audit`: cluster the concept graph and report communities, bridge nodes, fragile clusters, and cross-cluster knowledge gaps; writes `data/graph/community_audit.json`; `--format`, `--min-shared`
 - `search --query <text>`: search the graph
 - `graph-traverse --start <id>`: traverse the graph from a node
 - `retention-report`: write the retention report on its own
@@ -633,7 +637,8 @@ K-Ops/
 │   ├── fetch_queue.json
 │   ├── raw/
 │   ├── registry.json
-│   └── scorecard.json
+│   ├── scorecard.json
+│   └── span_verification.json
 ├── examples/
 ├── notes/
 │   ├── Answers/

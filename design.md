@@ -179,6 +179,22 @@ This lets weak, synthetic, deprecated, revoked, missing, or adversarial sources
 surface in `data/claims.json` and `data/scorecard.json`, not only in lint
 messages.
 
+### Governance Surfaces
+
+Four deterministic commands turn scattered signals into acted-upon governance:
+
+- `verify-spans` (`kops/span_verify.py`) — checks that each claim's `quote=`
+  anchor exists in its source; fails closed. See Trust Model below.
+- `community-audit` (`kops/graph_community.py`) — clusters the concept graph
+  (deterministic greedy-modularity), reports high-betweenness bridge nodes, fragile
+  single-connector clusters, and cross-cluster knowledge gaps.
+- `review-queue` (`kops/review_queue.py`) — aggregates everything needing human
+  judgment (failed spans, blocked/quarantined/unsupported claims, undocumented
+  contradictions, sources needing verification, unreviewed probes, gaps) into one
+  prioritised, read-only worklist.
+- `retract` (`kops/retract_source.py`) — revokes a source and unwinds its blast
+  radius. See Staleness and Contradictions below.
+
 ### Evaluation Surface
 
 Unit tests protect code behavior. They do not measure whether the knowledge
@@ -325,9 +341,13 @@ Desired direction:
 - Compare stored content hashes during refresh and mark dependent notes stale.
 - Make source review flags blocking in compile workflows.
 - Add pre/post agent-run Git checkpoints or branches.
-- Add an epistemic audit command that reports unsupported claims, stale claims,
+- ~~Add an epistemic audit command that reports unsupported claims, stale claims,
   orphan concepts, duplicate sources, weak high-centrality claims, and
-  contradiction backlog as fixable work items.
+  contradiction backlog as fixable work items.~~ **Largely done** — `review-queue`
+  reports unsupported/blocked/quarantined claims, undocumented contradictions, and
+  flagged sources; `community-audit` reports weak high-centrality (bridge) nodes,
+  fragile clusters, and knowledge gaps. Remaining: duplicate-source detection and a
+  single combined report.
 
 ### P1: Daily Collection
 
