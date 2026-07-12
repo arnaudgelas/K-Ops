@@ -65,6 +65,8 @@ Compact command map for the K-Ops vault.
 | Command | Use When | Notes |
 |---|---|---|
 | `build-graph` | Building the vault graph + retention report | Writes to `data/graph/` |
+| `community-audit` | Finding concept clusters, bridge nodes, and knowledge gaps | Clusters the concept graph; writes `data/graph/community_audit.json`; `--format`, `--min-shared` |
+| `review-queue` | Seeing everything that needs human judgment in one list | Aggregates failed spans, blocked/quarantined claims, undocumented contradictions, flagged sources, unreviewed probes, gaps; `--severity`, `--format` |
 | `search` | Keyword search across vault nodes | Accepts `--query`, `--limit`, `--scope` |
 | `graph-traverse` | Walking the link graph from a starting note | Accepts `--start`, `--depth`, `--relation` |
 | `retention-report` | Reviewing note freshness / stale content | Writes to `data/graph/retention_report.json` |

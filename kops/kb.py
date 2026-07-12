@@ -281,6 +281,35 @@ def main() -> None:
         help="Output format (default: text).",
     )
 
+    p_community_audit = sub.add_parser(
+        "community-audit",
+        help="Cluster the concept graph and report communities, bridge nodes, "
+        "fragile clusters, and cross-cluster knowledge gaps.",
+    )
+    p_community_audit.add_argument(
+        "--format", choices=["text", "json"], default="text", help="Output format (default: text)."
+    )
+    p_community_audit.add_argument(
+        "--min-shared",
+        type=int,
+        default=1,
+        help="Min shared sources for two unlinked concepts to count as a gap (default: 1).",
+    )
+
+    p_review_queue = sub.add_parser(
+        "review-queue",
+        help="One prioritised list of everything in the vault that needs human review.",
+    )
+    p_review_queue.add_argument(
+        "--format", choices=["text", "json"], default="text", help="Output format (default: text)."
+    )
+    p_review_queue.add_argument(
+        "--severity",
+        choices=["error", "warning", "info", "all"],
+        default="all",
+        help="Show items at this severity or higher (default: all).",
+    )
+
     p_build_graph = sub.add_parser("build-graph")
     p_build_graph.add_argument("--output")
     p_build_graph.add_argument("--report-output")
@@ -507,6 +536,8 @@ def main() -> None:
         run_bootstrap,
         run_build_graph,
         run_graph_audit,
+        run_community_audit,
+        run_review_queue,
         run_clear_stale_flags,
         run_contradiction_search,
         run_export_index,
@@ -627,6 +658,10 @@ def main() -> None:
         )
     elif args.command == "graph-audit":
         run_graph_audit(fmt=args.format)
+    elif args.command == "community-audit":
+        run_community_audit(fmt=args.format, min_shared=args.min_shared)
+    elif args.command == "review-queue":
+        run_review_queue(fmt=args.format, severity=args.severity)
     elif args.command == "build-graph":
         run_build_graph(
             output=args.output,

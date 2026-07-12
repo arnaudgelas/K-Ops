@@ -158,6 +158,12 @@ Implemented today:
 - source registry, claim registry, contradiction registry, and scorecard
 - deterministic quote-span verification (`verify-spans`): checks each claim's
   cited quote actually appears in its source, fails closed on a mismatch
+- concept-graph community/bridge/gap audit (`community-audit`): clusters concepts,
+  flags high-betweenness bridge nodes and fragile single-connector clusters, and
+  surfaces cross-cluster knowledge gaps (shared sources, no link)
+- aggregated human-review worklist (`review-queue`): one prioritised list of
+  failed spans, blocked/quarantined/unsupported claims, undocumented
+  contradictions, sources needing verification, unreviewed probes, and gaps
 - exact lookup and BM25 retrieval over sources, concepts, claims, and sections
 - deterministic compile plans written to `.tmp/compile_plan.json`
 - answer memo schema checks after `ask`

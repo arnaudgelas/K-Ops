@@ -469,6 +469,60 @@ def run_graph_audit(fmt: str = "text") -> None:
         print()
 
 
+def run_community_audit(fmt: str = "text", min_shared: int = 1) -> None:
+    from kops.graph_community import run as run_community
+
+    report = run_community(min_shared=min_shared)
+
+    if fmt == "json":
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return
+
+    print(
+        f"Community audit  ({report['concept_count']} concepts, "
+        f"{report['edge_count']} projected edges)"
+    )
+    print(
+        f"{report['community_count']} communit(y/ies), modularity={report['modularity']}"
+    )
+    print()
+    for c in report["communities"]:
+        titles = ", ".join(m["title"] for m in c["members"][:6])
+        more = "" if len(c["members"]) <= 6 else f" (+{len(c['members']) - 6})"
+        print(
+            f"[community {c['community_id']}] size={c['size']} "
+            f"cohesion={c['internal_cohesion']}"
+        )
+        print(f"  {titles}{more}")
+    if report["bridges"]:
+        print("\nBridge nodes (structural chokepoints — high blast radius):")
+        for b in report["bridges"]:
+            print(
+                f"  • {b['title']} — betweenness={b['betweenness']}, "
+                f"cross-cluster edges={b['cross_community_edges']}"
+            )
+    if report["fragile_communities"]:
+        print("\nFragile clusters (single point of contact to the rest of the vault):")
+        for f in report["fragile_communities"]:
+            print(
+                f"  • community {f['community_id']} (size {f['size']}) "
+                f"hangs off '{f['sole_connector']['title']}'"
+            )
+    if report["gaps"]:
+        print("\nKnowledge gaps (share sources, different clusters, no link):")
+        for g in report["gaps"]:
+            print(
+                f"  • '{g['concept_a']['title']}' ⇄ '{g['concept_b']['title']}' "
+                f"— {g['shared_source_count']} shared source(s)"
+            )
+
+
+def run_review_queue(fmt: str = "text", severity: str = "all") -> None:
+    from kops.review_queue import run as run_queue
+
+    run_queue(fmt=fmt, severity=severity)
+
+
 def run_search_graph(query: str, limit: int = 10, scope: str = "all", fmt: str = "json") -> None:
     results = search_graph(load_graph(), query, limit=limit, scope=scope)
     if fmt == "json":
