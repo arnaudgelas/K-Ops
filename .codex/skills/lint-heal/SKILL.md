@@ -8,6 +8,13 @@ description: Scan the vault for contradictions, unsupported claims, structural w
 ## Goal
 Continuously improve vault quality and ensure structural integrity.
 
+## Deterministic audits (run first)
+Before hand-scanning, run the deterministic surfaces and act on what they report:
+- `verify-spans` — claims whose `quote=` anchor is absent from the source (failed = fix the anchor or remove the claim).
+- `review-queue` — one prioritised worklist of everything needing human judgment.
+- `next-action` — the single highest-leverage next repair plus a convergence verdict (`blocking` / `cleanup` / `converged`).
+- `community-audit` — concept clusters, high-centrality bridge nodes, fragile single-connector clusters, and cross-cluster knowledge gaps.
+
 ## Look for
 - Contradictions between concept pages and source summaries (check `data/contradictions.json`).
 - Unsupported claims (Key Claims lacking direct inline citations `[[Sources/src-<id>|src-<id>]]`).

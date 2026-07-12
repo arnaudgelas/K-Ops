@@ -4,7 +4,13 @@ import argparse
 from dataclasses import dataclass
 from pathlib import Path
 
+from kops.kb_paths import kb_home
 
+# Source root (bundled assets + dev-repo memory/agent files) vs. destination root.
+# Sources live with the package/code (ROOT); project-scope *destinations* are the vault
+# (``kb_home()``), so `kops --vault <vault> install-agent-assets --scope project` writes
+# the runtime under the external vault, not under the installed package. In the dev repo
+# and in CI, kb_home() resolves to the code root, so behaviour there is unchanged.
 ROOT = Path(__file__).resolve().parent.parent
 PKG_DIR = Path(__file__).resolve().parent
 SKILLS_DIR = PKG_DIR / "skills"
@@ -265,9 +271,12 @@ def main() -> int:
 
     home = ensure_home(args.home)
     agents = normalize_agents(args.agent)
+    # Project scope targets the vault (KB_HOME / --vault), not the package/code root, so an
+    # externally-installed kops regenerates the *vault's* agent runtime.
+    project_root = kb_home()
     ops: list[Operation] = []
     if args.scope in {"project", "both"}:
-        ops.extend(collect_ops(ROOT, agents))
+        ops.extend(collect_ops(project_root, agents))
     if args.scope in {"home", "both"}:
         ops.extend(collect_ops(home, agents))
 

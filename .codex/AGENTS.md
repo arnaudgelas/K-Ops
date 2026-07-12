@@ -43,3 +43,5 @@ Goal: convert the current vault into memos, briefings, slide outlines, diagrams,
 - Use `uv run kops validate` to confirm config loads before running workflows.
 - Prefer `uv run kops compile --agent codex` when you want Codex to do the compilation pass.
 - Use `uv run kops extract-claims`, `extract-contradictions`, and `scorecard` to keep the machine-readable quality layer current.
+- After `extract-claims`, run `uv run kops verify-spans` to confirm claim quote anchors exist in their sources, and `uv run kops review-queue` to surface everything awaiting human review.
+- Use `uv run kops next-action` for the single next repair + convergence verdict, and `uv run kops consequence-gate --tier <...>` before backing a high-stakes answer or render with the vault's claims.

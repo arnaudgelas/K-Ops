@@ -43,6 +43,7 @@ Structure:
 - State uncertainty clearly (e.g., "according to [[Sources/...]]" vs "this is unclear").
 - Do not fabricate evidence.
 - Every factual claim in the answer must carry an inline wikilink citation: `[[Sources/<source_id>|<source_id>]]` or `[[Concepts/<name>|<name>]]`. If no source supports a claim, mark it `(unverified)`.
+- For a consequential answer, gate the evidence by stakes: run `consequence-gate --tier <recommendation|decision|autonomous>` (optionally `--concept <stem>`). Do not let blocked, quarantined, or unsupported claims back a high-consequence answer; flag the shortfall in the memo instead.
 
 ## Write-Back Requirement
 The Q&A skill is not complete until at least one write-back path is executed:
