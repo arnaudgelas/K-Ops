@@ -188,7 +188,7 @@ The vault has no committed `.obsidian/` directory. A user who clones the repo an
 
 ### MED-19 — Wikilink format created by Obsidian UI differs from the required path-prefixed format
 
-Obsidian's UI creates links in the format `[[filename]]` or `[[filename|alias]]`. The vault requires `[[Concepts/ConceptName|label]]` with an explicit path prefix. Any note linked via Obsidian's native UI or graph will fail lint because the path prefix is missing. This creates constant friction for human editors working in Obsidian.
+Obsidian's UI creates links in the format `[[filename]]` or `[[filename|alias]]`. The vault requires the path-prefixed form — a `Concepts/`-prefixed target followed by an explicit `|label`. Any note linked via Obsidian's native UI or graph will fail lint because the path prefix is missing. This creates constant friction for human editors working in Obsidian.
 
 **Recommendation:** (a) Configure Obsidian to use "Shortest path that is unambiguous" in Settings → Files & Links → New link format. Since filenames appear to be unique across the vault, this would produce `[[ConceptName|label]]` without the path prefix — and the lint patterns would need to accept bare wikilinks. (b) Alternatively, document explicitly that all links must be created via the CLI compile step, not Obsidian's UI. Pick one and enforce it.
 
