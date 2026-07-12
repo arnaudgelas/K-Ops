@@ -1,0 +1,1 @@
+{"concept":"Workflow_Pattern_Inventory","source_id":"src-1f2a3b4c5d","type":"factual","question":"What is the baseline K-Ops workflow for a new source batch?","expected_answer":["ingest → compile → lint"],"id":"probe-6f5edb89f2bb","review_status":"unreviewed","reviewer":null,"reject_reason":null}

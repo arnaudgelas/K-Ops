@@ -15,6 +15,9 @@ research/*
 !research/.gitkeep
 !research/benchmarks/
 !research/benchmarks/**
+!research/evals/
+research/evals/*
+!research/evals/dev-probes.jsonl
 outputs/*
 !outputs/.gitkeep
 node_modules/
