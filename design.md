@@ -282,14 +282,13 @@ depend on the changed source?
 The `retract` command implements this for the revocation case: it revokes a source,
 computes the blast radius over the vault graph, flags dependent concepts/answers for
 revalidation, and re-blocks dependent claims (flagging only — it never rewrites claim
-text). Two known limits: (1) claim re-blocking is complete because it recomputes from
-source frontmatter, but concept/answer revalidation-flagging is only as complete as the
-graph's `cites_source`/`supported_by` edges; (2) the graph builder's link extractors
-(`extract_section_links`, `INLINE_SOURCE_CITE_RE` in `vault_graph.py`) do not yet match
-*aliased* wikilinks (`[[Sources/src-x|alias]]`), so evidence citations written in that
-form are missed by the blast radius. Fixing the extractors would also improve
-community-audit gaps and scorecard orphan metrics. Until then, retract's claim-level
-blocking is the reliable backstop.
+text). Claim re-blocking is complete because it recomputes from source frontmatter;
+concept/answer revalidation-flagging is as complete as the graph's `cites_source`/
+`supported_by` edges. The graph builder's link extractors (`extract_section_links`,
+`INLINE_SOURCE_CITE_RE`, `SOURCE_LINK_RE` in `vault_graph.py`) now match *aliased*
+wikilinks (`[[Sources/src-x|alias]]`) as well as bare and sub-foldered forms, so evidence
+citations written in the vault's aliased convention are captured — improving retract's
+blast radius, community-audit gaps, and scorecard orphan metrics alike.
 
 Contradictions also need typed handling. A generic conflict bucket is too weak.
 The taxonomy should distinguish:

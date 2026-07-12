@@ -39,7 +39,8 @@ class DualLinkPattern:
 
 
 SOURCE_LINK_RE = DualLinkPattern(
-    r"(?:\[\[Sources/(src-[0-9a-f]{10})\||"
+    # Wikilink: optional subfolder, optional #anchor, optional |alias.
+    r"(?:\[\[Sources/(?:[^/|\]#\n]+/)?(src-[0-9a-f]{10})(?:#[^\]|]*)?(?:\|[^\]\n]*)?\]\]|"
     r"\[[^\]]*\]\((?:\.\./)*Sources/(?:[^/)]+/)?(src-[0-9a-f]{10})\.md(?:#[^)]*)?\))"
 )
 CONCEPT_LINK_RE = DualLinkPattern(
@@ -59,7 +60,12 @@ ANSWER_LINK_RE = DualLinkPattern(
     r"\[[^\]]*\]\((?:\.\./)*(\bAnswers/[^)#\n]+)\.md(?:#[^)]*)?\))"
 )
 BULLET_RE = re.compile(r"^\s*[-*]\s+(.*\S.*?)\s*$")
-INLINE_SOURCE_CITE_RE = re.compile(r"\[\[Sources/[^|\]#\n]+/(src-[0-9a-f]{10})(?:#[^|\]\n]*)?\|")
+# Inline source citation on a claim bullet. Optional subfolder, optional #anchor,
+# optional |alias — matches [[Sources/src-x]], [[Sources/src-x|alias]], and
+# [[Sources/web/src-x#page=2|alias]] alike.
+INLINE_SOURCE_CITE_RE = re.compile(
+    r"\[\[Sources/(?:[^/|\]#\n]+/)?(src-[0-9a-f]{10})(?:#[^\]|\n]*)?(?:\|[^\]\n]*)?\]\]"
+)
 
 
 def read_note(path: Path) -> tuple[dict, str]:
@@ -286,7 +292,8 @@ def extract_section_links(text: str, section_re: re.Pattern[str]) -> list[str]:
     if not match:
         return []
     pattern = DualLinkPattern(
-        r"(?:\[\[(?:Concepts|Sources|Answers)/(?:[^/]+/)?([^|\]#\n]+)(?:#[^\]|]*)?\]\]|"
+        # Wikilink branch now tolerates an optional |alias before the closing ]].
+        r"(?:\[\[(?:Concepts|Sources|Answers)/(?:[^/]+/)?([^|\]#\n]+)(?:#[^\]|]*)?(?:\|[^\]\n]*)?\]\]|"
         r"\[[^\]]*\]\((?:\.\./)*(?:Concepts|Sources|Answers)/(?:[^/]+/)?([^)#\n]+)\.md(?:#[^)]*)?\))"
     )
     return sorted(set(pattern.findall(match.group(1))))
