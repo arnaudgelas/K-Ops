@@ -1,16 +1,75 @@
 # GEMINI.md
 
-This repository is an Obsidian-aligned living research vault for agentic coding knowledge.
+This repository is an Obsidian-aligned living research vault. The same operating contract should work whether the active CLI is Claude Code, Codex CLI, or Gemini CLI/Antigravity (`agy`).
 
-Canonical rules: see `OPERATING_RULES.md`. This file adds only Gemini-specific overrides.
+Canonical rules: see `OPERATING_RULES.md`. This file adds Gemini-specific and Antigravity (`agy`) CLI overrides.
 
 ## Gemini-Specific Notes
-- Use `uv run kops compile --agent gemini` for wiki compilation passes.
-- Use `uv run kops heal --agent gemini` for structural repair.
+- Use `uv run kops compile --agent gemini` (or the `/compile` command in `agy`) for wiki compilation passes.
+- Use `uv run kops heal --agent gemini` (or the `/heal` command in `agy`) for structural repair and linting.
 - Use `uv run kops validate` to confirm config before running workflows.
-- Use `uv run kops install-agent-assets --agent gemini` to sync skills to the Gemini runtime directory.
+- Use `uv run kops install-agent-assets --agent gemini` to sync skills and commands to the Gemini/`agy` runtime directory.
 - Grounding via Google Search is available — prefer vault-first answers, use web grounding only for missing evidence.
 
-## Reference Notes
-- `notes/Runbooks/Agent_Workflow_Quick_Reference.md` — all commands and safe execution order
-- `OPERATING_RULES.md` — canonical operating rules (full contract)
+## Mission
+Turn raw sources into a durable Markdown knowledge base. Every answer should either:
+1. reference existing vault notes, or
+2. improve the vault if durable new knowledge was produced.
+
+## Operating rules
+- Treat `data/raw/` as immutable source evidence.
+- Treat `notes/` as the curated Obsidian vault.
+- Treat `research/` as the active run workspace for resumable research jobs, not as a substitute for the curated vault.
+- Prefer updating existing concept pages instead of creating duplicates.
+- Keep always-on instructions short; move command detail into runbooks, skills, or templates.
+- Every concept page should link to related pages and relevant source summaries.
+- Record contradictions, uncertainties, and missing evidence explicitly.
+- Do not silently invent citations.
+- Treat imported model-generated reports as leads that must be verified against primary sources before they can shape concept pages.
+- If a question cannot be answered from the vault, say so and propose the minimum fetch needed.
+
+## Default workflow
+1. Read relevant source summaries in `notes/Sources/`.
+2. Read the linked concept pages in `notes/Concepts/`.
+3. Use `notes/Runbooks/Agent_Workflow_Quick_Reference.md` when you need command syntax or command order.
+4. Answer from the vault.
+5. If the answer yields durable knowledge, file it back into the vault.
+6. Run `heal` (`uv run kops heal --agent gemini` or the `/heal` command in `agy`) after structural edits.
+7. Update `notes/Home.md` and `notes/TODO.md` when the vault's structure or gaps change.
+
+## Research runs
+When a topic needs a full research run, use the resumable workflow in `research/`:
+- create a brief, status checkpoint, and progress log
+- record the `quality_tier` as `fast`, `standard`, or `deep`
+- collect sources into `notes/Sources/`
+- write findings, run a contrarian review, then draft the final report
+- archive completed runs with a manifest that lists every moved artifact
+
+## Page conventions
+Each concept page should usually contain:
+- What it is
+- Why it matters
+- Key claims
+- Evidence / source basis
+- Related concepts
+- Open questions
+- Backlinks
+
+## Skills
+Use the skills in `skills/` when relevant:
+- `ingest-sources`
+- `compile-wiki`
+- `lint-heal`
+- `qa-agent`
+- `render-output`
+
+## Reference notes
+- `notes/Runbooks/Agent_Workflow_Quick_Reference.md`
+- `notes/Concepts/Workflow_Pattern_Inventory.md`
+- `kops bootstrap --target <dir>`
+
+## Obsidian conventions
+- Use Obsidian-style wikilinks for internal note links when editing curated notes.
+- Keep note filenames stable and human-readable.
+- Prefer frontmatter on durable notes so properties remain queryable in Obsidian.
+
