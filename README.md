@@ -524,10 +524,10 @@ Use the Python CLI for mechanical fetching and registry updates. Use the agent-n
 
 ### Vault Work
 
-- `compile --agent <...>`: compile source summaries into durable notes
+- `compile --agent <...>`: compile source summaries into durable notes (runs an inner-loop verify after the agent write — rebuilds registries and flags a regressing write; `--no-verify` to skip)
 - `compile-large --source-id <id>`: run the bottom-up summarization orchestrator for large sources (>50 nodes)
 - `ask --agent <...> --question <text>`: generate an answer memo from the vault
-- `heal --agent <...>`: run the healing prompt
+- `heal --agent <...>`: run the healing prompt (also runs the inner-loop verify; `--no-verify` to skip)
 - `render --agent <...> --format <memo|slides|outline|report> --prompt <text>`: generate an output artifact
 - `uv run python -m kops.generate_indexes`: regenerate Source Atlas, Topic Atlas, and OKF directory indexes
 

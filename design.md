@@ -339,11 +339,13 @@ and is the current frontier.
 ### Two loops, engineered differently
 
 - **Inner loop** — one agent invocation (`compile`, `ask`, `heal`): observe -> act ->
-  verify -> recover. Only `ask` closes it today (the answer provenance gate rejects
-  malformed memos). `compile`/`heal` do not yet verify-and-recover: the agent writes
-  concept pages and nothing deterministically re-checks that output and bounces
-  failures back inside the same invocation. Target: generate -> verify -> repair
-  before the write is accepted.
+  verify -> recover. `ask` closes it via the answer provenance gate. `compile`/`heal` now
+  close the **verify** half (`kops/inner_loop.py`): they snapshot the deterministic signal
+  vector before the agent runs, rebuild the registries the write invalidated, and report
+  loudly if the write regressed the vector (a new failed span / blocked claim, or a
+  vanished artifact). The **recover** half — re-invoking the agent to repair — is
+  deliberately deferred: it needs a live agent and stays human-gated; a regression is
+  surfaced for a human or a follow-up pass to fix or revert.
 - **Outer loop** — the vault lifecycle across invocations: sense (scorecard /
   review-queue / span verification) -> prioritise -> act -> re-sense. This is fully
   open. No measured feedback shows whether the vault is converging toward health or
@@ -413,11 +415,13 @@ state now → fail) and is stateless, so it is the right CI gate; `signal-log --
 **regression** gate that needs a persisted baseline, so it belongs to the local/persisted
 cadence, not stateless CI. The outer loop is done.
 
-What remains is the *inner* loop — making `compile`/`heal` verify-and-recover before a
-write is accepted. Only `ask` closes its inner loop today (the answer provenance gate);
-`compile`/`heal` still write agent output with no deterministic post-write check. Its full
-form (re-invoke the agent to repair) needs a live agent CLI, so it is validated differently
-from the deterministic work above.
+The *inner* loop is now closed on its **verify** half too: `compile`/`heal` run a
+deterministic post-write check (`kops/inner_loop.py`) that rebuilds derived state and flags
+a regressing agent write. What remains is the **recover** half — automatically re-invoking
+the agent to repair a flagged write — which needs a live agent CLI and stays human-gated;
+today the regression is reported for a human or a follow-up pass to act on. With that, the
+loop is measured, gated, controlled, CI-enforced, and inner-verified; only agent-driven
+auto-repair is left, and it is intentionally not automated.
 
 ## Design Principles
 
@@ -449,8 +453,10 @@ from the deterministic work above.
   datapoint each run and warns (does not hard-exit) on regression. The *controller*
   (`next-action`, recommend the single next repair + convergence verdict) and *stop
   criteria* are done. CI now enforces the deterministic gates (`extract-claims`/
-  `extract-contradictions`/`verify-spans`/`next-action` `--check`). Remaining loop work:
-  close the *inner* loop (`compile`/`heal` verify-and-recover before a write is accepted).
+  `extract-contradictions`/`verify-spans`/`next-action` `--check`). The *inner* loop's
+  **verify** half is done too (`compile`/`heal` run a deterministic post-write regression
+  check via `kops/inner_loop.py`). Remaining: the **recover** half (auto agent re-invoke),
+  intentionally deferred as it needs a live agent and stays human-gated.
 - ~~Add an epistemic audit command that reports unsupported claims, stale claims,
   orphan concepts, duplicate sources, weak high-centrality claims, and
   contradiction backlog as fixable work items.~~ **Largely done** — `review-queue`

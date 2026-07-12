@@ -63,7 +63,8 @@ def run_maintenance(
         _clean_tmp()
     if agent:
         run_refresh_sources()
-        cmd_compile(agent)
+        # maintenance rebuilds the registries itself below, so skip the inner-loop rebuild.
+        cmd_compile(agent, verify=False)
     run_normalize_github_sources()
     run_backfill_source_notes()
     run_backfill_source_metadata()
@@ -127,6 +128,11 @@ def main() -> None:
         action="store_true",
         help="Print rendered prompt and exit without running the agent.",
     )
+    p_compile.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Skip the inner-loop verification after the agent write.",
+    )
 
     p_compile_large = sub.add_parser(
         "compile-large",
@@ -164,6 +170,11 @@ def main() -> None:
         "--show-prompt",
         action="store_true",
         help="Print rendered prompt and exit without running the agent.",
+    )
+    p_heal.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Skip the inner-loop verification after the agent write.",
     )
 
     p_ask = sub.add_parser("ask")
@@ -647,7 +658,7 @@ def main() -> None:
         if args.compile_agent:
             cmd_compile(args.compile_agent)
     elif args.command == "compile":
-        cmd_compile(args.agent, show_prompt=args.show_prompt)
+        cmd_compile(args.agent, show_prompt=args.show_prompt, verify=not args.no_verify)
     elif args.command == "compile-large":
         run_compile_large_source(
             args.source_id,
@@ -659,7 +670,7 @@ def main() -> None:
         run_refresh_sources(branch=args.branch, fail_fast=args.fail_fast)
         cmd_compile(args.agent)
     elif args.command == "heal":
-        cmd_heal(args.agent, show_prompt=args.show_prompt)
+        cmd_heal(args.agent, show_prompt=args.show_prompt, verify=not args.no_verify)
     elif args.command == "ask":
         cmd_ask(args.agent, args.question)
     elif args.command == "claim-map":

@@ -320,21 +320,31 @@ def _build_compile_plan_summary() -> str:
         return "Full vault compile run."
 
 
-def cmd_compile(agent: str, show_prompt: bool = False) -> None:
+def _run_with_inner_verify(agent: str, prompt: Path, verify: bool) -> None:
+    """Run the agent, then (unless disabled) verify the write did not regress the vault."""
+    from kops import inner_loop
+
+    before = inner_loop.snapshot() if verify else None
+    agent_run(agent, prompt)
+    if verify and before is not None:
+        inner_loop.report(inner_loop.verify_agent_write(before))
+
+
+def cmd_compile(agent: str, show_prompt: bool = False, verify: bool = True) -> None:
     plan_summary = _build_compile_plan_summary()
     prompt = build_prompt("compile_prompt.md", plan_summary=plan_summary)
     if show_prompt:
         print(prompt.read_text(encoding="utf-8"))
         return
-    agent_run(agent, prompt)
+    _run_with_inner_verify(agent, prompt, verify)
 
 
-def cmd_heal(agent: str, show_prompt: bool = False) -> None:
+def cmd_heal(agent: str, show_prompt: bool = False, verify: bool = True) -> None:
     prompt = build_prompt("heal_prompt.md")
     if show_prompt:
         print(prompt.read_text(encoding="utf-8"))
         return
-    agent_run(agent, prompt)
+    _run_with_inner_verify(agent, prompt, verify)
 
 
 def cmd_ask(agent: str, question: str) -> None:
