@@ -14,6 +14,7 @@ Before hand-scanning, run the deterministic surfaces and act on what they report
 - `review-queue` — one prioritised worklist of everything needing human judgment.
 - `next-action` — the single highest-leverage next repair plus a convergence verdict (`blocking` / `cleanup` / `converged`).
 - `community-audit` — concept clusters, high-centrality bridge nodes, fragile single-connector clusters, and cross-cluster knowledge gaps.
+- `check-content-drift` — claims and answers whose cited source content-hash has changed since capture (drifted = revalidate the dependent claim/answer or re-anchor it).
 
 ## Look for
 - Contradictions between concept pages and source summaries (check `data/contradictions.json`).
