@@ -403,8 +403,21 @@ loop's **sensors and actuators**. Progress on closing the feedback:
 
 The loop is now measurable, gated, and controlled: K-Ops can tell whether an iteration
 helped (`signal-log`), refuse a regression (`signal-log --check`), name the next move, and
-decide when to stop (`next-action`). What remains is wiring the gate into CI and closing
-the *inner* loop — making `compile`/`heal` verify-and-recover before a write is accepted.
+decide when to stop (`next-action`).
+
+CI enforces the deterministic gates: `extract-claims --check` and
+`extract-contradictions --check` (registries in sync), `verify-spans --check` (no
+fabricated quotes), and `next-action --check` (fail on any blocking state). Note the two
+gate kinds differ by statefulness: `next-action --check` is an **absolute** gate (blocking
+state now → fail) and is stateless, so it is the right CI gate; `signal-log --check` is a
+**regression** gate that needs a persisted baseline, so it belongs to the local/persisted
+cadence, not stateless CI. The outer loop is done.
+
+What remains is the *inner* loop — making `compile`/`heal` verify-and-recover before a
+write is accepted. Only `ask` closes its inner loop today (the answer provenance gate);
+`compile`/`heal` still write agent output with no deterministic post-write check. Its full
+form (re-invoke the agent to repair) needs a live agent CLI, so it is validated differently
+from the deterministic work above.
 
 ## Design Principles
 
@@ -435,7 +448,8 @@ the *inner* loop — making `compile`/`heal` verify-and-recover before a write i
   or a derived artifact disappearing — the anti-gaming guard). `maintenance` records a
   datapoint each run and warns (does not hard-exit) on regression. The *controller*
   (`next-action`, recommend the single next repair + convergence verdict) and *stop
-  criteria* are now done too. Remaining loop work: wire `signal-log --check` into CI, and
+  criteria* are done. CI now enforces the deterministic gates (`extract-claims`/
+  `extract-contradictions`/`verify-spans`/`next-action` `--check`). Remaining loop work:
   close the *inner* loop (`compile`/`heal` verify-and-recover before a write is accepted).
 - ~~Add an epistemic audit command that reports unsupported claims, stale claims,
   orphan concepts, duplicate sources, weak high-centrality claims, and

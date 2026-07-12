@@ -485,6 +485,11 @@ def main() -> None:
     p_next_action.add_argument(
         "--format", choices=["text", "json"], default="text", help="Output format (default: text)."
     )
+    p_next_action.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit non-zero if the vault is in a BLOCKING state (the stateless CI gate).",
+    )
 
     p_contradiction_search = sub.add_parser(
         "contradiction-search", help="Search the contradiction registry by keyword."
@@ -773,7 +778,7 @@ def main() -> None:
     elif args.command == "signal-log":
         run_signal_log(record=args.record, check=args.check, fmt=args.format)
     elif args.command == "next-action":
-        run_next_action(fmt=args.format)
+        run_next_action(fmt=args.format, check=args.check)
     elif args.command == "contradiction-search":
         run_contradiction_search(args.query, limit=args.limit, fmt=args.format)
     elif args.command in {"scorecard", "audit-kb"}:

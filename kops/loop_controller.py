@@ -104,15 +104,31 @@ def compute_verdict() -> dict:
     return assess(build_queue(), compute_signal_vector(), compute_availability())
 
 
-def run(fmt: str = "text") -> dict:
+def run(fmt: str = "text", check: bool = False) -> dict:
     verdict = compute_verdict()
 
     if fmt == "json":
         import json
 
         print(json.dumps(verdict, indent=2, ensure_ascii=False))
-        return verdict
+    else:
+        _print_text(verdict)
 
+    # Composite absolute gate: fail closed when the vault is in a blocking state.
+    # (Unlike `signal-log --check`, which is a regression gate needing a persisted
+    # baseline, this is stateless and therefore the right gate for CI.)
+    if check and verdict["status"] == "blocking":
+        import sys
+
+        print("\nFAIL: vault is in a BLOCKING state:", file=sys.stderr)
+        for reason in verdict["blocking_reasons"]:
+            print(f"  - {reason}", file=sys.stderr)
+        sys.exit(1)
+
+    return verdict
+
+
+def _print_text(verdict: dict) -> None:
     status = verdict["status"]
     rem = verdict["remaining"]
     banner = {
@@ -135,7 +151,6 @@ def run(fmt: str = "text") -> dict:
             print(f"    hint: {na['command_hint']}")
     else:
         print("\nNo action needed.")
-    return verdict
 
 
 def main() -> None:
@@ -145,8 +160,11 @@ def main() -> None:
         description="Recommend the single next loop action and a convergence verdict."
     )
     parser.add_argument("--format", choices=["text", "json"], default="text")
+    parser.add_argument(
+        "--check", action="store_true", help="Exit non-zero if the vault is in a BLOCKING state."
+    )
     args = parser.parse_args()
-    run(fmt=args.format)
+    run(fmt=args.format, check=args.check)
 
 
 if __name__ == "__main__":

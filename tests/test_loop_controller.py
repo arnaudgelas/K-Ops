@@ -71,3 +71,40 @@ def test_remaining_counts_by_severity():
     items = [_item("error"), _item("warning"), _item("warning"), _item("info")]
     v = lc.assess(items, _ZERO_SIGNALS, _ALL_PRESENT)
     assert v["remaining"] == {"error": 1, "warning": 2, "info": 1}
+
+
+# ── --check gate (stateless CI gate) ─────────────────────────────────────────
+
+
+def test_check_exits_nonzero_when_blocking(monkeypatch):
+    import pytest
+
+    monkeypatch.setattr(
+        lc,
+        "compute_verdict",
+        lambda: {
+            "status": "blocking",
+            "blocking_reasons": ["x"],
+            "remaining": {"error": 1, "warning": 0, "info": 0},
+            "next_action": None,
+        },
+    )
+    with pytest.raises(SystemExit) as exc:
+        lc.run(fmt="json", check=True)
+    assert exc.value.code == 1
+
+
+def test_check_does_not_exit_when_cleanup(monkeypatch):
+    monkeypatch.setattr(
+        lc,
+        "compute_verdict",
+        lambda: {
+            "status": "cleanup",
+            "blocking_reasons": [],
+            "remaining": {"error": 0, "warning": 1, "info": 0},
+            "next_action": None,
+        },
+    )
+    # must return normally (no SystemExit) on a non-blocking verdict
+    result = lc.run(fmt="json", check=True)
+    assert result["status"] == "cleanup"
