@@ -588,6 +588,27 @@ def main() -> None:
         "--source", nargs="+", metavar="SRC_ID", help="Limit the check to these source ids."
     )
 
+    p_content_drift = sub.add_parser(
+        "check-content-drift",
+        help="Detect raw-content drift (content-hash) for any source and flag derived pages.",
+    )
+    p_content_drift.add_argument("--flag", action="store_true", help="Write drift flags to notes.")
+    p_content_drift.add_argument(
+        "--json", action="store_true", help="Emit JSON instead of a table."
+    )
+    p_content_drift.add_argument(
+        "--source", nargs="+", metavar="SRC_ID", help="Limit the check to these source ids."
+    )
+
+    p_backfill_hash = sub.add_parser(
+        "backfill-content-hash",
+        help="Seed the content_hash baseline on source notes (--force to re-baseline).",
+    )
+    p_backfill_hash.add_argument("--dry-run", action="store_true")
+    p_backfill_hash.add_argument(
+        "--force", action="store_true", help="Re-baseline all notes to the current raw hash."
+    )
+
     args = parser.parse_args()
 
     # Deferred until after argparse: importing the command layer eagerly loads the
@@ -823,6 +844,22 @@ def main() -> None:
         else:
             _report(results, flagged=args.flag)
         _sys.exit(code)
+    elif args.command == "check-content-drift":
+        import sys as _sys
+        from kops.content_drift import check as _cc, _print_report as _cc_report
+
+        results, code = _cc(flag=args.flag, only=set(args.source) if args.source else None)
+        if args.json:
+            import json as _json
+
+            print(_json.dumps({"results": results, "flagged": args.flag}, indent=2))
+        else:
+            _cc_report(results, flagged=args.flag)
+        _sys.exit(code)
+    elif args.command == "backfill-content-hash":
+        from kops.content_drift import backfill_content_hash
+
+        backfill_content_hash(dry_run=args.dry_run, force=args.force)
 
 
 if __name__ == "__main__":

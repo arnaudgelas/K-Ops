@@ -121,9 +121,14 @@ repositories.
 - Raw artifacts, normalized text, metadata, and content hashes are written
   under `data/raw/<source-id>/`.
 
-Known limit: content hashes are stored, but a complete automatic invalidation
-cascade from changed raw content to stale concept claims is not implemented
-yet.
+Content-hash drift is now detected (`check-content-drift`, `kops/content_drift.py`): it
+compares the `content_hash` baseline recorded on a source note against the current raw
+hash under `data/raw/<id>/metadata.json` and, with `--flag`, marks the source note and
+every derived page `revalidation_required` (the content-hash analog of the git-commit
+`check-drift`). Seed baselines with `backfill-content-hash`; re-baseline after re-curating
+with `backfill-content-hash --force`. Like `check-drift` it only *flags* — it never
+rewrites prose, and it is opt-in (not auto-run on refresh), so a stale baseline does not
+produce persistent false positives.
 
 ### Compile Planning
 
@@ -441,7 +446,11 @@ auto-repair is left, and it is intentionally not automated.
 - ~~Add quote-span verification for claims.~~ **Done** — deterministic quote
   *existence* verification (`verify-spans`). Remaining: LLM-judged citation
   *entailment* over verified quotes.
-- Compare stored content hashes during refresh and mark dependent notes stale.
+- ~~Compare stored content hashes during refresh and mark dependent notes stale.~~
+  **Done** — `check-content-drift` compares a source note's `content_hash` baseline
+  against the current raw hash and flags the note + derived pages; `backfill-content-hash`
+  seeds/re-baselines. Opt-in (not auto-run on refresh) to avoid stale-baseline false
+  positives. Remaining: an optional auto-run hook and baseline-on-compile.
 - Make source review flags blocking in compile workflows.
 - Add pre/post agent-run Git checkpoints or branches.
 - **Loop enablement (see Loop Engineering).** ~~Append each run's deterministic signal

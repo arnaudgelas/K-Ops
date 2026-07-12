@@ -44,6 +44,7 @@ Compact command map for the K-Ops vault.
 | `stale-impact` | After refresh — seeing what changed | Lists concepts + answers with `revalidation_required: true` |
 | `clear-stale-flags` | After reviewing stale concepts/answers | Removes `revalidation_required` flags; use `--dry-run` first |
 | `retract` | A source is discovered bad and must be pulled | Revokes the source, maps its blast radius, flags dependent notes for revalidation, re-blocks dependent claims; `--reason` (required), `--dry-run`, `--status`, `--format`. Flags/reports only — never rewrites claims |
+| `check-content-drift` | A source's raw content may have changed | Compares the note's `content_hash` baseline vs the current raw hash; `--flag` marks the note + derived pages for revalidation. Seed baselines with `backfill-content-hash`; re-baseline after re-curating with `--force` |
 
 ## Contradiction Commands
 

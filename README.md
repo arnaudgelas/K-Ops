@@ -571,6 +571,8 @@ Use the Python CLI for mechanical fetching and registry updates. Use the agent-n
 - `export-vault`: write a zip archive containing `.obsidian/` and `notes/`
 - `export-index`: export a structured vault manifest
 - `export-index --format csv`: write the manifest as CSV
+- `check-content-drift [--flag]`: detect raw-content drift (content-hash) for any source and flag the source note + derived pages `revalidation_required`; the content-hash analog of `check-drift`
+- `backfill-content-hash [--force]`: seed (or re-baseline) the `content_hash` drift baseline on source notes
 - `build-graph`: build the vault graph and retention report
 - `community-audit`: cluster the concept graph and report communities, bridge nodes, fragile clusters, and cross-cluster knowledge gaps; writes `data/graph/community_audit.json`; `--format`, `--min-shared`
 - `search --query <text>`: search the graph
