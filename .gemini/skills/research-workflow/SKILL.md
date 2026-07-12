@@ -22,10 +22,12 @@ Run higher-stakes topics as resumable, tiered research threads outside the curat
 6. **Import external reports**: `uv run kops research-import --topic "<topic>" --path <file> --provider <provider> --origin <origin>`.
 7. **Archive completed run**: `uv run kops research-archive --topic "<topic>"` (after phase shows `done`).
 
-## Companion Skills
-- `research-collect`
-- `research-review`
-- `research-report`
+## Phase Guidance
+The `research-collect`, `research-review`, and `research-report` CLI subcommands render their own runtime prompts (from `kops/templates/`), so no separate skill is needed. When running or reviewing a phase by hand, hold to these contracts:
+
+- **Collect** (`research-collect`): populate the findings file with high-signal, sourced claims. Create/update source notes in `notes/Sources/` under the strict metadata schemas; prefer primary sources; mark imported model reports `authority: lead_only` + `verification_state: needs_primary_sources`. Distinguish evidence from inference; keep uncertainty explicit; append a progress log.
+- **Review** (`research-review`): adversarial contrarian pass — try to break the thesis, not confirm it. Populate `## Strongest Objections`, `## Missing Evidence`, `## Claims To Soften` with genuine gaps (never fabricated counter-evidence); name missing primary sources to consult before drafting.
+- **Report** (`research-report`): synthesize brief + sources + findings + contrarian review into a bounded report. Build from collected evidence only, address the strongest objections, keep conclusions bounded by evidence, cite source summaries with wikilinks, and distinguish established from provisional findings.
 
 ## Rules
 - Keep active run files in `research/`, not in `notes/`.
