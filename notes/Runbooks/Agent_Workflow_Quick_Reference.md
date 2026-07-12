@@ -59,6 +59,7 @@ Compact command map for the K-Ops vault.
 |---|---|---|
 | `scorecard` | Checking overall vault health | Writes `data/scorecard.json`; prints human-readable summary |
 | `signal-log` | Tracking whether the vault is improving over time | Records the deterministic signal vector to `data/history/signals.jsonl` and reports deltas; `--record` appends a datapoint, `--check` fails closed on a hard regression (error-class signal up, or a derived artifact deleted) |
+| `next-action` | Deciding the single next repair, and whether the loop is done | The loop controller: emits one highest-leverage next action and a verdict (`blocking` / `cleanup` / `converged`) from the deterministic signals; `--format` |
 | `eval-setup` | Setting up the golden Q&A harness (once) | Creates `tests/qa_golden.yaml` if absent |
 | `eval-check` | Validating the golden Q&A file structure | Parses and checks required fields |
 

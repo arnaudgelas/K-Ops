@@ -478,6 +478,14 @@ def main() -> None:
         "--format", choices=["text", "json"], default="text", help="Output format (default: text)."
     )
 
+    p_next_action = sub.add_parser(
+        "next-action",
+        help="Recommend the single highest-leverage next loop action and a convergence verdict.",
+    )
+    p_next_action.add_argument(
+        "--format", choices=["text", "json"], default="text", help="Output format (default: text)."
+    )
+
     p_contradiction_search = sub.add_parser(
         "contradiction-search", help="Search the contradiction registry by keyword."
     )
@@ -581,6 +589,7 @@ def main() -> None:
         run_graph_audit,
         run_community_audit,
         run_review_queue,
+        run_next_action,
         run_retract,
         run_clear_stale_flags,
         run_contradiction_search,
@@ -763,6 +772,8 @@ def main() -> None:
         run_verify_spans(check=args.check, dry_run=args.dry_run)
     elif args.command == "signal-log":
         run_signal_log(record=args.record, check=args.check, fmt=args.format)
+    elif args.command == "next-action":
+        run_next_action(fmt=args.format)
     elif args.command == "contradiction-search":
         run_contradiction_search(args.query, limit=args.limit, fmt=args.format)
     elif args.command in {"scorecard", "audit-kb"}:

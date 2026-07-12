@@ -524,6 +524,12 @@ def run_signal_log(record: bool = False, check: bool = False, fmt: str = "text")
     return run_signals(record=record, check=check, fmt=fmt)
 
 
+def run_next_action(fmt: str = "text") -> None:
+    from kops.loop_controller import run as run_controller
+
+    run_controller(fmt=fmt)
+
+
 def run_retract(
     source_id: str,
     reason: str,

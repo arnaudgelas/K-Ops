@@ -388,15 +388,23 @@ loop's **sensors and actuators**. Progress on closing the feedback:
    signal rises or a required artifact disappears. `maintenance` records a datapoint
    and warns on regression without hard-exiting; the fail-closed gate is the standalone
    `--check` (for CI).
-3. **A controller — still missing.** Nothing yet maps the current top signal to the
-   single minimal next action. `review-queue` ranks by severity but does not recommend
-   the cheapest repair.
-4. **Documented stop criteria — still missing** for both the human-run and agent-run
-   cadence.
+3. **A controller — done.** `next-action` maps the current deterministic signals to the
+   single highest-leverage next repair (the top-severity `review-queue` item, with a
+   concrete command hint) and a convergence verdict. It recommends; it never acts.
+4. **Documented stop criteria — done.** `next-action` emits one of three states, from
+   deterministic signals only:
+   - `blocking` — an error-severity review item, an error-class signal (`failed_quote_spans`
+     / `blocked_claims`) > 0, or a missing derived artifact. The loop MUST continue.
+   - `cleanup` — no blocking condition, but warning/info items remain. Safe to stop the
+     mandatory loop ("converged enough"); optional cleanup is left.
+   - `converged` — nothing open. Stop.
+   The mandatory loop stops when the verdict is not `blocking`; an agent-run loop should
+   also stop on its own token/iteration budget (the runner's concern, not the vault's).
 
-The loop is now measurable and gated, but not yet *controlled*: K-Ops can tell whether
-an iteration helped, but not yet recommend the next move or decide when to stop. That
-is the remaining loop work.
+The loop is now measurable, gated, and controlled: K-Ops can tell whether an iteration
+helped (`signal-log`), refuse a regression (`signal-log --check`), name the next move, and
+decide when to stop (`next-action`). What remains is wiring the gate into CI and closing
+the *inner* loop — making `compile`/`heal` verify-and-recover before a write is accepted.
 
 ## Design Principles
 
@@ -425,9 +433,10 @@ is the remaining loop work.
   `data/history/signals.jsonl` (gitignored, append-only), reports deltas, and
   `signal-log --check` fails closed on a hard regression (an error-class signal rising,
   or a derived artifact disappearing — the anti-gaming guard). `maintenance` records a
-  datapoint each run and warns (does not hard-exit) on regression. Remaining loop work:
-  the *controller* (recommend the single minimal next action) and documented *stop
-  criteria*; and wiring the gate into CI.
+  datapoint each run and warns (does not hard-exit) on regression. The *controller*
+  (`next-action`, recommend the single next repair + convergence verdict) and *stop
+  criteria* are now done too. Remaining loop work: wire `signal-log --check` into CI, and
+  close the *inner* loop (`compile`/`heal` verify-and-recover before a write is accepted).
 - ~~Add an epistemic audit command that reports unsupported claims, stale claims,
   orphan concepts, duplicate sources, weak high-centrality claims, and
   contradiction backlog as fixable work items.~~ **Largely done** — `review-queue`
