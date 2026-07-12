@@ -530,6 +530,14 @@ def run_next_action(fmt: str = "text", check: bool = False) -> None:
     run_controller(fmt=fmt, check=check)
 
 
+def run_consequence_gate(
+    tier: str, concept: str | None = None, fmt: str = "text", check: bool = False
+) -> None:
+    from kops.consequence_gate import run as run_gate
+
+    run_gate(tier=tier, concept=concept, fmt=fmt, check=check)
+
+
 def run_retract(
     source_id: str,
     reason: str,

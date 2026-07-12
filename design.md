@@ -502,10 +502,15 @@ auto-repair is left, and it is intentionally not automated.
 
 ### P4: Consequence Gating
 
-- Define thresholds for exploratory, recommendation, decision, and autonomous
-  action use.
-- Prevent low-tier or quarantined claims from supporting high-consequence
-  outputs.
+- ~~Define thresholds for exploratory, recommendation, decision, and autonomous
+  action use. Prevent low-tier or quarantined claims from supporting high-consequence
+  outputs.~~ **Done (deterministic core)** — `consequence-gate --tier` checks a set of
+  claims against an escalating evidence bar (`kops/consequence_gate.py`): recommendation
+  bars blocked sources; decision additionally bars quarantined/unknown/unsupported/weak/
+  conflicting/stale/synthetic; autonomous requires admitted + direct + supported.
+  `--check` fails closed. Remaining: wire the gate into `ask`/`render` at the output
+  boundary (which claims an answer actually relies on is agent-mediated), and add
+  per-answer/render tier declarations.
 - Require context-package manifests for important answers, including included
   claims, excluded claims, gaps, stale flags, contradictions, and source
   manifests.

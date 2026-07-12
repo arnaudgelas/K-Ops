@@ -502,6 +502,22 @@ def main() -> None:
         help="Exit non-zero if the vault is in a BLOCKING state (the stateless CI gate).",
     )
 
+    p_consequence = sub.add_parser(
+        "consequence-gate",
+        help="Check whether evidence clears the bar for a consequence tier "
+        "(exploratory/recommendation/decision/autonomous).",
+    )
+    p_consequence.add_argument(
+        "--tier",
+        required=True,
+        choices=["exploratory", "recommendation", "decision", "autonomous"],
+    )
+    p_consequence.add_argument("--concept", help="Limit the gate to one concept stem.")
+    p_consequence.add_argument("--format", choices=["text", "json"], default="text")
+    p_consequence.add_argument(
+        "--check", action="store_true", help="Exit non-zero if the evidence does not clear the bar."
+    )
+
     p_contradiction_search = sub.add_parser(
         "contradiction-search", help="Search the contradiction registry by keyword."
     )
@@ -627,6 +643,7 @@ def main() -> None:
         run_community_audit,
         run_review_queue,
         run_next_action,
+        run_consequence_gate,
         run_retract,
         run_clear_stale_flags,
         run_contradiction_search,
@@ -811,6 +828,10 @@ def main() -> None:
         run_signal_log(record=args.record, check=args.check, fmt=args.format)
     elif args.command == "next-action":
         run_next_action(fmt=args.format, check=args.check)
+    elif args.command == "consequence-gate":
+        run_consequence_gate(
+            tier=args.tier, concept=args.concept, fmt=args.format, check=args.check
+        )
     elif args.command == "contradiction-search":
         run_contradiction_search(args.query, limit=args.limit, fmt=args.format)
     elif args.command in {"scorecard", "audit-kb"}:
