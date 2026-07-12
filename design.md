@@ -376,26 +376,27 @@ in tension with "let the loop run":
 
 ### What is missing (and the order that matters)
 
-The recent commands (`verify-spans`, `review-queue`, `community-audit`, `retract`)
-are the loop's **sensors and actuators**. Missing are the controller and the closed
-feedback:
+The commands `verify-spans`, `review-queue`, `community-audit`, and `retract` are the
+loop's **sensors and actuators**. Progress on closing the feedback:
 
-1. **Measurement over time — the real prerequisite.** You cannot close a loop you
-   cannot measure across iterations. `scorecard.json` is a snapshot; there is no time
-   series, so convergence, regression, and steady-state error are invisible.
-   Appending each run's deterministic signal summary to `data/history/*.jsonl` and
-   reporting deltas is filed below at P3, but it is really the P0 enabler for any
-   loop work; everything else depends on it.
-2. **A controller** that maps the current top signal to the single minimal next
-   action (`review-queue` is a first cut; it ranks but does not yet recommend the
-   cheapest repair).
-3. **A regression gate** (`maintenance` compares the deterministic signal vector
-   pre/post and fails closed on a net-negative iteration).
-4. **Documented stop criteria** for both the human-run and agent-run cadence.
+1. **Measurement over time — done.** `signal-log` records a deterministic 6-signal
+   vector to `data/history/signals.jsonl` each run and reports deltas, so convergence,
+   regression, and steady-state error are now visible across iterations. Signals are
+   plain counts off committed artifacts; a deleted artifact is itself flagged (present
+   -> absent is a hard regression), so the control signal cannot be gamed by deletion.
+2. **A regression gate — done.** `signal-log --check` fails closed when an error-class
+   signal rises or a required artifact disappears. `maintenance` records a datapoint
+   and warns on regression without hard-exiting; the fail-closed gate is the standalone
+   `--check` (for CI).
+3. **A controller — still missing.** Nothing yet maps the current top signal to the
+   single minimal next action. `review-queue` ranks by severity but does not recommend
+   the cheapest repair.
+4. **Documented stop criteria — still missing** for both the human-run and agent-run
+   cadence.
 
-Until measurement-over-time exists, K-Ops is building loop *components* without a loop
-*controller* or any way to tell whether an iteration helped. That, not more sensors,
-is the next real step.
+The loop is now measurable and gated, but not yet *controlled*: K-Ops can tell whether
+an iteration helped, but not yet recommend the next move or decide when to stop. That
+is the remaining loop work.
 
 ## Design Principles
 
@@ -418,10 +419,15 @@ is the next real step.
 - Compare stored content hashes during refresh and mark dependent notes stale.
 - Make source review flags blocking in compile workflows.
 - Add pre/post agent-run Git checkpoints or branches.
-- **Loop enablement (see Loop Engineering).** Append each run's deterministic signal
-  summary to `data/history/*.jsonl` and report deltas — the prerequisite for any
-  closed loop (currently mis-filed at P3). Then add a regression gate so `maintenance`
-  fails closed when the deterministic signal vector gets worse across an iteration.
+- **Loop enablement (see Loop Engineering).** ~~Append each run's deterministic signal
+  summary to `data/history/*.jsonl` and report deltas; add a regression gate.~~
+  **Done** — `signal-log` records a deterministic 6-signal vector to
+  `data/history/signals.jsonl` (gitignored, append-only), reports deltas, and
+  `signal-log --check` fails closed on a hard regression (an error-class signal rising,
+  or a derived artifact disappearing — the anti-gaming guard). `maintenance` records a
+  datapoint each run and warns (does not hard-exit) on regression. Remaining loop work:
+  the *controller* (recommend the single minimal next action) and documented *stop
+  criteria*; and wiring the gate into CI.
 - ~~Add an epistemic audit command that reports unsupported claims, stale claims,
   orphan concepts, duplicate sources, weak high-centrality claims, and
   contradiction backlog as fixable work items.~~ **Largely done** — `review-queue`

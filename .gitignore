@@ -23,6 +23,7 @@ build/
 .uv/
 *.swp
 data/graph/
+data/history/
 
 scripts/__pycache__/
 .pytest_cache/

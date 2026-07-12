@@ -54,6 +54,7 @@ def run_maintenance(
         run_extract_contradictions,
         run_verify_spans,
         run_scorecard,
+        run_signal_log,
         run_lint,
     )
     from kops.kb_runtime import cmd_compile
@@ -79,6 +80,13 @@ def run_maintenance(
         results, _ = _check_drift(flag=True, only=None)
         _drift_report(results, flagged=True)
     run_scorecard()
+    # Record one signal datapoint per maintenance run. Warn (do not hard-exit) on a
+    # hard regression — the fail-closed gate is the standalone 'signal-log --check'.
+    signal_result = run_signal_log(record=True)
+    if signal_result and signal_result.get("regression", {}).get("hard"):
+        reasons = signal_result["regression"].get("reasons", [])
+        print("WARNING: hard signal regression detected — " + "; ".join(reasons))
+        print("  Run 'kops signal-log --check' to gate on this.")
     run_lint(fix_backlinks=True)
 
 
@@ -454,6 +462,22 @@ def main() -> None:
         "--dry-run", action="store_true", help="Run without mutating files."
     )
 
+    p_signal_log = sub.add_parser(
+        "signal-log",
+        help="Record/report the deterministic vault signal vector over time; gate on regressions.",
+    )
+    p_signal_log.add_argument(
+        "--record", action="store_true", help="Append this run's datapoint to the history."
+    )
+    p_signal_log.add_argument(
+        "--check",
+        action="store_true",
+        help="Fail if an error-class signal strictly increased vs the last record.",
+    )
+    p_signal_log.add_argument(
+        "--format", choices=["text", "json"], default="text", help="Output format (default: text)."
+    )
+
     p_contradiction_search = sub.add_parser(
         "contradiction-search", help="Search the contradiction registry by keyword."
     )
@@ -565,6 +589,7 @@ def main() -> None:
         run_extract_claims,
         run_extract_contradictions,
         run_verify_spans,
+        run_signal_log,
         run_fetch,
         run_ingest_github,
         run_lint,
@@ -736,6 +761,8 @@ def main() -> None:
         run_extract_contradictions(check=args.check, dry_run=args.dry_run)
     elif args.command == "verify-spans":
         run_verify_spans(check=args.check, dry_run=args.dry_run)
+    elif args.command == "signal-log":
+        run_signal_log(record=args.record, check=args.check, fmt=args.format)
     elif args.command == "contradiction-search":
         run_contradiction_search(args.query, limit=args.limit, fmt=args.format)
     elif args.command in {"scorecard", "audit-kb"}:

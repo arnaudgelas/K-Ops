@@ -518,6 +518,12 @@ def run_review_queue(fmt: str = "text", severity: str = "all") -> None:
     run_queue(fmt=fmt, severity=severity)
 
 
+def run_signal_log(record: bool = False, check: bool = False, fmt: str = "text") -> dict:
+    from kops.signal_history import run as run_signals
+
+    return run_signals(record=record, check=check, fmt=fmt)
+
+
 def run_retract(
     source_id: str,
     reason: str,

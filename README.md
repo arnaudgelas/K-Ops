@@ -553,6 +553,7 @@ Use the Python CLI for mechanical fetching and registry updates. Use the agent-n
 - `scorecard`: compute `data/scorecard.json`
 - `audit-kb`: run the scorecard audit under an explicit audit command name
 - `review-queue`: one prioritised list of everything needing human review (failed spans, blocked/quarantined/unsupported claims, undocumented contradictions, flagged sources, unreviewed probes, gaps); `--severity`, `--format`
+- `signal-log`: record/report the deterministic quality-signal vector over time (`data/history/signals.jsonl`, gitignored) and gate on it — `--record` appends a datapoint, `--check` exits non-zero on a hard regression (an error-class signal rising, or a derived artifact disappearing)
 - `stale-impact`: list notes flagged for revalidation
 - `clear-stale-flags`: remove `revalidation_required` flags
 - `retract <source-id> --reason <text>`: revoke a bad source, map its blast radius, flag dependents for revalidation, and re-block dependent claims; `--dry-run`, `--status`, `--format` (flags/reports only — never rewrites claims)
