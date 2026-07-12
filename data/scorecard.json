@@ -1,6 +1,6 @@
 {
   "project": "K-Ops",
-  "generated_at": "2026-07-11T23:27:04",
+  "generated_at": "2026-07-12T17:27:47",
   "eval_pass_rate": null,
   "catastrophic_failure_count": 0,
   "concepts": {
@@ -126,7 +126,15 @@
     "missing_fields": {}
   },
   "graph_topology": {
-    "available": false
+    "available": true,
+    "node_count": 10,
+    "edge_count": 19,
+    "source_count": 1,
+    "orphaned_sources": 0,
+    "orphaned_source_rate": 0.0,
+    "isolated_concepts": 0,
+    "isolated_answers": 0,
+    "contradiction_nodes": 0
   },
   "eval": {
     "latest_run": null,
