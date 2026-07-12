@@ -15,7 +15,7 @@ Welcome to the **K-Ops** Knowledge Base. This is the central entry point for the
 | **Total Concepts** | 1 |
 | **Total Sources** | 1 |
 | **Total Answers** | 0 |
-| **Last Compiled** | 2026-07-10 |
+| **Last Compiled** | 2026-07-12 |
 
 ## Navigation
 
@@ -27,7 +27,7 @@ Welcome to the **K-Ops** Knowledge Base. This is the central entry point for the
   - [[Indexes/Flat_Concept_Index|Flat Concept Index]] — Flat list of all concepts
   - [[Indexes/Workflow_Atlas|Workflow Atlas]] — Active research and runbooks
 - **Operating Rules**:
-  - [[../OPERATING_RULES.md|Operating Rules]] — Repository contract and behavioral guardrails
+  - [Operating Rules](../OPERATING_RULES.md) — Repository contract and behavioral guardrails
 - **Runbooks**:
   - [[Runbooks/Agent_Workflow_Quick_Reference|Agent Workflow Quick Reference]] — Compact operator map
   - [[Runbooks/Research_Workflow|Research Workflow]] — Deep research execution pipeline

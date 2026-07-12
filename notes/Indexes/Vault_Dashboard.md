@@ -22,7 +22,7 @@ These are the most stale or aging sources in the vault, sorted by their retentio
 
 | Source ID | Title | Retention Score | Tier | Age (Days) |
 |---|---|---|---|---|
-| [[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]] | Agent Workflow Quick Reference Summary | 0.9518 | fresh | 26 |
+| [[Sources/src-1f2a3b4c5d|src-1f2a3b4c5d]] | Agent Workflow Quick Reference Summary | 1.0000 | fresh | 0.0 |
 
 ## Browse by Source Title (Alphabetical Index)
 
