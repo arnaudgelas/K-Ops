@@ -320,6 +320,83 @@ Desired direction:
 - blocked compile for flagged sources until human review
 - separate raw-evidence read scope from curated-vault write scope
 
+## Loop Engineering
+
+K-Ops is described here as a "governed loop," but it is currently an *open* loop: a
+human runs each command, reads the output, and decides the next step. It has sensors
+(scorecard, review-queue, span verification) and actuators (compile, heal, retract)
+but no controller, no feedback comparison, and no convergence criteria. Closing that
+gap is loop engineering: designing the system that runs the cycle — observe, act,
+verify, recover — with an explicit goal and stopping condition, instead of prompting
+each step by hand.
+
+The engineering progression is prompt -> context -> harness -> loop. K-Ops has done
+the first three: prompt templates; context engineering (retrieval-seeded `ask`,
+`compile_plan.json`); harness engineering (deterministic Python bookkeeping, the
+agent hand-off, the answer provenance gate). The loop layer is the least engineered
+and is the current frontier.
+
+### Two loops, engineered differently
+
+- **Inner loop** — one agent invocation (`compile`, `ask`, `heal`): observe -> act ->
+  verify -> recover. Only `ask` closes it today (the answer provenance gate rejects
+  malformed memos). `compile`/`heal` do not yet verify-and-recover: the agent writes
+  concept pages and nothing deterministically re-checks that output and bounces
+  failures back inside the same invocation. Target: generate -> verify -> repair
+  before the write is accepted.
+- **Outer loop** — the vault lifecycle across invocations: sense (scorecard /
+  review-queue / span verification) -> prioritise -> act -> re-sense. This is fully
+  open. No measured feedback shows whether the vault is converging toward health or
+  drifting.
+
+### Constraints unique to a governance system
+
+Loop engineering usually optimises for autonomy. Here it must not. Four hard rules,
+in tension with "let the loop run":
+
+1. **Human-gated actuation.** The loop proposes; a human plus Git approves. Design
+   principle 7 and the security model (no full-auto compile/ask) forbid an autonomous
+   repair loop over a knowledge base. Loop engineering here means an *instrumented,
+   proposal-generating* loop, not an autonomous one.
+2. **Only non-gameable signals may close the loop.** A loop driven by a soft metric
+   gets gamed: told to cut "unsupported claims," an agent downgrades or deletes
+   claims; told to raise citation coverage, it adds citations it never read (the
+   documented tool-call-hacking failure mode). K-Ops is unusually well-placed here —
+   its deterministic checks (quote existence via `verify-spans`, claim admission,
+   lint, contradiction extraction) are hard to game and are the trustworthy control
+   signals. LLM-judged metrics (faithfulness, citation *entailment*) stay strictly
+   **advisory** and must never gate the loop.
+3. **Regression detection across the full signal vector.** A repair that fixes one
+   signal can break another (resolving a contradiction edits a claim and breaks its
+   quote span). Each iteration must compare the whole deterministic signal vector
+   before and after and reject a net-negative step. Without this, the loop thrashes.
+4. **Explicit convergence / stop criteria.** No new error-severity items; signal delta
+   below a threshold; a token/iteration budget. An open-ended loop over a vault
+   over-edits, and over-editing curated knowledge is destructive, not neutral.
+
+### What is missing (and the order that matters)
+
+The recent commands (`verify-spans`, `review-queue`, `community-audit`, `retract`)
+are the loop's **sensors and actuators**. Missing are the controller and the closed
+feedback:
+
+1. **Measurement over time — the real prerequisite.** You cannot close a loop you
+   cannot measure across iterations. `scorecard.json` is a snapshot; there is no time
+   series, so convergence, regression, and steady-state error are invisible.
+   Appending each run's deterministic signal summary to `data/history/*.jsonl` and
+   reporting deltas is filed below at P3, but it is really the P0 enabler for any
+   loop work; everything else depends on it.
+2. **A controller** that maps the current top signal to the single minimal next
+   action (`review-queue` is a first cut; it ranks but does not yet recommend the
+   cheapest repair).
+3. **A regression gate** (`maintenance` compares the deterministic signal vector
+   pre/post and fails closed on a net-negative iteration).
+4. **Documented stop criteria** for both the human-run and agent-run cadence.
+
+Until measurement-over-time exists, K-Ops is building loop *components* without a loop
+*controller* or any way to tell whether an iteration helped. That, not more sensors,
+is the next real step.
+
 ## Design Principles
 
 1. Keep raw evidence recoverable.
@@ -341,6 +418,10 @@ Desired direction:
 - Compare stored content hashes during refresh and mark dependent notes stale.
 - Make source review flags blocking in compile workflows.
 - Add pre/post agent-run Git checkpoints or branches.
+- **Loop enablement (see Loop Engineering).** Append each run's deterministic signal
+  summary to `data/history/*.jsonl` and report deltas — the prerequisite for any
+  closed loop (currently mis-filed at P3). Then add a regression gate so `maintenance`
+  fails closed when the deterministic signal vector gets worse across an iteration.
 - ~~Add an epistemic audit command that reports unsupported claims, stale claims,
   orphan concepts, duplicate sources, weak high-centrality claims, and
   contradiction backlog as fixable work items.~~ **Largely done** — `review-queue`
@@ -371,7 +452,8 @@ Desired direction:
 
 - Persist retrieval indexes instead of rebuilding them per query.
 - Consider SQLite + FTS5 behind the current retrieval API.
-- Record scorecard history as JSONL and report deltas.
+- Record scorecard history as JSONL and report deltas. (Note: this is the closed-loop
+  measurement prerequisite from Loop Engineering; treat as P0, not P3.)
 - Add hybrid retrieval: exact lookup, BM25, embeddings, graph traversal,
   reranking, and query routing.
 
