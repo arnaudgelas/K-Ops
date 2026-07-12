@@ -43,6 +43,7 @@ Compact command map for the K-Ops vault.
 | `claim-search` | Looking for atomic claims by keyword | Accepts `--query`, `--limit`, `--format` |
 | `stale-impact` | After refresh — seeing what changed | Lists concepts + answers with `revalidation_required: true` |
 | `clear-stale-flags` | After reviewing stale concepts/answers | Removes `revalidation_required` flags; use `--dry-run` first |
+| `retract` | A source is discovered bad and must be pulled | Revokes the source, maps its blast radius, flags dependent notes for revalidation, re-blocks dependent claims; `--reason` (required), `--dry-run`, `--status`, `--format`. Flags/reports only — never rewrites claims |
 
 ## Contradiction Commands
 

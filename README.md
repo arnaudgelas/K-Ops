@@ -164,6 +164,9 @@ Implemented today:
 - aggregated human-review worklist (`review-queue`): one prioritised list of
   failed spans, blocked/quarantined/unsupported claims, undocumented
   contradictions, sources needing verification, unreviewed probes, and gaps
+- source retraction (`retract`): revoke a bad source, map its blast radius over
+  the graph, flag dependent concepts/answers for revalidation, and re-block
+  dependent claims — flags and reports, never silently rewrites claims
 - exact lookup and BM25 retrieval over sources, concepts, claims, and sections
 - deterministic compile plans written to `.tmp/compile_plan.json`
 - answer memo schema checks after `ask`

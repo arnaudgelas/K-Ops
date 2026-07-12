@@ -310,6 +310,25 @@ def main() -> None:
         help="Show items at this severity or higher (default: all).",
     )
 
+    p_retract = sub.add_parser(
+        "retract",
+        help="Retract a bad source: revoke it, map its blast radius, and flag dependents.",
+    )
+    p_retract.add_argument("source_id", help="Source id to retract, e.g. src-1f2a3b4c5d.")
+    p_retract.add_argument("--reason", required=True, help="Why the source is being retracted.")
+    p_retract.add_argument(
+        "--status",
+        choices=["revoked", "permission-revoked", "deleted-from-origin", "do-not-use"],
+        default="revoked",
+    )
+    p_retract.add_argument("--format", choices=["text", "json"], default="text")
+    p_retract.add_argument(
+        "--dry-run", action="store_true", help="Report the blast radius, change nothing."
+    )
+    p_retract.add_argument(
+        "--no-recompute", action="store_true", help="Skip re-deriving the claim registry."
+    )
+
     p_build_graph = sub.add_parser("build-graph")
     p_build_graph.add_argument("--output")
     p_build_graph.add_argument("--report-output")
@@ -538,6 +557,7 @@ def main() -> None:
         run_graph_audit,
         run_community_audit,
         run_review_queue,
+        run_retract,
         run_clear_stale_flags,
         run_contradiction_search,
         run_export_index,
@@ -662,6 +682,15 @@ def main() -> None:
         run_community_audit(fmt=args.format, min_shared=args.min_shared)
     elif args.command == "review-queue":
         run_review_queue(fmt=args.format, severity=args.severity)
+    elif args.command == "retract":
+        run_retract(
+            args.source_id,
+            args.reason,
+            status=args.status,
+            dry_run=args.dry_run,
+            fmt=args.format,
+            recompute=not args.no_recompute,
+        )
     elif args.command == "build-graph":
         run_build_graph(
             output=args.output,

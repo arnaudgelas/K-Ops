@@ -482,17 +482,12 @@ def run_community_audit(fmt: str = "text", min_shared: int = 1) -> None:
         f"Community audit  ({report['concept_count']} concepts, "
         f"{report['edge_count']} projected edges)"
     )
-    print(
-        f"{report['community_count']} communit(y/ies), modularity={report['modularity']}"
-    )
+    print(f"{report['community_count']} communit(y/ies), modularity={report['modularity']}")
     print()
     for c in report["communities"]:
         titles = ", ".join(m["title"] for m in c["members"][:6])
         more = "" if len(c["members"]) <= 6 else f" (+{len(c['members']) - 6})"
-        print(
-            f"[community {c['community_id']}] size={c['size']} "
-            f"cohesion={c['internal_cohesion']}"
-        )
+        print(f"[community {c['community_id']}] size={c['size']} cohesion={c['internal_cohesion']}")
         print(f"  {titles}{more}")
     if report["bridges"]:
         print("\nBridge nodes (structural chokepoints — high blast radius):")
@@ -521,6 +516,21 @@ def run_review_queue(fmt: str = "text", severity: str = "all") -> None:
     from kops.review_queue import run as run_queue
 
     run_queue(fmt=fmt, severity=severity)
+
+
+def run_retract(
+    source_id: str,
+    reason: str,
+    status: str = "revoked",
+    dry_run: bool = False,
+    fmt: str = "text",
+    recompute: bool = True,
+) -> None:
+    from kops.retract_source import run as run_retract_source
+
+    run_retract_source(
+        source_id, reason, status=status, dry_run=dry_run, fmt=fmt, recompute=recompute
+    )
 
 
 def run_search_graph(query: str, limit: int = 10, scope: str = "all", fmt: str = "json") -> None:
