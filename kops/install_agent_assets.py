@@ -16,9 +16,6 @@ PKG_DIR = Path(__file__).resolve().parent
 SKILLS_DIR = PKG_DIR / "skills"
 TEMPLATES_DIR = PKG_DIR / "templates"
 CLAUDE_AGENTS_DIR = ROOT / ".claude" / "agents"
-CLAUDE_MEMORY = ROOT / "CLAUDE.md"
-AGENTS_MEMORY = ROOT / "AGENTS.md"
-GEMINI_MEMORY = ROOT / "GEMINI.md"
 SUPPORTED_AGENTS = ("claude", "gemini", "codex")
 AGENT_RUNTIME_DIRS = {
     "claude": ".claude",
@@ -183,17 +180,23 @@ def collect_command_ops(base_root: Path, agents: tuple[str, ...]) -> list[Operat
     return ops
 
 
-def collect_ops(base_root: Path, agents: tuple[str, ...]) -> list[Operation]:
+def collect_ops(base_root: Path, agents: tuple[str, ...], memory_root: Path) -> list[Operation]:
+    # Memory files (CLAUDE/AGENTS/GEMINI.md) are project-owned content, so they come from
+    # memory_root — the vault for project scope, the code root for home scope. Agent
+    # definitions, skills, and commands are tooling and come from the package/code root.
     ops: list[Operation] = []
+    claude_memory = memory_root / "CLAUDE.md"
+    gemini_memory = memory_root / "GEMINI.md"
+    agents_memory = memory_root / "AGENTS.md"
     if "claude" in agents:
         for source in sorted(CLAUDE_AGENTS_DIR.glob("*.md")):
             ops.append(Operation("copy", source, base_root / ".claude" / "agents" / source.name))
-        if CLAUDE_MEMORY.exists():
-            ops.append(Operation("copy", CLAUDE_MEMORY, base_root / ".claude" / "CLAUDE.md"))
-    if "gemini" in agents and GEMINI_MEMORY.exists():
-        ops.append(Operation("copy", GEMINI_MEMORY, base_root / ".gemini" / "GEMINI.md"))
-    if "codex" in agents and AGENTS_MEMORY.exists():
-        ops.append(Operation("copy", AGENTS_MEMORY, base_root / ".codex" / "AGENTS.md"))
+        if claude_memory.exists():
+            ops.append(Operation("copy", claude_memory, base_root / ".claude" / "CLAUDE.md"))
+    if "gemini" in agents and gemini_memory.exists():
+        ops.append(Operation("copy", gemini_memory, base_root / ".gemini" / "GEMINI.md"))
+    if "codex" in agents and agents_memory.exists():
+        ops.append(Operation("copy", agents_memory, base_root / ".codex" / "AGENTS.md"))
     ops.extend(collect_skill_ops(base_root, agents))
     ops.extend(collect_command_ops(base_root, agents))
     return ops
@@ -276,9 +279,11 @@ def main() -> int:
     project_root = kb_home()
     ops: list[Operation] = []
     if args.scope in {"project", "both"}:
-        ops.extend(collect_ops(project_root, agents))
+        # Project scope: destinations and memory both belong to the vault.
+        ops.extend(collect_ops(project_root, agents, memory_root=project_root))
     if args.scope in {"home", "both"}:
-        ops.extend(collect_ops(home, agents))
+        # Home scope: destinations are ~/, memory is the tooling's canonical copy.
+        ops.extend(collect_ops(home, agents, memory_root=ROOT))
 
     results: list[str] = []
     for op in ops:
