@@ -137,6 +137,66 @@ def generate_topic_atlas_content(concepts):
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _note_title(path):
+    fm, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+    title = fm.get("title")
+    if title:
+        return str(title)
+    return path.stem.replace("_", " ")
+
+
+def generate_workflow_atlas_content():
+    runbooks_dir = CONFIG.vault_dir / "Runbooks"
+    runbooks = []
+    if runbooks_dir.exists():
+        for p in sorted(runbooks_dir.glob("*.md")):
+            if p.stem == "index":
+                continue
+            runbooks.append((f"Runbooks/{p.stem}", _note_title(p)))
+
+    # Active research runs are keyed by their brief under research/briefs/.
+    briefs_dir = CONFIG.research_dir / "briefs"
+    runs = []
+    if briefs_dir.exists():
+        for p in sorted(briefs_dir.glob("*.md")):
+            runs.append((p.stem, _note_title(p)))
+
+    lines = [
+        "---",
+        'title: "Workflow Atlas"',
+        "type: index",
+        "tags:",
+        "  - kb/index",
+        "---",
+        "# Workflow Atlas",
+        "",
+        "## What It Is",
+        "",
+        "This page maps the operating layer of the vault: the runbooks that describe how "
+        "to run agent workflows and the active research runs under `research/`. Use it to "
+        "find the right procedure or resume an in-flight job. Auto-generated from "
+        "`notes/Runbooks/` and `research/briefs/`.",
+        "",
+        "## Runbooks",
+        "",
+    ]
+    if runbooks:
+        for target, title in runbooks:
+            lines.append(f"- [[{target}|{title}]]")
+    else:
+        lines.append("_No runbooks found._")
+    lines.append("")
+    lines.append("## Active Research Runs")
+    lines.append("")
+    if runs:
+        for stem, title in runs:
+            lines.append(f"- {title} (`research/briefs/{stem}.md`)")
+    else:
+        lines.append("_No active research runs. Start one with the research workflow._")
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def generate_source_registry_content():
     registry = json.loads(CONFIG.registry_path.read_text(encoding="utf-8"))
     TITLE_RE = re.compile(r'^title:\s*["\'](.+?)["\']', re.MULTILINE)
@@ -321,7 +381,7 @@ def generate_updated_home_content(concepts, sources=None):
         "  - [[Indexes/Flat_Concept_Index|Flat Concept Index]] — Flat list of all concepts",
         "  - [[Indexes/Workflow_Atlas|Workflow Atlas]] — Active research and runbooks",
         "- **Operating Rules**:",
-        "  - [[../OPERATING_RULES.md|Operating Rules]] — Repository contract and behavioral guardrails",
+        "  - [Operating Rules](../OPERATING_RULES.md) — Repository contract and behavioral guardrails",
         "- **Runbooks**:",
         "  - [[Runbooks/Agent_Workflow_Quick_Reference|Agent Workflow Quick Reference]] — Compact operator map",
         "  - [[Runbooks/Research_Workflow|Research Workflow]] — Deep research execution pipeline",
@@ -830,6 +890,12 @@ def main():
     topic_atlas_content = generate_topic_atlas_content(concepts)
     topic_atlas_path.write_text(topic_atlas_content, encoding="utf-8")
     print(f"Updated {topic_atlas_path}")
+
+    # 2.b Workflow Atlas
+    workflow_atlas_path = CONFIG.indexes_dir / "Workflow_Atlas.md"
+    workflow_atlas_content = generate_workflow_atlas_content()
+    workflow_atlas_path.write_text(workflow_atlas_content, encoding="utf-8")
+    print(f"Updated {workflow_atlas_path}")
 
     # 3. Source Registry
     source_registry_path = CONFIG.indexes_dir / "Source_Registry.md"
