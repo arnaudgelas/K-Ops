@@ -36,6 +36,7 @@ data/eval_runs/
 data/baseline_runs/
 data/evidence/
 data/invalidation_queue.json
+data/distillation_proposals.json
 
 scripts/__pycache__/
 .pytest_cache/
