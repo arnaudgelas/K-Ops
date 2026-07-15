@@ -44,7 +44,7 @@ for it.
 |---|---:|---|---:|
 | **M0 — Truth and safety baseline** ✅ *code+docs complete 2026-07-15; exit gate pending 1 external item* | Week 1 | Accurate positioning, explicit guarantees and safe execution boundaries | P0 |
 | **M1 — Measurable proof** ✅ *code complete 2026-07-15; 4/5 gate met, calibration + answer-quality numbers pending a real-provider run* | Weeks 2–6 | End-to-end benchmark, canonical evidence objects and calibrated entailment | P0 |
-| **M2 — Governed outputs** | Weeks 5–10 | Answer-level consequence gating and automatic invalidation | P0 |
+| **M2 — Governed outputs** ✅ *complete 2026-07-15; all 5 exit-gate (killer-demo) criteria met* | Weeks 5–10 | Answer-level consequence gating and automatic invalidation | P0 |
 | **M3 — Consumable product** | Weeks 8–12 | Stable context API, read-only MCP and evaluable demo | P1 |
 | **M4 — Defensible differentiation** | Weeks 11–16 | Source independence, typed contradictions and published proof | P1 |
 | **M5 — Conditional expansion** | After Week 16 | Retrieval, profiles, SDK and UI only when evidence justifies them | P2 |
@@ -624,6 +624,13 @@ the thesis.
 **Priority:** P0
 **Effort:** 1 week
 **Dependencies:** D1.1, E1.4
+**Status:** ✅ **Done (2026-07-15).** `kops/context_package.py` —
+`build_context_package(question, tier, ...)` freezes and persists a
+`ContextPackage` with claim_ids, spans, trust_states, source_version_ids,
+freshness, excluded_claims, retrieval_trace, policy_version, tier. Deterministic
+(same inputs → same `package_hash`, `built_at` excluded); every served claim is
+partitioned into `claim_ids` or `excluded_claims` (with reasons) — nothing
+silently dropped. Retrieval is exclusion-aware (`command="ask"`). 6 tests.
 
 Before answer generation, build a frozen package containing:
 
@@ -650,6 +657,11 @@ governed answers.
 **Priority:** P0
 **Effort:** 3–5 days
 **Dependencies:** C2.1
+**Status:** ✅ **Done (2026-07-15).** `kops/answer_claim_map.py` —
+`validate_answer_claim_map` rejects unknown claim ids, uncited factual sentences
+(non-exploratory), empty reliance sets, citations of excluded claims, and
+source-version-changed evidence; exploratory is lenient (violations → warnings).
+Deterministic sentence classification. 9 tests.
 
 Every factual answer sentence must reference one or more claim IDs from the
 context package.
@@ -671,6 +683,11 @@ The model may not self-introduce trusted claims.
 **Priority:** P0
 **Effort:** 2–3 days
 **Dependencies:** J1.2, C2.1
+**Status:** ✅ **Done (2026-07-15).** `kops/tier_policy.py` —
+`evaluate_tier_policy` composes `consequence_gate.assess_claims` (does not fork
+it) and adds entailment treatment (advisory/warn/gate by tier), freshness/stale
+barring at decision+, unresolved-contradiction → qualify/abstain, and autonomous
+corroboration + fail-closed. Returns permit/qualify/abstain/refuse. 10 tests.
 
 #### Exploratory
 
@@ -710,6 +727,18 @@ promotion and answer serving where consequence policy requires it.
 **Priority:** P0
 **Effort:** 1 week
 **Dependencies:** C2.2, C2.3
+**Status:** ✅ **Done (2026-07-15).** `kops/output_gate.py` `serve_ask` runs the
+full process — build package → pre-gate (tier policy + stale-set) → skip
+generation on abstain/refuse → generate (injected) → validate claim map →
+finalize permit/qualify/abstain/refuse → record a `consequence_gate`
+`ValidationEvent` → stamp `consequence_tier` + `context_package_hash` into the
+memo. `--tier` added to `ask`/`render` (`consequence_gate.TIERS`); schema fields
+are recommended-and-optional so old memos stay valid. 10 tests.
+**Honest deferrals:** in the live `ask` command the entailment post-check and
+the source-version-changed check are injectable inputs left unset — both are
+proven at unit level but dormant in production (entailment gating waits on the
+J1.2 calibration exit; source-version drift is a no-op within one synchronous
+serve and matters mainly for re-validating stored answers).
 
 Commands:
 
@@ -738,6 +767,14 @@ Do not gate the entire vault. Gate the exact claims supporting the output.
 **Priority:** P0
 **Effort:** 1–2 weeks
 **Dependencies:** D1.1
+**Status:** ✅ **Done (2026-07-15).** `kops/invalidation.py` — on a detected
+content-hash change: append a new immutable `SourceVersion` (prior preserved),
+find dependent claim-evidence links, emit a `ValidationEvent` per affected
+target, re-derive **claims → contradictions → claims** to a fixed point (closes
+the gap `retract` leaves), flag dependent concepts/answers `revalidation_required`,
+and write a `data/invalidation_queue.json` stale-set that the serving gate reads
+via `stale_targets()`. Respects the no-prose-rewrite boundary; idempotent;
+dry-run. 10 tests.
 
 On source hash change:
 
@@ -760,6 +797,13 @@ Do not silently rewrite prior historical answers.
 **Priority:** P0
 **Effort:** 3–5 days
 **Dependencies:** D1.1
+**Status:** ✅ **Done (2026-07-15).** `kops/validation_log.py` — a canonical
+validator/result vocabulary (rejects unknowns), `record_event` on the M1
+append-only `ValidationEvent` store, and `serving_audit(answer_id)` that
+reconstructs a served answer's full decision record. Made the durable ledger
+git-reviewable (`.gitignore` `data/history/*` + negations for
+`validation_events.jsonl`/`source_versions.jsonl`) while keeping ephemeral
+artifacts ignored. 8 tests.
 
 Record:
 
@@ -777,14 +821,29 @@ wait.
 
 #### M2 exit gate
 
-- A decision-grade answer using a quarantined or unsupported claim is refused.
-- A decision-grade answer with no claim map is refused.
-- A source update automatically makes dependent answers stale.
-- A retracted source cannot appear in a current recommendation or decision
-  answer.
-- Every serving decision has a reproducible audit record.
+- [x] A decision-grade answer using a quarantined or unsupported claim is
+  refused — excluded from the package; citing it → `excluded-claim` → refuse
+  (`test_output_gate.py::test_decision_answer_relying_on_quarantined_claim_is_refused`).
+- [x] A decision-grade answer with no claim map is refused — uncited/empty
+  reliance → refuse (`::test_decision_answer_with_no_claim_map_is_refused`).
+- [x] A source update automatically makes dependent answers stale — real F2.1
+  cascade writes the stale-set; the decision serve reads it and abstains
+  *without generating* (`::test_source_update_makes_dependent_decision_answer_stale`).
+- [x] A retracted source cannot appear in a current recommendation or decision
+  answer — excluded from the package via `command="ask"`; citing it → refuse
+  (`::test_revoked_source_cannot_appear_in_decision_answer`).
+- [x] Every serving decision has a reproducible audit record — a
+  `consequence_gate` `ValidationEvent` (pinned to the package hash) per serve;
+  `validation_log.serving_audit` reconstructs it
+  (`::test_every_serving_decision_has_reproducible_audit_record`).
 
-This is the actual killer demo.
+**Gate status (2026-07-15):** all 5 criteria MET — independently verified
+(full suite 462 passed / 1 xfailed, ruff clean, adversarial audit confirming the
+gate tests are non-trivial: they force generation past the pre-gate and prove
+the post-gate / stale-set / exclusion mechanisms do the refusing). Two protections
+(live entailment post-check, source-version-drift check) are proven at unit level
+but left dormant in the shipped `ask` command pending J1.2 calibration — see the
+`C2.4` status note. This is the actual killer demo, and it works end to end.
 
 ---
 
