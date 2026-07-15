@@ -14,6 +14,9 @@ source_note:
   recommended:
     - content_hash     # SHA-256 of raw content for staleness detection
     - tags             # kb/source + topic tags
+    - derived_from     # upstream source_id this note derives from (lineage / independence)
+    - publisher        # declared publisher/organization (independence)
+    - tier             # primary | secondary (declared corroboration tier)
 
 source_kinds:
   arxiv-paper:
