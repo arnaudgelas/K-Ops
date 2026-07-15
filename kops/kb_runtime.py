@@ -3,19 +3,18 @@ from __future__ import annotations
 import datetime as dt
 import json
 import re
-import subprocess
 from pathlib import Path
 
 import importlib.resources
 
+from kops import runners
+from kops import source_override
 from kops.utils import (
     CONFIG,
     ROOT,
-    detect_agent_command,
     ensure_dir,
     now_stamp,
     parse_frontmatter,
-    shell_join,
     slugify,
     write_text,
 )
@@ -46,20 +45,39 @@ def build_runtime_prompt(name: str, text: str) -> Path:
 
 
 def agent_run(agent: str, prompt_path: Path) -> None:
-    base_cmd = detect_agent_command(agent)
-    prompt_text = prompt_path.read_text(encoding="utf-8")
+    """Backward-compatible generator runner (write-oriented, mutating flags).
 
-    if agent == "codex":
-        cmd = base_cmd + ["exec", "--skip-git-repo-check", "--full-auto", prompt_text]
-    elif agent == "claude":
-        cmd = base_cmd + ["-p", str(prompt_path)]
-    elif agent == "gemini":
-        cmd = base_cmd + ["-p", prompt_text]
-    else:
-        raise ValueError(agent)
+    Retained as a thin shim so existing imports/monkeypatches keep working. New
+    call sites should use :func:`mutating_agent_run` or :func:`readonly_agent_run`
+    to make the execution role explicit (roadmap task S0.2).
+    """
+    runners.execute_generator(agent, prompt_path, full_auto=True, cwd=ROOT)
 
-    print(f"\nRunning: {shell_join(cmd)}\n")
-    subprocess.run(cmd, check=True, cwd=ROOT)
+
+def readonly_agent_run(agent: str, prompt_path: Path) -> None:
+    """Read-only generator role for answer generation.
+
+    Same providers as the mutating role, but never grants write-oriented flags
+    (no Codex ``--full-auto``). Used by ``ask``.
+    """
+    runners.execute_generator(agent, prompt_path, full_auto=False, cwd=ROOT)
+
+
+def mutating_agent_run(agent: str, prompt_path: Path) -> runners.GitCheckpoint:
+    """Mutating generator role wrapped in pre/post git checkpoints.
+
+    Records repo HEAD + working-tree status before the run and a before/after
+    diff record after, so uncommitted destructive changes stay visible and
+    recoverable. Never auto-commits and never auto-reverts. Used by
+    compile / heal / render / research-*.
+    """
+    before = runners.git_checkpoint_before(ROOT)
+    try:
+        agent_run(agent, prompt_path)
+    finally:
+        record = runners.git_checkpoint_after(before, ROOT)
+        runners.persist_git_record(record, ROOT)
+    return record
 
 
 def build_answer_scaffold(question: str, asked_at: str) -> str:
@@ -122,7 +140,11 @@ def build_ask_retrieval_context(question: str, top_k: int = 8) -> str:
 
         index = VaultIndex()
         index.build()
-        results = index.search(question, top_k=top_k)
+        # Security-critical: the ask context is fed verbatim into the agent
+        # prompt, so a flagged/revoked/adversarial/prompt-injected source must
+        # never reach it by default. ``command="ask"`` scopes which audited
+        # overrides (if any) may re-admit a source for this surface only.
+        results = index.search(question, top_k=top_k, command="ask")
     except Exception as exc:
         return (
             "Seed retrieval failed before agent handoff.\n"
@@ -248,16 +270,14 @@ def validate_answer_memo_after_agent(answer_path: Path) -> None:
 
 
 def _registry_entry_flag_reasons(entry: dict) -> list[str]:
-    reasons: list[str] = []
-    if entry.get("adversarial_content") is True:
-        reasons.append("adversarial_content")
-    if entry.get("prompt_injection_detected") is True:
-        reasons.append("prompt_injection_detected")
-    if entry.get("fetch_warning"):
-        reasons.append(f"fetch_warning:{entry['fetch_warning']}")
-    if entry.get("source_status") in {"revoked", "permission-revoked", "do-not-use"}:
-        reasons.append(f"source_status:{entry['source_status']}")
-    return reasons
+    """Flag reasons for a registry entry.
+
+    Delegates to the canonical ``source_override.frontmatter_flag_reasons`` so the
+    compile planner, claim admission, and every serving surface share one
+    definition of "flagged" (notably including ``deleted-from-origin``, which an
+    earlier inline copy of this set omitted) and cannot drift apart.
+    """
+    return source_override.frontmatter_flag_reasons(entry)
 
 
 def _build_compile_plan() -> dict:
@@ -265,16 +285,21 @@ def _build_compile_plan() -> dict:
     existing_ids = {path.stem for path in CONFIG.summaries_dir.rglob("src-*.md")}
     all_ids = {item["id"] for item in registry if item.get("id")}
 
+    overrides = source_override.load_overrides()
     flagged: list[dict] = []
     flagged_ids: set[str] = set()
     for item in registry:
         source_id = item.get("id")
         if not source_id:
             continue
-        reasons = _registry_entry_flag_reasons(item)
-        if reasons:
+        excluded, reasons = source_override.should_exclude(
+            item, command="compile", overrides=overrides
+        )
+        if not reasons:
+            continue
+        if excluded:
             flagged_ids.add(source_id)
-            flagged.append({"id": source_id, "reasons": reasons})
+        flagged.append({"id": source_id, "reasons": reasons})
 
     return {
         "generated_at": dt.datetime.now().replace(microsecond=0).isoformat(),
@@ -325,7 +350,7 @@ def _run_with_inner_verify(agent: str, prompt: Path, verify: bool) -> None:
     from kops import inner_loop
 
     before = inner_loop.snapshot() if verify else None
-    agent_run(agent, prompt)
+    mutating_agent_run(agent, prompt)
     if verify and before is not None:
         inner_loop.report(inner_loop.verify_agent_write(before))
 
@@ -360,7 +385,7 @@ def cmd_ask(agent: str, question: str) -> None:
         web_fetch_policy=web_fetch_policy,
         retrieval_context=build_ask_retrieval_context(question),
     )
-    agent_run(agent, prompt)
+    readonly_agent_run(agent, prompt)
     if not answer_path.exists():
         raise FileNotFoundError(f"Answer memo was not written: {answer_path}")
     answer_text = answer_path.read_text(encoding="utf-8")
@@ -383,4 +408,4 @@ def cmd_ask(agent: str, question: str) -> None:
 def cmd_render(agent: str, fmt: str, prompt_text: str) -> None:
     ensure_dir(CONFIG.outputs_dir)
     prompt = build_prompt("render_prompt.md", format=fmt, prompt=prompt_text)
-    agent_run(agent, prompt)
+    mutating_agent_run(agent, prompt)

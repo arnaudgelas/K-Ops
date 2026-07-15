@@ -26,6 +26,10 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from kops.utils import CONFIG, ROOT, parse_frontmatter  # noqa: E402
+from kops import source_override  # noqa: E402
+
+# Default command context for retrieval-surface exclusion (overrides scope by command).
+DEFAULT_RETRIEVAL_COMMAND = "search"
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +145,10 @@ class VaultIndex:
         self._bm25: _BM25 | None = None
         self._corpus: list[list[str]] = []
         self._built = False
+        # source_id -> source-note frontmatter (used to exclude flagged sources,
+        # including source-section records that inherit their source's status).
+        self._source_frontmatter: dict[str, dict] = {}
+        self._overrides: list[source_override.SourceOverride] = []
 
     # ------------------------------------------------------------------
     # Build
@@ -191,6 +199,7 @@ class VaultIndex:
                 "search_text": search_text,
                 "frontmatter": fm,
             }
+            self._source_frontmatter[source_id] = fm
             self._add_record(record)
 
     def _index_concepts(self) -> None:
@@ -307,6 +316,8 @@ class VaultIndex:
         self._id_map = {}
         self._corpus = []
         self._bm25 = None
+        self._source_frontmatter = {}
+        self._overrides = source_override.load_overrides()
 
         self._index_sources()
         self._index_concepts()
@@ -336,14 +347,48 @@ class VaultIndex:
             self.build()
 
     # ------------------------------------------------------------------
+    # Source-exclusion filter
+    # ------------------------------------------------------------------
+
+    def _record_is_excluded(self, record: dict, command: str, include_flagged: bool) -> bool:
+        """Deterministically exclude flagged/revoked/adversarial sources by default.
+
+        Concept and claim records are never source-flagged here. Source and
+        source-section records consult the originating source note's frontmatter
+        (a section inherits its source's status) plus the audited override store.
+        """
+        if include_flagged:
+            return False
+        kind = record.get("kind")
+        if kind == "source":
+            meta = record.get("frontmatter") or {}
+        elif kind == "source-section":
+            meta = self._source_frontmatter.get(record.get("source_id", ""), {})
+        else:
+            return False
+        excluded, _ = source_override.should_exclude(
+            meta, command=command, overrides=self._overrides
+        )
+        return excluded
+
+    # ------------------------------------------------------------------
     # Exact lookup
     # ------------------------------------------------------------------
 
-    def exact(self, query_id: str) -> list[dict]:
+    def exact(
+        self,
+        query_id: str,
+        *,
+        command: str = DEFAULT_RETRIEVAL_COMMAND,
+        include_flagged: bool = False,
+    ) -> list[dict]:
         """Look up by source_id, claim_id, concept slug, node_id, or src-XXXX#anchor.
 
         For source-section records the retrieval_method is 'exact-section';
         for all other kinds it is 'exact'.
+
+        Flagged/revoked/adversarial sources are excluded by default; pass
+        ``include_flagged=True`` for an explicit admin/debug view.
         """
         self._ensure_built()
         # Normalise 'src-XXXX#anchor' queries: look up the combined key directly
@@ -365,6 +410,8 @@ class VaultIndex:
                 continue
             seen.add(idx)
             r = self._records[idx]
+            if self._record_is_excluded(r, command, include_flagged):
+                continue
             method = "exact-section" if r.get("kind") == "source-section" else "exact"
             results.append(_make_result(r, 1.0, method))
         return results
@@ -373,36 +420,69 @@ class VaultIndex:
     # BM25
     # ------------------------------------------------------------------
 
-    def bm25(self, query: str, top_k: int = 10) -> list[dict]:
-        """BM25 search over indexed text. Returns scored results."""
+    def bm25(
+        self,
+        query: str,
+        top_k: int = 10,
+        *,
+        command: str = DEFAULT_RETRIEVAL_COMMAND,
+        include_flagged: bool = False,
+    ) -> list[dict]:
+        """BM25 search over indexed text. Returns scored results.
+
+        Flagged/revoked/adversarial sources are excluded by default. Extra
+        candidates are fetched so exclusion does not silently shrink the result
+        set below ``top_k`` when flagged sources score highly.
+        """
         self._ensure_built()
         if self._bm25 is None:
             return []
         terms = _tokenize(query)
         if not terms:
             return []
-        hits = self._bm25.get_top_n(terms, top_k=top_k)
+        fetch = top_k if include_flagged else top_k * 5
+        hits = self._bm25.get_top_n(terms, top_k=fetch)
         results = []
         for idx, score in hits:
             r = self._records[idx]
+            if self._record_is_excluded(r, command, include_flagged):
+                continue
             method = "bm25-section" if r.get("kind") == "source-section" else "bm25"
             results.append(_make_result(r, score, method))
+            if len(results) >= top_k:
+                break
         return results
 
     # ------------------------------------------------------------------
     # Combined search
     # ------------------------------------------------------------------
 
-    def search(self, query: str, top_k: int = 10, kind: str | None = None) -> list[dict]:
-        """Combines exact + bm25. Returns results with retrieval_method field."""
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        kind: str | None = None,
+        *,
+        command: str = DEFAULT_RETRIEVAL_COMMAND,
+        include_flagged: bool = False,
+    ) -> list[dict]:
+        """Combines exact + bm25. Returns results with retrieval_method field.
+
+        Flagged/revoked/adversarial sources are excluded by default so they
+        never reach a caller (e.g. an agent prompt). Pass ``include_flagged=True``
+        for an explicit admin/debug view; ``command`` scopes which audited
+        overrides may re-admit a flagged source.
+        """
         self._ensure_built()
 
         # Try exact first
-        exact_results = self.exact(query)
+        exact_results = self.exact(query, command=command, include_flagged=include_flagged)
 
         # BM25: request extra candidates when kind filtering to avoid over-pruning
         bm25_fetch = top_k * 10 if kind else top_k
-        bm25_results = self.bm25(query, top_k=bm25_fetch)
+        bm25_results = self.bm25(
+            query, top_k=bm25_fetch, command=command, include_flagged=include_flagged
+        )
 
         # Merge: exact results first, then bm25 not already in exact set
         seen_ids: set[str] = set()
@@ -512,6 +592,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--kind", choices=["source", "concept", "claim", "source-section"], default=None
     )
+    parser.add_argument(
+        "--include-flagged",
+        action="store_true",
+        help="Admin/debug: include flagged/revoked/adversarial sources (default: excluded).",
+    )
     args = parser.parse_args()
 
     t0 = time.perf_counter()
@@ -520,7 +605,9 @@ if __name__ == "__main__":
     build_ms = (time.perf_counter() - t0) * 1000
 
     t1 = time.perf_counter()
-    results = idx.search(args.query, top_k=args.top, kind=args.kind)
+    results = idx.search(
+        args.query, top_k=args.top, kind=args.kind, include_flagged=args.include_flagged
+    )
     query_ms = (time.perf_counter() - t1) * 1000
 
     print(f"Index build: {build_ms:.0f}ms | Query: {query_ms:.0f}ms")

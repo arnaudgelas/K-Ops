@@ -4,7 +4,7 @@ import datetime as dt
 import shutil
 from pathlib import Path
 
-from kops.kb_runtime import agent_run, build_prompt
+from kops.kb_runtime import build_prompt, mutating_agent_run
 from kops.research_artifacts import (
     copy_imported_report,
     render_research_brief,
@@ -329,7 +329,7 @@ def cmd_research_collect(agent: str, topic: str, tier: str = "standard") -> None
         progress_path=str(progress_path.relative_to(ROOT)),
         findings_path=str(findings_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt)
+    mutating_agent_run(agent, prompt)
     if not findings_path.exists():
         raise FileNotFoundError(f"Expected findings file was not written: {findings_path}")
     append_research_progress(slug, "Completed source collection and initial findings distillation.")
@@ -375,7 +375,7 @@ def cmd_research_review(agent: str, topic: str, tier: str = "standard") -> None:
         findings_path=str(findings_path.relative_to(ROOT)),
         review_path=str(review_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt)
+    mutating_agent_run(agent, prompt)
     if not review_path.exists():
         raise FileNotFoundError(f"Expected contrarian review was not written: {review_path}")
     append_research_progress(slug, "Completed contrarian review.")
@@ -418,7 +418,7 @@ def cmd_research_report(
         review_path=str(review_path.relative_to(ROOT)),
         report_path=str(report_path.relative_to(ROOT)),
     )
-    agent_run(agent, prompt)
+    mutating_agent_run(agent, prompt)
     if not report_path.exists():
         raise FileNotFoundError(f"Expected report was not written: {report_path}")
     append_research_progress(slug, "Completed final report drafting.")

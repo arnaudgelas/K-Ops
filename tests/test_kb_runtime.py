@@ -17,7 +17,9 @@ class _FakeVaultIndex:
     def build(self) -> None:
         return None
 
-    def search(self, query: str, top_k: int = 8) -> list[dict]:
+    def search(
+        self, query: str, top_k: int = 8, command: str = "search", **kwargs: object
+    ) -> list[dict]:
         assert query == "workflow pattern"
         assert top_k == 8
         return [
@@ -127,7 +129,7 @@ def test_cmd_ask_injects_retrieval_context(tmp_path, monkeypatch):
         answer_path.write_text(answer_text, encoding="utf-8")
 
     monkeypatch.setattr(kb_runtime, "build_prompt", fake_build_prompt)
-    monkeypatch.setattr(kb_runtime, "agent_run", fake_agent_run)
+    monkeypatch.setattr(kb_runtime, "readonly_agent_run", fake_agent_run)
 
     kb_runtime.cmd_ask("claude", "workflow pattern")
 
@@ -170,7 +172,7 @@ def test_cmd_ask_rejects_missing_retrieval_path(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(kb_runtime, "build_prompt", fake_build_prompt)
-    monkeypatch.setattr(kb_runtime, "agent_run", fake_agent_run)
+    monkeypatch.setattr(kb_runtime, "readonly_agent_run", fake_agent_run)
 
     try:
         kb_runtime.cmd_ask("claude", "workflow pattern")
