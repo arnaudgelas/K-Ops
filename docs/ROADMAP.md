@@ -46,7 +46,7 @@ for it.
 | **M1 — Measurable proof** ✅ *code complete 2026-07-15; 4/5 gate met, calibration + answer-quality numbers pending a real-provider run* | Weeks 2–6 | End-to-end benchmark, canonical evidence objects and calibrated entailment | P0 |
 | **M2 — Governed outputs** ✅ *complete 2026-07-15; all 5 exit-gate (killer-demo) criteria met* | Weeks 5–10 | Answer-level consequence gating and automatic invalidation | P0 |
 | **M3 — Consumable product** | Weeks 8–12 | Stable context API, read-only MCP and evaluable demo | P1 |
-| **M4 — Defensible differentiation** | Weeks 11–16 | Source independence, typed contradictions and published proof | P1 |
+| **M4 — Defensible differentiation** ✅ *complete 2026-07-15; 3/4 gate met, external partner confirmation pending* | Weeks 11–16 | Source independence, typed contradictions and published proof | P1 |
 | **M5 — Conditional expansion** | After Week 16 | Retrieval, profiles, SDK and UI only when evidence justifies them | P2 |
 
 M1 and the early parts of M2 may run in parallel. M3 must not expose an
@@ -974,6 +974,19 @@ Stars may be observed but are not a product KPI.
 **Priority:** P1
 **Effort:** 1 week
 **Dependencies:** D1.1, F2.1
+**Status:** ✅ **Done (2026-07-15).** `kops/typed_contradictions.py` + additive
+enrichment of `contradiction_registry.py`: a deterministic classifier for all 9
+types plus scope, time_interval, severity, materiality, resolution_state,
+supporting_evidence, reviewer_decision. `material_contradiction_ids(claims)`
+returns claim ids in unresolved+material contradictions. Backward-compatible
+(the 8 original record keys, the 5 CLI display keys, and `claim_ids` semantics
+preserved; `run --check` deterministic). Wired into `tier_policy` so an
+immaterial contradiction no longer forces qualify/abstain. 27 tests.
+**Follow-up (non-blocking):** with a non-empty material set, a claim conflicted
+only via `conflicts_with` but absent from the typed registry is treated as
+immaterial-by-absence; the output-gate guard (empty→None) keeps this from ever
+weakening below the all-material baseline, but switching to an explicit
+*immaterial* set would be strictly more conservative.
 
 Types:
 
@@ -1005,6 +1018,15 @@ Each contradiction includes:
 **Priority:** P1
 **Effort:** 2 weeks
 **Dependencies:** D1.1
+**Status:** ✅ **Done (2026-07-15).** `kops/source_lineage.py` — resolves each
+source to its canonical upstream via `derived_from` (cycle-safe), and
+`independent_source_ids`/`is_corroborated`/`independence_confidence` collapse
+copies that share an upstream so corroboration counts *independent* origins. The
+corpus derivative pair (`src-5ec0000012`/`5ec0000013`, both `derived_from:
+src-fac0000007`) collapses to 1 and is not corroborated. Tracks only DECLARED
+provenance (no synthetic-text detection). Wired into `tier_policy`'s autonomous
+corroboration, replacing the naive distinct-source count. Schema additions
+(`derived_from`, `publisher`, `tier`) are recommended/optional. 13 tests.
 
 Track:
 
@@ -1035,6 +1057,13 @@ dependency.
 **Priority:** P1
 **Effort:** 1–2 weeks
 **Dependencies:** D1.1, L4.1
+**Status:** ✅ **Done (2026-07-15).** `kops/distillation.py` — proposal-only
+detectors (duplicate/merge, split via `atomic_claims`, supersede with reciprocal
+edges, concept rename, stale archival) using deterministic TF-IDF cosine. The
+merge guardrail is enforced: a near-duplicate pair with divergent scope, time,
+or evidence yields a `needs-review` proposal, never a silent merge. Emits an
+immutable `data/distillation_proposals.json` and review-queue-shaped items;
+never auto-applies or rewrites prose. 11 tests.
 
 Support:
 
@@ -1055,6 +1084,15 @@ Never silently merge claims with different scope, time or evidence.
 **Priority:** P1
 **Effort:** 3–5 days
 **Dependencies:** E1.4, M2, L4.1
+**Status:** ✅ **Done (2026-07-15).** `kops/benchmark_report.py` + the generated
+`research/benchmarks/REPORT.md` (deterministic JSON→Markdown over the E1.4
+harness; byte-identical on re-render). Adds stdlib Wilson confidence intervals.
+The honest headline is the real governance advantage (0 stale/revoked-source
+decision answers vs BM25's 43 leaks over 84 questions); answer-quality numbers
+are labelled pending a real-provider run. A "M4 differentiation" section embeds
+two LIVE computed decision flips: source independence (`permit → refuse` on the
+corpus derivative pair) and typed-contradiction materiality (`qualify → permit`).
+`benchmark-report` CLI subcommand added. 14 tests.
 
 Report:
 
@@ -1080,12 +1118,27 @@ It must be something measurable, such as:
 
 #### M4 exit gate
 
-- Source independence changes at least one corroboration decision in the
-  benchmark.
-- Typed contradictions improve qualification or abstention behavior.
-- The benchmark demonstrates a material, repeatable advantage.
-- At least one external design partner confirms that the governance prevented a
-  real error or materially improved review.
+- [x] Source independence changes at least one corroboration decision in the
+  benchmark — the corpus derivative pair flips the autonomous decision `permit →
+  refuse` once lineage collapses the shared upstream (`benchmark_report.compute_independence_flip`;
+  `test_benchmark_report.py::test_independence_flip_is_a_real_decision_change`).
+- [x] Typed contradictions improve qualification or abstention behavior — a
+  material contradiction forces `qualify` while an immaterial one now `permit`s
+  the same claim (`compute_materiality_flip`;
+  `test_material_contradictions_refine_qualify_abstain`).
+- [x] The benchmark demonstrates a material, repeatable advantage — 0
+  stale/revoked-source decision answers vs BM25's 43 leaks over 84 questions
+  (Wilson CIs), and `REPORT.md` regenerates byte-identically.
+- [ ] **PENDING (external):** at least one design partner confirms the
+  governance prevented a real error or materially improved review — cannot be
+  produced in-repo; tracked in the `docs/DESIGN_PARTNERS.md` confirmation ledger.
+
+**Gate status (2026-07-15):** 3 of 4 items met (the two differentiation
+mechanisms + the material, repeatable advantage), all independently verified
+(full suite 531 passed / 1 xfailed, ruff clean, adversarial audit confirming the
+decision flips are live-computed, backward-compat preserved, and no metric
+rigged). The fourth item is external design-partner confirmation, shared with
+the M0/P0.1 ledger.
 
 ---
 
