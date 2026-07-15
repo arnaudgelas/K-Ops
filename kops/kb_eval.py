@@ -73,3 +73,26 @@ def run_eval_check() -> None:
         f"Eval check OK: {len(questions)} question(s) in "
         f"{eval_path.relative_to(ROOT)} (version {data.get('version', '?')})"
     )
+
+    # Also validate the rich golden set for the held-out benchmark corpus, if present.
+    golden_path = ROOT / "research" / "benchmarks" / "held-out" / "golden_set.yaml"
+    if golden_path.exists():
+        from kops.golden_eval import (
+            load_golden_set,
+            validate_golden_set,
+            verify_source_spans,
+        )
+
+        gdata = load_golden_set(golden_path)
+        gerrors = validate_golden_set(gdata)
+        corpus = ROOT / gdata.get("corpus", "research/benchmarks/held-out/corpus")
+        gerrors += verify_source_spans(gdata, corpus)
+        if gerrors:
+            print(f"Golden-set check FAILED ({len(gerrors)} error(s)):")
+            for err in gerrors:
+                print(f"  {err}")
+            raise SystemExit(1)
+        print(
+            f"Eval check OK: {len(gdata['questions'])} question(s) in "
+            f"{golden_path.relative_to(ROOT)} (rich golden set, all spans verbatim)"
+        )

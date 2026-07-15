@@ -578,6 +578,40 @@ def main() -> None:
         "generate-probes", help="Generate diagnostic questions (probes) from source summaries."
     )
 
+    sub.add_parser(
+        "eval-setup", help="Create the golden Q&A evaluation scaffold if it does not exist."
+    )
+    sub.add_parser(
+        "eval-check",
+        help="Validate the golden Q&A scaffold and the rich golden-set schema.",
+    )
+
+    p_benchmark = sub.add_parser(
+        "benchmark",
+        help="Run the end-to-end M1 benchmark metrics harness (roadmap E1.4).",
+    )
+    p_benchmark.add_argument(
+        "--snapshot",
+        help="Snapshot dir to overlay (default: the 03-retraction governance scenario).",
+    )
+    p_benchmark.add_argument(
+        "--no-snapshot", action="store_true", help="Run over the plain base corpus."
+    )
+    p_benchmark.add_argument(
+        "--provider",
+        default="deterministic",
+        help="'deterministic' (offline, default) or 'agent-cli:<agent>' (real numbers).",
+    )
+    p_benchmark.add_argument(
+        "--entailment",
+        action="store_true",
+        help="Run the J1.1 entailment judge (requires KB_JUDGE_AGENT/KB_JUDGE_CMD).",
+    )
+    p_benchmark.add_argument("--top-k", type=int, default=8)
+    p_benchmark.add_argument("--out-dir", help="Report output dir (default: data/eval_runs).")
+    p_benchmark.add_argument("--corpus", help="Benchmark corpus dir (default: E1.1 held-out).")
+    p_benchmark.add_argument("--golden-set", help="Golden set YAML (default: E1.2 golden_set).")
+
     p_eval = sub.add_parser(
         "evaluate", help="Evaluate compiled concept pages against raw sources and summaries."
     )
@@ -673,7 +707,10 @@ def main() -> None:
         run_validate_config,
         cmd_claim_map,
         run_generate_probes,
+        run_benchmark,
         run_evaluate,
+        run_eval_setup,
+        run_eval_check,
         run_compile_large_source,
     )
     from kops.kb_runtime import cmd_ask, cmd_compile, cmd_heal, cmd_render
@@ -844,6 +881,21 @@ def main() -> None:
         run_maintenance(agent=args.agent, clean_tmp=args.clean_tmp, check_drift=args.check_drift)
     elif args.command == "generate-probes":
         run_generate_probes()
+    elif args.command == "benchmark":
+        run_benchmark(
+            snapshot=args.snapshot,
+            no_snapshot=args.no_snapshot,
+            provider=args.provider,
+            entailment=args.entailment,
+            top_k=args.top_k,
+            out_dir=args.out_dir,
+            corpus=args.corpus,
+            golden_set=args.golden_set,
+        )
+    elif args.command == "eval-setup":
+        run_eval_setup()
+    elif args.command == "eval-check":
+        run_eval_check()
     elif args.command == "evaluate":
         run_evaluate(
             limit=args.limit,

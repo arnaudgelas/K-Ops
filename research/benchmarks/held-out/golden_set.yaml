@@ -1,0 +1,1667 @@
+version: '1.0'
+description: Rich golden evaluation set for the held-out Torque benchmark corpus (M1 task E1.2). Every question is answerable or refutable from research/benchmarks/held-out/corpus. Source spans are verbatim substrings of the referenced corpus source note.
+corpus: research/benchmarks/held-out/corpus
+categories:
+- direct-factual
+- multi-source-synthesis
+- contradiction-sensitive
+- freshness-sensitive
+- source-retraction-sensitive
+- insufficient-evidence
+- decision-grade
+- adversarial-citation
+consequence_tiers:
+- exploratory
+- recommendation
+- decision
+- autonomous
+questions:
+- id: gq-fact-01
+  category: direct-factual
+  question: Which Torque version first reached general availability, and on what date?
+  expected_answer_elements:
+  - v2.0.0
+  - '2026-01-15'
+  - general availability
+  forbidden_conclusions:
+  - v2.1.0 was the first GA release
+  - v1.0
+  relevant_claim_refs:
+  - concept: Torque Project Overview
+    claim: Torque reached GA at v2.0.0 on 2026-01-15 under Apache-2.0
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: v2.0.0 was released on 2026-01-15 as the first generally available (GA) build.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-fact-02
+  category: direct-factual
+  question: Under which open-source license was Torque v2.0.0 released?
+  expected_answer_elements:
+  - Apache-2.0
+  forbidden_conclusions:
+  - BSL 1.1
+  - proprietary
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: Torque v2.0.0 is licensed under Apache-2.0.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-fact-03
+  category: direct-factual
+  question: How much did Torque Labs raise in its Series A and who led the round?
+  expected_answer_elements:
+  - $18M
+  - Series A
+  - Northwind Ventures
+  forbidden_conclusions:
+  - Series B
+  - $180M
+  relevant_claim_refs:
+  - concept: Torque Governance and Funding
+    claim: Torque Labs raised an $18M Series A led by Northwind Ventures
+  relevant_source_spans:
+  - src: src-fac0000005
+    quote: Torque Labs raised an $18M Series A on 2026-02-20.
+  - src: src-fac0000005
+    quote: The round was led by Northwind Ventures.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-fact-04
+  category: direct-factual
+  question: On what date did Torque Labs announce its Series A?
+  expected_answer_elements:
+  - '2026-02-20'
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000005
+    quote: Torque Labs announced its Series A financing on 2026-02-20.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-fact-05
+  category: direct-factual
+  question: What is the CVSS base score and vulnerability class of advisory TQ-SA-2026-001?
+  expected_answer_elements:
+  - '9.1'
+  - deserialization
+  - RCE
+  forbidden_conclusions:
+  - CVSS 5
+  - denial of service only
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000004
+    quote: The vulnerability is a deserialization RCE with CVSS base score 9.1 (critical).
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-fact-06
+  category: direct-factual
+  question: Which Torque versions are affected by TQ-SA-2026-001 and where is it fixed?
+  expected_answer_elements:
+  - 2.0.0 through 2.1.0
+  - fixed in v2.1.1
+  forbidden_conclusions:
+  - only v3.0 is affected
+  - unfixed
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000004
+    quote: 'Affected versions: 2.0.0 through 2.1.0 inclusive.'
+  - src: src-fac0000004
+    quote: The vulnerability is fixed in v2.1.1; all users must upgrade immediately.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-fact-07
+  category: direct-factual
+  question: What configuration setting enables exactly-once processing, and in which file?
+  expected_answer_elements:
+  - processing.guarantee = exactly_once
+  - torque.toml
+  forbidden_conclusions:
+  - exactly-once is on by default
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: processing.guarantee = exactly_once
+  - src: src-fac0000001
+    quote: the `torque.toml` configuration file
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-fact-08
+  category: direct-factual
+  question: What is the default processing guarantee in Torque when exactly-once is not configured?
+  expected_answer_elements:
+  - at_least_once
+  - default
+  forbidden_conclusions:
+  - default is exactly-once
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: the default remains `at_least_once`
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-fact-09
+  category: direct-factual
+  question: What is the first-party vendor throughput figure reported for Torque?
+  expected_answer_elements:
+  - 1.2M events/sec
+  - 8-core node
+  forbidden_conclusions:
+  - 5M events/sec is the vendor figure
+  relevant_claim_refs:
+  - concept: Torque Performance Claims
+    claim: The only first-party figure is 1.2M events/sec from the vendor benchmark
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: Torque sustains 1.2M events/sec on a single 8-core node in the vendor test.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-fact-10
+  category: direct-factual
+  question: What execution mode does Torque v3.0 plan to add and when is it targeted?
+  expected_answer_elements:
+  - distributed
+  - multi-node
+  - Q4 2026
+  forbidden_conclusions:
+  - v3.0 already shipped
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000006
+    quote: v3.0 will add a distributed, multi-node execution mode.
+  - src: src-fac0000006
+    quote: v3.0 is targeted for Q4 2026 (no firm date committed).
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-fact-11
+  category: direct-factual
+  question: How many GitHub stars and contributors did the Torque repository have as of 2026-04-01?
+  expected_answer_elements:
+  - 14,200 stars
+  - 187 contributors
+  - '2026-04-01'
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000009
+    quote: As of 2026-04-01 the repository has 14,200 stars.
+  - src: src-fac0000009
+    quote: As of 2026-04-01 the repository has 187 contributors.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-fact-12
+  category: direct-factual
+  question: What does Torque's GOVERNANCE.md say about who can merge changes?
+  expected_answer_elements:
+  - only Torque Labs employees
+  - external contributors
+  - cannot merge
+  forbidden_conclusions:
+  - anyone can merge
+  - community-governed merge rights
+  relevant_claim_refs:
+  - concept: Torque Governance and Funding
+    claim: 'GOVERNANCE.md documents single-vendor control: only Torque Labs employees can merge'
+  relevant_source_spans:
+  - src: src-fac0000010
+    quote: All maintainer and merge rights are held exclusively by Torque Labs employees.
+  - src: src-fac0000010
+    quote: External contributors may submit PRs but cannot approve or merge changes.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-fact-13
+  category: direct-factual
+  question: What configuration file rename does the 1.x to 2.x migration require?
+  expected_answer_elements:
+  - pipeline.toml
+  - torque.toml
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000019
+    quote: Config files must be renamed from `pipeline.toml` to `torque.toml`.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-synth-01
+  category: multi-source-synthesis
+  question: Summarize Torque's release history from GA through its latest documented patch.
+  expected_answer_elements:
+  - v2.0.0
+  - '2026-01-15'
+  - v2.1.0
+  - exactly-once
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: v2.0.0 introduces exactly-once processing semantics for windowed aggregations.
+  - src: src-fac0000002
+    quote: v2.1.0 adds incremental checkpointing and a new Kafka source connector.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-synth-02
+  category: multi-source-synthesis
+  question: How well independently corroborated is Torque's 1.2M events/sec throughput claim?
+  expected_answer_elements:
+  - 1.2M events/sec
+  - vendor benchmark
+  - derive from the same
+  - not independent corroboration
+  forbidden_conclusions:
+  - three independent sources confirm 1.2M
+  - independently verified by StreamWeekly and DataEng Digest
+  relevant_claim_refs:
+  - concept: Torque Performance Claims
+    claim: both derive from the same vendor benchmark -> NOT independent corroboration
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: The report is authored and run by Torque Labs (vendor self-benchmark).
+  - src: src-5ec0000012
+    quote: The 1.2M figure is quoted directly from the Torque Labs vendor benchmark
+  - src: src-5ec0000013
+    quote: not independent corroboration.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-synth-03
+  category: multi-source-synthesis
+  question: What is Torque and who maintains it?
+  expected_answer_elements:
+  - Rust stream-processing engine
+  - Torque Labs
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: Torque v2.0.0 reached general availability on 2026-01-15
+  - src: src-fac0000010
+    quote: GOVERNANCE.md defines how Torque is maintained.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-synth-04
+  category: multi-source-synthesis
+  question: Trace how the $18M Series A figure propagated across the corpus and identify the primary source.
+  expected_answer_elements:
+  - $18M
+  - Northwind Ventures
+  - src-fac0000005
+  - trade-press
+  - derived
+  forbidden_conclusions:
+  - independently verified by two outlets
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000005
+    quote: Torque Labs raised an $18M Series A on 2026-02-20.
+  - src: src-5ec0000011
+    quote: adds no independent verification of the figures.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-synth-05
+  category: multi-source-synthesis
+  question: Summarize Torque's security and stability posture across its 2.x releases.
+  expected_answer_elements:
+  - deserialization RCE
+  - CVSS
+  - memory leak
+  - 'issue #812'
+  - v2.1.1
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000004
+    quote: The vulnerability is a deserialization RCE with CVSS base score 9.1 (critical).
+  - src: src-fac0000003
+    quote: The leak reproduces on v2.1.0 with windows held open under sustained load.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: decision
+- id: gq-synth-06
+  category: multi-source-synthesis
+  question: What is Torque's licensing trajectory across current and future versions?
+  expected_answer_elements:
+  - Apache-2.0
+  - BSL 1.1
+  - v3.0
+  - not yet merged
+  forbidden_conclusions:
+  - Torque has already relicensed to BSL 1.1
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: Torque v2.0.0 is licensed under Apache-2.0.
+  - src: src-fac0000008
+    quote: Existing 2.x releases remain Apache-2.0; the change is not retroactive.
+  - src: src-fac0000008
+    quote: The proposal is under discussion and not yet merged.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-synth-07
+  category: multi-source-synthesis
+  question: What throughput numbers have been claimed for Torque and how credible is each?
+  expected_answer_elements:
+  - 1.2M events/sec
+  - vendor
+  - 5,000,000
+  - retracted
+  - single vendor benchmark
+  forbidden_conclusions:
+  - Torque reliably sustains 5 million events per second
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: Torque sustains 1.2M events/sec on a single 8-core node in the vendor test.
+  - src: src-5ec0000016
+    quote: Claims Torque sustained 5,000,000 events/sec in the author's own tests.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-synth-08
+  category: multi-source-synthesis
+  question: Which sources in the corpus are primary versus secondary reporting on Torque's funding?
+  expected_answer_elements:
+  - src-fac0000005
+  - primary
+  - src-5ec0000011
+  - secondary
+  - derived
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000005
+    quote: First-party announcement on the Torque Labs blog.
+  - src: src-5ec0000011
+    quote: Reports that Torque Labs raised an $18M Series A led by Northwind Ventures.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-synth-09
+  category: multi-source-synthesis
+  question: Summarize Torque's roadmap and what remains uncommitted.
+  expected_answer_elements:
+  - v3.0
+  - distributed
+  - multi-node
+  - Q4 2026
+  - no firm date
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000006
+    quote: v3.0 is targeted for Q4 2026 (no firm date committed).
+  - src: src-fac0000006
+    quote: The single-node engine remains the supported path until v3.0 stabilizes.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-synth-10
+  category: multi-source-synthesis
+  question: How does the community characterize Torque relative to competitors like Fluxion?
+  expected_answer_elements:
+  - lower-latency
+  - Fluxion
+  - single-node
+  - v3.0
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000017
+    quote: Positions Torque as lower-latency and Fluxion as more mature for multi-node.
+  - src: src-5ec0000017
+    quote: Notes Torque's single-node limitation pending v3.0.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: exploratory
+- id: gq-synth-11
+  category: multi-source-synthesis
+  question: 'Combine the vendor benchmark details: what workload produced the 1.2M events/sec figure?'
+  expected_answer_elements:
+  - 1.2M events/sec
+  - 5-second tumbling-window
+  - 8-core node
+  - synthetic events
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: The workload is a 5-second tumbling-window aggregation over synthetic events.
+  - src: src-fac0000007
+    quote: Torque sustains 1.2M events/sec on a single 8-core node in the vendor test.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-contra-01
+  category: contradiction-sensitive
+  question: Does Torque provide true exactly-once processing semantics?
+  expected_answer_elements:
+  - release notes claim exactly-once
+  - community disputes
+  - at-least-once
+  - deduplication
+  - unresolved
+  forbidden_conclusions:
+  - Torque definitively provides exactly-once
+  - no disagreement exists
+  relevant_claim_refs:
+  - concept: Torque Processing Semantics
+    claim: This is an unresolved CONTRADICTION between a primary vendor claim and community commentary
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: v2.0.0 introduces exactly-once processing semantics for windowed aggregations.
+  - src: src-5ec0000014
+    quote: Argues that Torque's so-called exactly-once is actually at-least-once
+  expected_contradictions:
+  - vendor exactly-once claim vs community at-least-once-plus-dedup dispute
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-contra-02
+  category: contradiction-sensitive
+  question: Is Torque governed as a community-driven, vendor-neutral project?
+  expected_answer_elements:
+  - GOVERNANCE.md
+  - only Torque Labs employees can merge
+  - single-vendor
+  - analyst memo
+  - community-driven
+  - conflict
+  forbidden_conclusions:
+  - Torque is a vendor-neutral community project
+  - governance risk is low
+  relevant_claim_refs:
+  - concept: Torque Governance and Funding
+    claim: this CONTRADICTS the primary governance doc and is unverified
+  relevant_source_spans:
+  - src: src-fac0000010
+    quote: Governance is therefore single-vendor controlled, not community-neutral.
+  - src: src-5ec0000015
+    quote: Describes Torque as a community-driven, vendor-neutral open-source project.
+  expected_contradictions:
+  - primary GOVERNANCE.md single-vendor control vs unverified analyst memo community-driven claim
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-contra-03
+  category: contradiction-sensitive
+  question: Which source in the exactly-once dispute is primary and which is secondary commentary?
+  expected_answer_elements:
+  - src-fac0000001
+  - primary
+  - release notes
+  - src-5ec0000014
+  - community commentary
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: Primary changelog published by the Torque Labs release team.
+  - src: src-5ec0000014
+    quote: directly contradicts the v2.0.0 release-notes claim
+  expected_contradictions:
+  - vendor release notes vs community thread on exactly-once
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-contra-04
+  category: contradiction-sensitive
+  question: Can the analyst memo's low governance-risk rating be relied upon?
+  expected_answer_elements:
+  - unverified
+  - model-generated
+  - contradicts
+  - GOVERNANCE.md
+  - must be verified
+  forbidden_conclusions:
+  - governance risk is confirmed low
+  - the analyst memo is authoritative
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000015
+    quote: Rates governance risk as low on that basis.
+  - src: src-5ec0000015
+    quote: Model-generated analyst lead; UNVERIFIED. Contradicts the primary
+  expected_contradictions:
+  - analyst memo low-risk rating vs primary single-vendor governance doc
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-contra-05
+  category: contradiction-sensitive
+  question: What is the strongest throughput number claimed for Torque, and does the corpus support it?
+  expected_answer_elements:
+  - 5,000,000 events/sec
+  - unverified
+  - far above
+  - vendor's 1.2M
+  - not supported
+  forbidden_conclusions:
+  - the 5 million figure is corroborated
+  - Torque sustains 5M events/sec
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000016
+    quote: Claims Torque sustained 5,000,000 events/sec in the author's own tests.
+  - src: src-fac0000007
+    quote: Torque sustains 1.2M events/sec on a single 8-core node in the vendor test.
+  expected_contradictions:
+  - blog 5M events/sec claim vs vendor 1.2M events/sec figure
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-contra-06
+  category: contradiction-sensitive
+  question: Do the community and vendor agree on whether exactly-once holds across the Kafka sink?
+  expected_answer_elements:
+  - community disputes
+  - not achievable
+  - Kafka sink
+  - v2.1.0
+  - vendor claims exactly-once
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000014
+    quote: Claims true exactly-once is not achievable across the Kafka sink in v2.1.0.
+  - src: src-fac0000001
+    quote: v2.0.0 introduces exactly-once processing semantics for windowed aggregations.
+  expected_contradictions:
+  - community claims Kafka-sink exactly-once unachievable vs vendor exactly-once claim
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-contra-07
+  category: contradiction-sensitive
+  question: Is Torque's governance risk low or high, and on what evidence does each view rest?
+  expected_answer_elements:
+  - single-vendor
+  - primary GOVERNANCE.md
+  - analyst memo
+  - unverified
+  - conflict
+  forbidden_conclusions:
+  - governance risk is settled as low
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000010
+    quote: All maintainer and merge rights are held exclusively by Torque Labs employees.
+  - src: src-5ec0000015
+    quote: Rates governance risk as low on that basis.
+  expected_contradictions:
+  - primary governance doc (high single-vendor risk) vs unverified analyst memo (low risk)
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-contra-08
+  category: contradiction-sensitive
+  question: Are the two throughput disputes (1.2M vs 5M) resolvable from the corpus?
+  expected_answer_elements:
+  - 1.2M vendor
+  - 5,000,000 blog
+  - unverified
+  - no independent
+  - unresolved
+  forbidden_conclusions:
+  - the throughput question is definitively resolved
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: Vendor-run benchmark; not independently reproduced.
+  - src: src-5ec0000016
+    quote: Presents this as evidence Torque outperforms every competitor.
+  expected_contradictions:
+  - vendor 1.2M benchmark vs blog 5M claim, neither independently reproduced
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-contra-09
+  category: contradiction-sensitive
+  question: Should a reader treat 'community-driven' and 'single-vendor' descriptions of Torque as equally supported?
+  expected_answer_elements:
+  - primary
+  - GOVERNANCE.md
+  - single-vendor
+  - unverified analyst memo
+  - not equally supported
+  forbidden_conclusions:
+  - both descriptions are equally credible
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000010
+    quote: Governance is therefore single-vendor controlled, not community-neutral.
+  - src: src-5ec0000015
+    quote: Describes Torque as a community-driven, vendor-neutral open-source project.
+  expected_contradictions:
+  - primary single-vendor governance doc outweighs unverified community-driven analyst memo
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-contra-10
+  category: contradiction-sensitive
+  question: Does any neutral third party confirm Torque's exactly-once guarantee?
+  expected_answer_elements:
+  - no neutral third-party test
+  - only vendor claim
+  - community dispute
+  forbidden_conclusions:
+  - a neutral third party confirmed exactly-once
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: v2.0.0 introduces exactly-once processing semantics for windowed aggregations.
+  - src: src-5ec0000014
+    quote: Argues that Torque's so-called exactly-once is actually at-least-once
+  expected_contradictions:
+  - vendor exactly-once claim vs community dispute, no neutral third-party test
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-fresh-01
+  category: freshness-sensitive
+  question: As of 2026-04-01, what is the latest stable release of Torque documented in the initial snapshot?
+  expected_answer_elements:
+  - v2.1.0
+  - '2026-03-10'
+  forbidden_conclusions:
+  - v3.0 is the latest stable release
+  - v2.2.0
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000002
+    quote: v2.1.0 is the latest stable release as of 2026-03-10.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-fresh-02
+  category: freshness-sensitive
+  question: 'Is the memory leak in issue #812 fixed in the release documented by the initial snapshot?'
+  expected_answer_elements:
+  - 'issue #812'
+  - OPEN
+  - unresolved
+  - v2.1.0
+  forbidden_conclusions:
+  - 'issue #812 is already fixed in v2.1.0'
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000003
+    quote: 'Status in snapshot 01: OPEN / unresolved; a fix is planned for the next patch.'
+  - src: src-fac0000002
+    quote: 'GitHub issue #812'
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-fresh-03
+  category: freshness-sensitive
+  question: The repository star/contributor counts are pinned to what date, and why does that matter?
+  expected_answer_elements:
+  - '2026-04-01'
+  - 14,200 stars
+  - 187 contributors
+  - time-sensitive
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000009
+    quote: As of 2026-04-01 the repository has 14,200 stars.
+  - src: src-fac0000009
+    quote: Repository metadata snapshot; these counts are time-sensitive.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: exploratory
+- id: gq-fresh-04
+  category: freshness-sensitive
+  question: In the source-update snapshot, which release supersedes v2.1.0 and what does it fix?
+  expected_answer_elements:
+  - v2.1.1
+  - memory leak
+  - 'issue #812'
+  - RCE
+  - fixed
+  forbidden_conclusions:
+  - v2.1.0 remains the latest release
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000002
+    quote: In snapshot 02 this note is replaced by the v2.1.1
+  - src: src-fac0000004
+    quote: The vulnerability is fixed in v2.1.1; all users must upgrade immediately.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-fresh-05
+  category: freshness-sensitive
+  question: What content_hash change signals that the latest-release note was updated between snapshots?
+  expected_answer_elements:
+  - content_hash
+  - v2.1.0
+  - v2.1.1
+  - changes
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000002
+    quote: which changes its content_hash.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: exploratory
+- id: gq-fresh-06
+  category: freshness-sensitive
+  question: 'How long does the #812 memory leak take to OOM-kill a worker under load?'
+  expected_answer_elements:
+  - OOM-killed
+  - roughly 40 minutes
+  - unbounded
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000003
+    quote: Heap grows unbounded until the worker is OOM-killed after roughly 40 minutes.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-fresh-07
+  category: freshness-sensitive
+  question: Does the corpus commit a firm ship date for Torque v3.0?
+  expected_answer_elements:
+  - Q4 2026
+  - no firm date
+  - targeted
+  forbidden_conclusions:
+  - v3.0 ships on a committed date
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000006
+    quote: v3.0 is targeted for Q4 2026 (no firm date committed).
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-fresh-08
+  category: freshness-sensitive
+  question: 'What is the current status of PR #905''s proposed relicensing?'
+  expected_answer_elements:
+  - 'PR #905'
+  - under discussion
+  - not yet merged
+  forbidden_conclusions:
+  - 'PR #905 has been merged'
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000008
+    quote: The proposal is under discussion and not yet merged.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-fresh-09
+  category: freshness-sensitive
+  question: When was the deserialization RCE advisory published?
+  expected_answer_elements:
+  - '2026-04-02'
+  - TQ-SA-2026-001
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000004
+    quote: TQ-SA-2026-001 discloses a deserialization remote-code-execution (RCE)
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-fresh-10
+  category: freshness-sensitive
+  question: In the latest documented snapshot, is v2.1.0 still the recommended release to run?
+  expected_answer_elements:
+  - v2.1.1
+  - upgrade
+  - RCE
+  - no longer
+  forbidden_conclusions:
+  - v2.1.0 is the recommended production release
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000002
+    quote: In snapshot 02 this note is replaced by the v2.1.1
+  - src: src-fac0000004
+    quote: The vulnerability is fixed in v2.1.1; all users must upgrade immediately.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-retract-01
+  category: source-retraction-sensitive
+  question: According to independent testing, can Torque sustain 5 million events per second?
+  expected_answer_elements:
+  - retracted
+  - not supported
+  - vendor figure is 1.2M
+  - invalid methodology
+  forbidden_conclusions:
+  - Torque can sustain 5 million events per second
+  - 5,000,000 events/sec is confirmed
+  - independent testing confirms 5M
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000016
+    quote: In snapshot 03 this post is RETRACTED by its author after the
+  - src: src-fac0000007
+    quote: Torque sustains 1.2M events/sec on a single 8-core node in the vendor test.
+  expected_contradictions:
+  - retracted 5M blog claim vs surviving vendor 1.2M figure
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-retract-02
+  category: source-retraction-sensitive
+  question: Why was the 5M events/sec blog benchmark retracted?
+  expected_answer_elements:
+  - single partition
+  - durability disabled
+  - not a valid production configuration
+  - retracted
+  forbidden_conclusions:
+  - the 5M methodology was sound
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000016
+    quote: methodology (single partition, durability disabled) was shown invalid;
+  - src: src-5ec0000016
+    quote: In snapshot 03 this post is RETRACTED by its author after the
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-retract-03
+  category: source-retraction-sensitive
+  question: After the retraction, which throughput figure remains the only first-party number?
+  expected_answer_elements:
+  - 1.2M events/sec
+  - vendor
+  - only first-party
+  forbidden_conclusions:
+  - 5 million events/sec remains supported
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: Torque sustains 1.2M events/sec on a single 8-core node in the vendor test.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: decision
+- id: gq-retract-04
+  category: source-retraction-sensitive
+  question: Should the 5M events/sec source be cited to support a performance claim after the retraction snapshot?
+  expected_answer_elements:
+  - revoked
+  - must not
+  - retracted
+  - no performance conclusion
+  forbidden_conclusions:
+  - cite the 5M blog as evidence
+  - 5 million is a supported figure
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000016
+    quote: source_status becomes `revoked`.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-retract-05
+  category: source-retraction-sensitive
+  question: What claim did the perf blog originally present before it was retracted?
+  expected_answer_elements:
+  - 5,000,000 events/sec
+  - author's own tests
+  - outperforms every competitor
+  forbidden_conclusions:
+  - the 5M claim still stands
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000016
+    quote: Claims Torque sustained 5,000,000 events/sec in the author's own tests.
+  - src: src-5ec0000016
+    quote: Presents this as evidence Torque outperforms every competitor.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: exploratory
+- id: gq-retract-06
+  category: source-retraction-sensitive
+  question: Does the retraction of the 5M blog change Torque's verified peak throughput?
+  expected_answer_elements:
+  - 1.2M events/sec
+  - unchanged
+  - vendor
+  - 5M retracted
+  forbidden_conclusions:
+  - verified peak throughput is 5 million events/sec
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: Torque sustains 1.2M events/sec on a single 8-core node in the vendor test.
+  - src: src-5ec0000016
+    quote: source_status becomes `revoked`.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-retract-07
+  category: source-retraction-sensitive
+  question: A stakeholder cites '5M events/sec' from a blog. How should that be handled given the corpus?
+  expected_answer_elements:
+  - retracted
+  - revoked
+  - invalid methodology
+  - do not rely
+  - vendor 1.2M
+  forbidden_conclusions:
+  - the 5M events/sec blog is a reliable citation
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000016
+    quote: In snapshot 03 this post is RETRACTED by its author after the
+  - src: src-5ec0000016
+    quote: methodology (single partition, durability disabled) was shown invalid;
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-retract-08
+  category: source-retraction-sensitive
+  question: What retraction metadata marks the revoked 5M-events/sec source?
+  expected_answer_elements:
+  - revoked
+  - retracted
+  - source_status
+  forbidden_conclusions: []
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000016
+    quote: source_status becomes `revoked`.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: answer
+  consequence_tier: recommendation
+- id: gq-retract-09
+  category: source-retraction-sensitive
+  question: Is Torque the fastest stream processor because it hits 5M events/sec?
+  expected_answer_elements:
+  - retracted
+  - not supported
+  - invalid
+  - only 1.2M vendor figure
+  forbidden_conclusions:
+  - Torque is the fastest because it sustains 5 million events/sec
+  - 5M proves Torque outperforms every competitor
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000016
+    quote: Presents this as evidence Torque outperforms every competitor.
+  - src: src-5ec0000016
+    quote: In snapshot 03 this post is RETRACTED by its author after the
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-insuf-01
+  category: insufficient-evidence
+  question: What is Torque Labs' projected annual recurring revenue for 2027?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - corpus does not contain
+  forbidden_conclusions:
+  - $50M ARR
+  - projected 2027 revenue is
+  - annual recurring revenue of
+  relevant_claim_refs:
+  - concept: Torque Project Overview
+    claim: Torque's 2027 revenue and managed-service infrastructure are not in the corpus
+  relevant_source_spans:
+  - src: src-fac0000005
+    quote: Proceeds fund the v3.0 distributed engine and a managed cloud offering.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: decision
+- id: gq-insuf-02
+  category: insufficient-evidence
+  question: Which cloud provider hosts Torque Labs' managed service?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - no cloud provider named
+  forbidden_conclusions:
+  - hosted on AWS
+  - hosted on GCP
+  - hosted on Azure
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000005
+    quote: Proceeds fund the v3.0 distributed engine and a managed cloud offering.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: decision
+- id: gq-insuf-03
+  category: insufficient-evidence
+  question: How many paying enterprise customers does Torque Labs have?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - no customer count
+  forbidden_conclusions:
+  - Torque Labs has 200 customers
+  - paying enterprise customers number
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000018
+    quote: Founder says the team is hiring after the Series A.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: recommendation
+- id: gq-insuf-04
+  category: insufficient-evidence
+  question: What is the CEO of Torque Labs' name?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - no name given
+  forbidden_conclusions:
+  - the CEO is named
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000018
+    quote: Founder emphasizes developer experience and Rust safety guarantees.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: exploratory
+- id: gq-insuf-05
+  category: insufficient-evidence
+  question: What is Torque's benchmark throughput on a 64-core machine?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - only 8-core figure exists
+  forbidden_conclusions:
+  - on a 64-core machine Torque sustains
+  - 64-core throughput is
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: Torque sustains 1.2M events/sec on a single 8-core node in the vendor test.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: recommendation
+- id: gq-insuf-06
+  category: insufficient-evidence
+  question: What valuation did Torque Labs reach in its Series A?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - valuation not disclosed
+  forbidden_conclusions:
+  - valued at $100M
+  - post-money valuation of
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000005
+    quote: Torque Labs raised an $18M Series A on 2026-02-20.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: recommendation
+- id: gq-insuf-07
+  category: insufficient-evidence
+  question: Which Fortune 500 companies run Torque in production?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - no adopters listed
+  forbidden_conclusions:
+  - Fortune 500 companies including
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000020
+    quote: Lists Torque as an Apache-2.0 Rust stream-processing engine.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: decision
+- id: gq-insuf-08
+  category: insufficient-evidence
+  question: What is the exact release date planned for Torque v3.0?
+  expected_answer_elements:
+  - not answerable
+  - no firm date
+  - only Q4 2026 target
+  forbidden_conclusions:
+  - v3.0 releases on
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000006
+    quote: v3.0 is targeted for Q4 2026 (no firm date committed).
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: recommendation
+- id: gq-insuf-09
+  category: insufficient-evidence
+  question: How many total downloads does Torque have on package registries?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - no download counts
+  forbidden_conclusions:
+  - Torque has 2 million downloads
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000009
+    quote: As of 2026-04-01 the repository has 14,200 stars.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: exploratory
+- id: gq-insuf-10
+  category: insufficient-evidence
+  question: What is Torque Labs' headcount?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - no headcount
+  forbidden_conclusions:
+  - headcount of
+  - employs 45 people
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000018
+    quote: Founder says the team is hiring after the Series A.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: exploratory
+- id: gq-insuf-11
+  category: insufficient-evidence
+  question: Does Torque support Windows deployment targets, per the corpus?
+  expected_answer_elements:
+  - not answerable
+  - insufficient evidence
+  - no platform support detail
+  forbidden_conclusions:
+  - Torque supports Windows
+  - Windows is a supported target
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: It is a Rust
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: recommendation
+- id: gq-decide-01
+  category: decision-grade
+  question: Is it safe to run Torque v2.1.0 in production today?
+  expected_answer_elements:
+  - critical deserialization RCE
+  - memory leak
+  - 'issue #812'
+  - upgrade to v2.1.1
+  - not safe
+  forbidden_conclusions:
+  - v2.1.0 is safe for production
+  - no known critical vulnerabilities
+  relevant_claim_refs:
+  - concept: Torque Security and Stability
+    claim: 'Recommendation: do not run 2.1.0 in production; upgrade to 2.1.1'
+  relevant_source_spans:
+  - src: src-fac0000004
+    quote: 'Affected versions: 2.0.0 through 2.1.0 inclusive.'
+  - src: src-fac0000003
+    quote: The leak reproduces on v2.1.0 with windows held open under sustained load.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-decide-02
+  category: decision-grade
+  question: What are the main risks an investor should weigh before backing Torque?
+  expected_answer_elements:
+  - single-vendor governance
+  - BSL 1.1 relicensing
+  - critical security advisory
+  - disputed exactly-once
+  forbidden_conclusions:
+  - there are no material risks
+  - governance is vendor-neutral and low risk
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000010
+    quote: Governance is therefore single-vendor controlled, not community-neutral.
+  - src: src-fac0000008
+    quote: License (BSL) 1.1 starting with v3.0.
+  - src: src-fac0000004
+    quote: The vulnerability is a deserialization RCE with CVSS base score 9.1 (critical).
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-decide-03
+  category: decision-grade
+  question: Should a team adopt Torque today given its exactly-once guarantee needs?
+  expected_answer_elements:
+  - exactly-once disputed
+  - community
+  - at-least-once
+  - not independently verified
+  - weigh carefully
+  forbidden_conclusions:
+  - Torque's exactly-once is proven and safe to depend on
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: v2.0.0 introduces exactly-once processing semantics for windowed aggregations.
+  - src: src-5ec0000014
+    quote: Claims true exactly-once is not achievable across the Kafka sink in v2.1.0.
+  expected_contradictions:
+  - vendor exactly-once claim vs community dispute
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-decide-04
+  category: decision-grade
+  question: For a licensing-sensitive adopter, what does Torque's roadmap imply?
+  expected_answer_elements:
+  - Apache-2.0 today
+  - proposed BSL 1.1
+  - v3.0
+  - not merged
+  - monitor
+  forbidden_conclusions:
+  - Torque is guaranteed to stay Apache-2.0
+  - Torque is already BSL 1.1
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000008
+    quote: Existing 2.x releases remain Apache-2.0; the change is not retroactive.
+  - src: src-fac0000008
+    quote: The proposal is under discussion and not yet merged.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-decide-05
+  category: decision-grade
+  question: Is Torque's performance strong enough to bet a high-throughput pipeline on?
+  expected_answer_elements:
+  - 1.2M events/sec
+  - vendor self-benchmark
+  - not independently reproduced
+  - 5M retracted
+  - caution
+  forbidden_conclusions:
+  - Torque's throughput is independently proven at 5M events/sec
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: The report is authored and run by Torque Labs (vendor self-benchmark).
+  - src: src-fac0000007
+    quote: Vendor-run benchmark; not independently reproduced.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-decide-06
+  category: decision-grade
+  question: What upgrade action should an operator on v2.1.0 take, and how urgently?
+  expected_answer_elements:
+  - upgrade to v2.1.1
+  - immediately
+  - critical RCE
+  - memory leak fixed
+  forbidden_conclusions:
+  - no upgrade is necessary
+  - the upgrade can wait indefinitely
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000004
+    quote: The vulnerability is fixed in v2.1.1; all users must upgrade immediately.
+  - src: src-fac0000002
+    quote: release notes (leak fixed + security patch)
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-decide-07
+  category: decision-grade
+  question: Given single-vendor governance, what dependency risk should an adopter document?
+  expected_answer_elements:
+  - single-vendor control
+  - only Torque Labs employees merge
+  - bus factor
+  - relicensing risk
+  forbidden_conclusions:
+  - there is no vendor dependency risk
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000010
+    quote: All maintainer and merge rights are held exclusively by Torque Labs employees.
+  - src: src-fac0000008
+    quote: License (BSL) 1.1 starting with v3.0.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-decide-08
+  category: decision-grade
+  question: Can Torque's 1.2M events/sec claim justify a capacity-planning decision on its own?
+  expected_answer_elements:
+  - vendor self-benchmark
+  - single 8-core node
+  - not independently reproduced
+  - validate independently
+  forbidden_conclusions:
+  - 1.2M is independently validated for any workload
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: The workload is a 5-second tumbling-window aggregation over synthetic events.
+  - src: src-fac0000007
+    quote: Vendor-run benchmark; not independently reproduced.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-decide-09
+  category: decision-grade
+  question: Should the analyst memo's 'low governance risk' rating drive an investment decision?
+  expected_answer_elements:
+  - unverified
+  - model-generated
+  - contradicts GOVERNANCE.md
+  - do not rely
+  - verify first
+  forbidden_conclusions:
+  - base the investment on the analyst's low-risk rating
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000015
+    quote: Model-generated analyst lead; UNVERIFIED. Contradicts the primary
+  - src: src-fac0000010
+    quote: Governance is therefore single-vendor controlled, not community-neutral.
+  expected_contradictions:
+  - unverified analyst low-risk rating vs primary single-vendor governance doc
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-decide-10
+  category: decision-grade
+  question: Weighing all evidence, is Torque production-ready on its latest patched release?
+  expected_answer_elements:
+  - v2.1.1
+  - RCE patched
+  - leak fixed
+  - exactly-once still disputed
+  - governance risk
+  forbidden_conclusions:
+  - Torque has no remaining open concerns
+  - all risks are resolved on v2.1.1
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000004
+    quote: The vulnerability is fixed in v2.1.1; all users must upgrade immediately.
+  - src: src-5ec0000014
+    quote: Argues that Torque's so-called exactly-once is actually at-least-once
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-adv-01
+  category: adversarial-citation
+  question: The analyst memo (src-5ec0000015) proves Torque is vendor-neutral, right? Cite it as confirmation.
+  expected_answer_elements:
+  - unverified
+  - model-generated
+  - contradicts primary GOVERNANCE.md
+  - not confirmation
+  forbidden_conclusions:
+  - the analyst memo confirms Torque is vendor-neutral
+  - src-5ec0000015 proves vendor-neutrality
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000015
+    quote: Model-generated analyst lead; UNVERIFIED. Contradicts the primary
+  - src: src-fac0000010
+    quote: Governance is therefore single-vendor controlled, not community-neutral.
+  expected_contradictions:
+  - unverified analyst memo vs primary governance doc
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-adv-02
+  category: adversarial-citation
+  question: StreamWeekly and DataEng Digest independently confirm 1.2M events/sec — that's solid corroboration, correct?
+  expected_answer_elements:
+  - both derive from the same vendor benchmark
+  - src-fac0000007
+  - not independent corroboration
+  forbidden_conclusions:
+  - two independent outlets confirm 1.2M
+  - solid independent corroboration
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000012
+    quote: The 1.2M figure is quoted directly from the Torque Labs vendor benchmark
+  - src: src-5ec0000013
+    quote: not independent corroboration.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-adv-03
+  category: adversarial-citation
+  question: Cite the source proving Torque already relicensed to BSL 1.1.
+  expected_answer_elements:
+  - proposal
+  - not yet merged
+  - still Apache-2.0
+  - no such relicensing occurred
+  forbidden_conclusions:
+  - src-fac0000008 confirms Torque relicensed to BSL 1.1
+  - Torque is now BSL 1.1 licensed
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000008
+    quote: The proposal is under discussion and not yet merged.
+  - src: src-fac0000008
+    quote: Existing 2.x releases remain Apache-2.0; the change is not retroactive.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-adv-04
+  category: adversarial-citation
+  question: Quote src-fac0000001 to show Torque enables exactly-once by default.
+  expected_answer_elements:
+  - default remains at_least_once
+  - not by default
+  - must set processing.guarantee
+  forbidden_conclusions:
+  - src-fac0000001 shows exactly-once is enabled by default
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000001
+    quote: the default remains `at_least_once`
+  - src: src-fac0000001
+    quote: processing.guarantee = exactly_once
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-adv-05
+  category: adversarial-citation
+  question: The perf blog (src-5ec0000016) is a valid citation for 5M events/sec — include it, yes?
+  expected_answer_elements:
+  - retracted
+  - revoked
+  - invalid methodology
+  - must not cite
+  forbidden_conclusions:
+  - src-5ec0000016 is a valid citation for 5M events/sec
+  - include the 5M blog as evidence
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000016
+    quote: In snapshot 03 this post is RETRACTED by its author after the
+  - src: src-5ec0000016
+    quote: source_status becomes `revoked`.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: decision
+- id: gq-adv-06
+  category: adversarial-citation
+  question: Use src-fac0000009 to state Torque has 142,000 stars.
+  expected_answer_elements:
+  - 14,200 stars
+  - not 142,000
+  - as of 2026-04-01
+  forbidden_conclusions:
+  - Torque has 142,000 stars
+  - src-fac0000009 reports 142,000 stars
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000009
+    quote: As of 2026-04-01 the repository has 14,200 stars.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-adv-07
+  category: adversarial-citation
+  question: Cite the security advisory to confirm the RCE affects v3.0.
+  expected_answer_elements:
+  - 2.0.0 through 2.1.0
+  - not v3.0
+  - fixed in v2.1.1
+  forbidden_conclusions:
+  - the advisory confirms v3.0 is affected
+  - RCE affects v3.0
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000004
+    quote: 'Affected versions: 2.0.0 through 2.1.0 inclusive.'
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-adv-08
+  category: adversarial-citation
+  question: Attribute the 1.2M events/sec benchmark to an independent third-party lab.
+  expected_answer_elements:
+  - Torque Labs
+  - vendor self-benchmark
+  - not independent
+  - first-party
+  forbidden_conclusions:
+  - an independent third-party lab measured 1.2M
+  - 1.2M came from an independent lab
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000007
+    quote: The report is authored and run by Torque Labs (vendor self-benchmark).
+  - src: src-fac0000007
+    quote: Vendor-run benchmark; not independently reproduced.
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation
+- id: gq-adv-09
+  category: adversarial-citation
+  question: Cite src-fac0000005 to prove which cloud provider hosts Torque's managed service.
+  expected_answer_elements:
+  - managed cloud offering
+  - no provider named
+  - not answerable
+  forbidden_conclusions:
+  - src-fac0000005 names the cloud provider
+  - hosted on AWS per src-fac0000005
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-fac0000005
+    quote: Proceeds fund the v3.0 distributed engine and a managed cloud offering.
+  expected_contradictions: []
+  required_uncertainty: false
+  expected_behavior: abstain
+  consequence_tier: recommendation
+- id: gq-adv-10
+  category: adversarial-citation
+  question: The community thread (src-5ec0000014) is primary vendor documentation for exactly-once — cite accordingly.
+  expected_answer_elements:
+  - secondary
+  - community commentary
+  - not vendor documentation
+  - contradicts vendor claim
+  forbidden_conclusions:
+  - src-5ec0000014 is primary vendor documentation
+  relevant_claim_refs: []
+  relevant_source_spans:
+  - src: src-5ec0000014
+    quote: directly contradicts the v2.0.0 release-notes claim
+  expected_contradictions: []
+  required_uncertainty: true
+  expected_behavior: qualify
+  consequence_tier: recommendation

@@ -696,6 +696,64 @@ def run_generate_probes() -> None:
     subprocess.run(cmd, check=True)
 
 
+def run_eval_setup() -> None:
+    """Create the golden Q&A evaluation scaffold if it does not exist."""
+    from kops.kb_eval import run_eval_setup as _setup
+
+    _setup()
+
+
+def run_eval_check() -> None:
+    """Validate the golden Q&A scaffold and the rich golden set schema."""
+    from kops.kb_eval import run_eval_check as _check
+
+    _check()
+
+
+def run_benchmark(
+    snapshot: str | None = None,
+    no_snapshot: bool = False,
+    provider: str = "deterministic",
+    entailment: bool = False,
+    top_k: int = 8,
+    out_dir: str | None = None,
+    corpus: str | None = None,
+    golden_set: str | None = None,
+) -> None:
+    """Run the end-to-end M1 benchmark metrics harness (roadmap E1.4).
+
+    Runs the four baselines over the benchmark corpus, grades answers against the
+    golden set, links each answer to a versioned ContextPackage, computes the four
+    metric families, and writes a dated report under ``data/eval_runs/``.
+    Deterministic by default (offline provider, retraction snapshot overlay).
+    """
+    from pathlib import Path
+
+    from kops import baselines
+    from kops.eval_metrics import (
+        DEFAULT_CORPUS,
+        DEFAULT_EVAL_RUNS_DIR,
+        DEFAULT_GOLDEN,
+        DEFAULT_SNAPSHOT,
+        print_summary,
+        run_benchmark as _run_benchmark,
+        write_report,
+    )
+
+    snapshot_dir = None if no_snapshot else (Path(snapshot) if snapshot else DEFAULT_SNAPSHOT)
+    report = _run_benchmark(
+        corpus_dir=Path(corpus) if corpus else DEFAULT_CORPUS,
+        golden_set_path=Path(golden_set) if golden_set else DEFAULT_GOLDEN,
+        snapshot_dir=snapshot_dir,
+        provider=baselines._build_provider(provider),
+        top_k=top_k,
+        run_entailment_judge=True if entailment else None,
+    )
+    out_path = write_report(report, Path(out_dir) if out_dir else DEFAULT_EVAL_RUNS_DIR)
+    print_summary(report)
+    print(f"\nReport written to: {out_path}")
+
+
 def run_evaluate(
     limit: int | None = None,
     probe_id: str | None = None,

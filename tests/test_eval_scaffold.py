@@ -6,7 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
 import yaml
 
 
@@ -26,7 +25,6 @@ def test_qa_golden_yaml_has_required_shape():
         assert item.get("question")
 
 
-@pytest.mark.xfail(reason="eval-check subcommand not yet implemented in kb.py", strict=True)
 def test_eval_check_command_passes():
     result = subprocess.run(
         [sys.executable, "-m", "kops.kb", "eval-check"],
@@ -38,7 +36,6 @@ def test_eval_check_command_passes():
     assert "Eval check OK" in result.stdout
 
 
-@pytest.mark.xfail(reason="eval-setup subcommand not yet implemented in kb.py", strict=True)
 def test_eval_setup_is_idempotent():
     result = subprocess.run(
         [sys.executable, "-m", "kops.kb", "eval-setup"],

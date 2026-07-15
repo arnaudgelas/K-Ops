@@ -300,8 +300,17 @@ def _eval_claim_anchor(probe: dict, claims: list[dict], registry_ids: set[str]) 
 # ---------------------------------------------------------------------------
 
 
-def run(approved_only: bool = True) -> None:
+def run(
+    approved_only: bool = True,
+    limit: int | None = None,
+    probe_id: str | None = None,
+    verbose: bool = False,
+) -> None:
     probes = _load_probes(approved_only=approved_only)
+    if probe_id is not None:
+        probes = [p for p in probes if p.get("id") == probe_id]
+    if limit is not None:
+        probes = probes[:limit]
     if not probes:
         if approved_only:
             print("no approved probes — nothing to evaluate")
@@ -367,5 +376,21 @@ if __name__ == "__main__":
         action="store_true",
         help="Include unreviewed probes (baseline run). Default: approved-only.",
     )
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Limit the number of probes to run."
+    )
+    parser.add_argument("--probe-id", type=str, default=None, help="Evaluate only this probe id.")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=5,
+        help="Accepted for CLI compatibility; evaluation is sequential.",
+    )
+    parser.add_argument("--verbose", action="store_true", help="Print verbose details.")
     args = parser.parse_args()
-    run(approved_only=not args.all_probes)
+    run(
+        approved_only=not args.all_probes,
+        limit=args.limit,
+        probe_id=args.probe_id,
+        verbose=args.verbose,
+    )
