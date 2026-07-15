@@ -1,0 +1,106 @@
+{
+  "snapshot": "02-source-update",
+  "description": "src-fac0000002 updated from v2.1.0 to v2.1.1: memory leak FIXED and RCE patched. content_hash changes; the 'leak unresolved' support is withdrawn.",
+  "sources": {
+    "src-fac0000001": {
+      "content_hash": "9202e83b1c",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-fac0000002": {
+      "content_hash": "aab20eb443",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-fac0000003": {
+      "content_hash": "25edee02bc",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-fac0000004": {
+      "content_hash": "8f9833f83d",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-fac0000005": {
+      "content_hash": "7d9fbfc9c5",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-fac0000006": {
+      "content_hash": "20f6c25f36",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-fac0000007": {
+      "content_hash": "c697edaf2e",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-fac0000008": {
+      "content_hash": "4ccdc8db92",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-fac0000009": {
+      "content_hash": "ed7fb6dc78",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-fac0000010": {
+      "content_hash": "8ea0347f99",
+      "source_status": "active",
+      "tier": "primary"
+    },
+    "src-5ec0000011": {
+      "content_hash": "c734e2cc77",
+      "source_status": "active",
+      "tier": "secondary"
+    },
+    "src-5ec0000012": {
+      "content_hash": "fdeb4dbc9b",
+      "source_status": "active",
+      "tier": "secondary"
+    },
+    "src-5ec0000013": {
+      "content_hash": "27ed55beea",
+      "source_status": "active",
+      "tier": "secondary"
+    },
+    "src-5ec0000014": {
+      "content_hash": "0a7a9effb2",
+      "source_status": "active",
+      "tier": "secondary"
+    },
+    "src-5ec0000015": {
+      "content_hash": "44cddd1487",
+      "source_status": "active",
+      "tier": "secondary"
+    },
+    "src-5ec0000016": {
+      "content_hash": "7ecda36564",
+      "source_status": "active",
+      "tier": "secondary"
+    },
+    "src-5ec0000017": {
+      "content_hash": "b9757b499f",
+      "source_status": "active",
+      "tier": "secondary"
+    },
+    "src-5ec0000018": {
+      "content_hash": "238a0f7a00",
+      "source_status": "active",
+      "tier": "secondary"
+    },
+    "src-5ec0000019": {
+      "content_hash": "b36f5c2a6d",
+      "source_status": "active",
+      "tier": "secondary"
+    },
+    "src-5ec0000020": {
+      "content_hash": "bdaa08fb11",
+      "source_status": "active",
+      "tier": "secondary"
+    }
+  }
+}
