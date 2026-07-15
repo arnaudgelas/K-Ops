@@ -102,6 +102,24 @@ def _admitted_claim_dicts(package: ContextPackage, vault: Path | None) -> list[d
     return [c for c in all_claims if str(c.get("claim_id") or c.get("id") or "") in wanted]
 
 
+def _corroboration_inputs(admitted: list[dict], vault: Path | None) -> tuple[dict, set[str] | None]:
+    """Source frontmatter + material-contradiction ids for the tier policy.
+
+    Loaded through the package's vault redirection so independence-aware
+    corroboration (L4.2) and contradiction materiality (L4.1) act on the same
+    vault the package froze. The material set is returned only when it is
+    non-empty; otherwise ``None``, so a vault lacking typed-contradiction data
+    falls back to treating every contradiction as material (over-cautious, never
+    under-cautious).
+    """
+    from kops import claim_registry, typed_contradictions
+
+    with _context_package.redirect_vault(vault):
+        meta_by_id = claim_registry._load_source_metadata_by_id()
+        material = typed_contradictions.material_contradiction_ids(admitted)
+    return meta_by_id, (material or None)
+
+
 def _gate_prompt(tier: str, allowed_ids: list[str]) -> str:
     """The claim-citation guidance injected into the generator prompt."""
     lines = [f"Consequence tier: {tier}."]
@@ -222,6 +240,7 @@ def serve_ask(
     #    claim (or the whole package) that the source-invalidation stale-set has
     #    marked stale — a stale claim may not be served as current at decision+.
     admitted = _admitted_claim_dicts(package, vault)
+    meta_by_id, material = _corroboration_inputs(admitted, vault)
     stale = invalidation.stale_targets(queue_path)
     pre = tier_policy.evaluate_tier_policy(
         admitted,
@@ -229,6 +248,8 @@ def serve_ask(
         entailment=entailment,
         freshness=package.freshness,
         contradictions=contradictions,
+        material_contradictions=material,
+        meta_by_id=meta_by_id,
         package=package,
     )
     package_stale = package_hash in stale
@@ -335,9 +356,15 @@ def gate_render(
     package_hash = package.package_hash
 
     admitted = _admitted_claim_dicts(package, vault)
+    meta_by_id, material = _corroboration_inputs(admitted, vault)
     stale = invalidation.stale_targets(queue_path)
     pre = tier_policy.evaluate_tier_policy(
-        admitted, tier, freshness=package.freshness, package=package
+        admitted,
+        tier,
+        freshness=package.freshness,
+        material_contradictions=material,
+        meta_by_id=meta_by_id,
+        package=package,
     )
     package_stale = package_hash in stale
     allowed = [cid for cid in pre["allowed_claim_ids"] if cid not in stale and not package_stale]

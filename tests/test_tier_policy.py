@@ -101,3 +101,36 @@ def test_invalid_tier_raises():
 def test_deterministic():
     claims = [_claim("c1"), _claim("c2", adm="quarantine")]
     assert evaluate_tier_policy(claims, "decision") == evaluate_tier_policy(claims, "decision")
+
+
+def test_autonomous_corroboration_is_independence_aware():
+    # M4/L4.2: two sources sharing an upstream are NOT independent corroboration,
+    # so the SAME claim flips from permit to refuse based only on lineage.
+    claim = _claim("c1", sources=("src-a", "src-b"))
+    shared = {"src-a": {"derived_from": "src-up"}, "src-b": {"derived_from": "src-up"}}
+    dependent = evaluate_tier_policy(
+        [claim], "autonomous", meta_by_id=shared, entailment={"c1": "supported"}
+    )
+    assert dependent["decision"] == "refuse"
+    assert any("needs-corroboration" in b["reasons"] for b in dependent["barred"])
+
+    independent = {"src-a": {}, "src-b": {}}
+    ok = evaluate_tier_policy(
+        [claim], "autonomous", meta_by_id=independent, entailment={"c1": "supported"}
+    )
+    assert ok["decision"] == "permit"
+
+
+def test_material_contradictions_refine_qualify_abstain():
+    # M4/L4.1: an immaterial contradiction no longer forces qualify; a material
+    # one still does. Same claim, different behaviour by materiality.
+    claim = _claim("c1", conflicts=("c9",))
+
+    immaterial = evaluate_tier_policy([claim], "decision", material_contradictions=set())
+    assert immaterial["decision"] == "permit"
+    assert any(
+        w["kind"] == "contradiction" and w["detail"] == "immaterial" for w in immaterial["warnings"]
+    )
+
+    material = evaluate_tier_policy([claim], "decision", material_contradictions={"c1"})
+    assert material["decision"] == "qualify"

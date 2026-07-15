@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from typing import Any, Iterable, Mapping
 
-from kops import consequence_gate
+from kops import consequence_gate, source_lineage
 
 TIERS = consequence_gate.TIERS
 
@@ -71,14 +71,24 @@ def evaluate_tier_policy(
     entailment: Mapping[str, str] | None = None,
     freshness: Mapping[str, str] | None = None,
     contradictions: Iterable[str] | None = None,
+    material_contradictions: Iterable[str] | None = None,
+    meta_by_id: Mapping[str, Any] | None = None,
     package: Any | None = None,
 ) -> dict[str, Any]:
     """Evaluate the tier policy over ``claims``.
 
     ``entailment`` maps claim_id -> verdict; ``freshness`` maps source_id ->
-    status; ``contradictions`` is the set of claim_ids in unresolved material
-    contradictions (defaults to claims whose ``conflicts_with`` is non-empty).
+    status; ``contradictions`` is the set of claim_ids that participate in a
+    contradiction (defaults to claims whose ``conflicts_with`` is non-empty).
     ``package`` may supply ``freshness`` when not given explicitly.
+
+    ``material_contradictions`` (M4/L4.1) narrows which contradictions force
+    qualify/abstain to the typed, *material* ones; contradictions outside this
+    set are downgraded to advisory warnings. When it is ``None`` every
+    contradiction is treated as material (the pre-L4.1 behaviour). ``meta_by_id``
+    (M4/L4.2) supplies source frontmatter so autonomous corroboration counts
+    *independent* origins (collapsing derivative copies that share an upstream)
+    rather than a naive distinct-source count.
 
     Returns ``{"tier", "decision", "allowed_claim_ids", "barred", "warnings",
     "requires_human_override", "entailment_treatment"}`` where ``decision`` is
@@ -93,6 +103,14 @@ def evaluate_tier_policy(
     if contradictions is None:
         contradictions = {_claim_id(c) for c in claims if c.get("conflicts_with")}
     contradicted = set(contradictions)
+    # Which contradictions actually force qualify/abstain. Default (None) keeps
+    # every contradiction material; supply the L4.1 typed set to downgrade
+    # immaterial ones (terminology/extraction/scope) to warnings.
+    material = (
+        contradicted
+        if material_contradictions is None
+        else (contradicted & set(material_contradictions))
+    )
     treatment = _ENTAILMENT_TREATMENT[tier]
 
     # 1. Admission backbone — reuse the deterministic gate, don't fork it.
@@ -111,6 +129,7 @@ def evaluate_tier_policy(
         verdict = entailment.get(cid)
         stale = _is_stale(claim, freshness)
         in_contradiction = cid in contradicted
+        in_material_contradiction = cid in material
 
         # 2. Entailment: advisory / warn / gate by tier.
         if verdict in _ENTAILMENT_BAR:
@@ -132,17 +151,24 @@ def evaluate_tier_policy(
                 warnings.append({"claim_id": cid, "kind": "stale", "detail": ",".join(stale)})
 
         # 4. Autonomous: independent corroboration required, fail closed.
+        #    Corroboration counts INDEPENDENT origins (L4.2) — derivative copies
+        #    that share an upstream collapse and do not corroborate each other.
         if tier == "autonomous":
-            if len(set(_claim_sources(claim))) < 2:
+            if not source_lineage.is_corroborated(_claim_sources(claim), meta_by_id=meta_by_id):
                 reasons.append("needs-corroboration")
-            if in_contradiction:
+            if in_material_contradiction:
                 reasons.append("unresolved-contradiction")
 
-        # 5. Contradictions: at decision they force qualify/abstain, not a hard bar.
-        if in_contradiction:
+        # 5. Contradictions: a MATERIAL unresolved contradiction forces
+        #    qualify/abstain at decision; an immaterial one only warns (L4.1).
+        if in_material_contradiction:
             unresolved_contradiction = True
             if tier in {"exploratory", "recommendation"}:
-                warnings.append({"claim_id": cid, "kind": "contradiction", "detail": "unresolved"})
+                warnings.append(
+                    {"claim_id": cid, "kind": "contradiction", "detail": "unresolved-material"}
+                )
+        elif in_contradiction:
+            warnings.append({"claim_id": cid, "kind": "contradiction", "detail": "immaterial"})
 
         if reasons:
             barred.append({"claim_id": cid, "reasons": sorted(set(reasons))})
