@@ -26,11 +26,16 @@ build/
 .uv/
 *.swp
 data/graph/
-data/history/
+# Durable audit ledgers are tracked (git review is the tamper backstop, F2.2);
+# everything else under data/history/ (e.g. signals.jsonl) stays ignored.
+data/history/*
+!data/history/validation_events.jsonl
+!data/history/source_versions.jsonl
 data/entailment_cache/
 data/eval_runs/
 data/baseline_runs/
 data/evidence/
+data/invalidation_queue.json
 
 scripts/__pycache__/
 .pytest_cache/
