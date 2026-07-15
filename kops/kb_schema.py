@@ -333,6 +333,32 @@ class Validator:
                 )
             )
 
+        # Optional consequence-gate provenance (C2.4). Validated only when present
+        # so pre-gate answer memos stay valid.
+        consequence_tier = frontmatter.get("consequence_tier")
+        if consequence_tier is not None:
+            valid_tiers = {"exploratory", "recommendation", "decision", "autonomous"}
+            if consequence_tier not in valid_tiers:
+                issues.append(
+                    ValidationIssue(
+                        "error",
+                        "consequence_tier",
+                        f"`consequence_tier` `{consequence_tier}` is invalid. Valid values are: {', '.join(sorted(valid_tiers))}",
+                        path,
+                    )
+                )
+
+        context_package_hash = frontmatter.get("context_package_hash")
+        if context_package_hash is not None and not isinstance(context_package_hash, str):
+            issues.append(
+                ValidationIssue(
+                    "error",
+                    "context_package_hash",
+                    "`context_package_hash` must be a string",
+                    path,
+                )
+            )
+
         return issues
 
     def validate_large_source_manifest(

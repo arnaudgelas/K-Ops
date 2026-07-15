@@ -85,3 +85,5 @@ answer_memo:
     - fetch_required   # boolean
   recommended:
     - created
+    - consequence_tier      # exploratory | recommendation | decision | autonomous (C2.4 serving gate)
+    - context_package_hash  # hash of the frozen ContextPackage this answer relied on (C2.1)

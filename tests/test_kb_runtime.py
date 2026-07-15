@@ -10,7 +10,34 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import kops.kb_runtime as kb_runtime  # noqa: E402
+import kops.output_gate as output_gate  # noqa: E402
 import kops.retrieval as retrieval  # noqa: E402
+from kops.evidence_model import ContextPackage  # noqa: E402
+from kops.evidence_store import EvidenceStore  # noqa: E402
+
+
+def _isolate_output_gate(monkeypatch, tmp_path, question: str, tier: str = "exploratory") -> None:
+    """Isolate output_gate.serve_ask from a real vault and the real ledger.
+
+    cmd_ask now routes through the consequence gate. These plumbing tests only
+    care about cmd_ask's generator seam + post-processing, so we hand the gate a
+    canned empty context package (exploratory -> always permits) and a tmp-rooted
+    evidence store, keeping the assertions about retrieval-context injection and
+    retrieval_path enforcement exactly as before.
+    """
+    monkeypatch.setattr(
+        output_gate,
+        "build_context_package",
+        lambda q, t, **k: ContextPackage(question=q, tier=t),
+    )
+    monkeypatch.setattr(
+        output_gate,
+        "EvidenceStore",
+        lambda *a, **k: EvidenceStore(
+            base_dir=tmp_path / "data" / "evidence",
+            history_dir=tmp_path / "data" / "history",
+        ),
+    )
 
 
 class _FakeVaultIndex:
@@ -130,11 +157,13 @@ def test_cmd_ask_injects_retrieval_context(tmp_path, monkeypatch):
 
     monkeypatch.setattr(kb_runtime, "build_prompt", fake_build_prompt)
     monkeypatch.setattr(kb_runtime, "readonly_agent_run", fake_agent_run)
+    _isolate_output_gate(monkeypatch, tmp_path, "workflow pattern")
 
     kb_runtime.cmd_ask("claude", "workflow pattern")
 
     assert captured_kwargs["retrieval_context"] == "seed context"
     assert captured_kwargs["web_fetch_policy"] == "disabled"
+    assert captured_kwargs["tier"] == "exploratory"
 
 
 def test_cmd_ask_rejects_missing_retrieval_path(tmp_path, monkeypatch):
@@ -173,6 +202,7 @@ def test_cmd_ask_rejects_missing_retrieval_path(tmp_path, monkeypatch):
 
     monkeypatch.setattr(kb_runtime, "build_prompt", fake_build_prompt)
     monkeypatch.setattr(kb_runtime, "readonly_agent_run", fake_agent_run)
+    _isolate_output_gate(monkeypatch, tmp_path, "workflow pattern")
 
     try:
         kb_runtime.cmd_ask("claude", "workflow pattern")

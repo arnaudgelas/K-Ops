@@ -21,6 +21,7 @@ from kops.utils import ROOT
 # in the command layer (which eagerly loads the vault config), so `kops --help`
 # works outside a vault. The command imports are deferred into main() and
 # run_maintenance(), after argparse has had its chance to handle --help.
+from kops.consequence_gate import TIERS as CONSEQUENCE_TIERS
 from kops.research_tiers import RESEARCH_TIERS
 
 
@@ -180,6 +181,12 @@ def main() -> None:
     p_ask = sub.add_parser("ask")
     p_ask.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
     p_ask.add_argument("--question", required=True)
+    p_ask.add_argument(
+        "--tier",
+        choices=list(CONSEQUENCE_TIERS),
+        default="exploratory",
+        help="Consequence tier governing the evidence bar for this answer.",
+    )
 
     p_render = sub.add_parser("render")
     p_render.add_argument("--agent", choices=["codex", "claude", "gemini"], required=True)
@@ -187,6 +194,12 @@ def main() -> None:
         "--format", required=True, choices=["memo", "slides", "outline", "report"]
     )
     p_render.add_argument("--prompt", required=True)
+    p_render.add_argument(
+        "--tier",
+        choices=list(CONSEQUENCE_TIERS),
+        default="exploratory",
+        help="Consequence tier governing the evidence a render may rely on.",
+    )
 
     p_claim_map = sub.add_parser(
         "claim-map", help="Generate a Mermaid argument map for a concept from claims.json."
@@ -747,11 +760,11 @@ def main() -> None:
     elif args.command == "heal":
         cmd_heal(args.agent, show_prompt=args.show_prompt, verify=not args.no_verify)
     elif args.command == "ask":
-        cmd_ask(args.agent, args.question)
+        cmd_ask(args.agent, args.question, tier=args.tier)
     elif args.command == "claim-map":
         cmd_claim_map(args.concept, output=args.output)
     elif args.command == "render":
-        cmd_render(args.agent, args.format, args.prompt)
+        cmd_render(args.agent, args.format, args.prompt, tier=args.tier)
     elif args.command == "validate":
         run_validate_config(strict=args.strict)
     elif args.command == "install-agent-assets":

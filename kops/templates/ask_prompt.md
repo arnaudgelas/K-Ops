@@ -7,6 +7,23 @@ Answer file: {answer_path}
 Web fetch policy:
 - {web_fetch_policy}
 
+Consequence tier: {tier}
+
+---
+
+## Consequence gate (governed evidence)
+
+This answer is served under the **{tier}** consequence tier. The governance layer has
+frozen the exact evidence you may rely on into a context package:
+
+{claim_guidance}
+
+At the `decision` and `autonomous` tiers you MUST cite only the admitted claim ids listed
+above; any factual sentence that cites an unknown or excluded claim id, or that cites no
+claim id at all, causes the answer to be refused by the post-generation gate. At the
+`exploratory` and `recommendation` tiers, cite the admitted claim ids wherever they apply
+and clearly label anything not grounded in them.
+
 ---
 
 ## Seed retrieval context

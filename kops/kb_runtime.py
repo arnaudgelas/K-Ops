@@ -94,6 +94,8 @@ def build_answer_scaffold(question: str, asked_at: str) -> str:
             "sources_consulted: []",
             "retrieval_path: []",
             "fetch_required: false",
+            "consequence_tier: exploratory",
+            'context_package_hash: ""',
             "tags:",
             "  - kb/answer",
             "---",
@@ -372,20 +374,41 @@ def cmd_heal(agent: str, show_prompt: bool = False, verify: bool = True) -> None
     _run_with_inner_verify(agent, prompt, verify)
 
 
-def cmd_ask(agent: str, question: str) -> None:
+def cmd_ask(agent: str, question: str, tier: str = "exploratory") -> None:
+    from kops import output_gate
+
     asked_at = dt.datetime.now().replace(microsecond=0).isoformat()
     answer_path = CONFIG.answers_dir / f"{now_stamp()}_{slugify(question)}.md"
     if not answer_path.exists():
         write_text(answer_path, build_answer_scaffold(question, asked_at))
     web_fetch_policy = "allowed" if CONFIG.allow_web_fetch_during_qa else "disabled"
-    prompt = build_prompt(
-        "ask_prompt.md",
-        question=question,
-        answer_path=str(answer_path.relative_to(ROOT)),
-        web_fetch_policy=web_fetch_policy,
-        retrieval_context=build_ask_retrieval_context(question),
-    )
-    readonly_agent_run(agent, prompt)
+    retrieval_context = build_ask_retrieval_context(question)
+
+    def _generate(claim_guidance: str, path: Path | None) -> str:
+        # The consequence gate (output_gate.serve_ask) governs the outcome; this
+        # closure is the generator seam it drives. The full ask prompt still
+        # injects the seed retrieval context and now also the tier + admitted
+        # claim ids + citation rule the gate froze into the context package.
+        prompt = build_prompt(
+            "ask_prompt.md",
+            question=question,
+            answer_path=str(answer_path.relative_to(ROOT)),
+            web_fetch_policy=web_fetch_policy,
+            retrieval_context=retrieval_context,
+            tier=tier,
+            claim_guidance=claim_guidance,
+        )
+        readonly_agent_run(agent, prompt)
+        return answer_path.read_text(encoding="utf-8") if answer_path.exists() else ""
+
+    result = output_gate.serve_ask(question, tier, generate=_generate, answer_path=answer_path)
+
+    if result["decision"] in {"refuse", "abstain"}:
+        print(f"Answer refused at consequence tier '{tier}' (decision: {result['decision']}).")
+        print(f"Context package: {result['package_hash']}")
+        print(f"Audit event: {result['audit_event_id']}")
+        return
+
     if not answer_path.exists():
         raise FileNotFoundError(f"Answer memo was not written: {answer_path}")
     answer_text = answer_path.read_text(encoding="utf-8")
@@ -399,13 +422,25 @@ def cmd_ask(agent: str, question: str) -> None:
         print("Vault backfilling is disabled; skipping Home/TODO updates.")
     print(f"Answer written to {answer_path.relative_to(ROOT)}")
     print(f"Answer quality: {answer_quality}")
+    print(f"Consequence decision: {result['decision']} (tier: {tier})")
     if CONFIG.file_answer_back_into_vault:
         print(
             f"Home updated with {answer_path.relative_to(CONFIG.vault_dir).with_suffix('').as_posix()}"
         )
 
 
-def cmd_render(agent: str, fmt: str, prompt_text: str) -> None:
+def cmd_render(agent: str, fmt: str, prompt_text: str, tier: str = "exploratory") -> None:
+    from kops import output_gate
+
     ensure_dir(CONFIG.outputs_dir)
-    prompt = build_prompt("render_prompt.md", format=fmt, prompt=prompt_text)
+    gate = output_gate.gate_render(prompt_text, tier)
+    if gate["decision"] in {"refuse", "abstain"}:
+        print(
+            f"Render refused at consequence tier '{tier}' (decision: {gate['decision']}): "
+            "the evidence a render would rely on did not clear the gate."
+        )
+        print(f"Context package: {gate['package_hash']}")
+        print(f"Audit event: {gate['audit_event_id']}")
+        return
+    prompt = build_prompt("render_prompt.md", format=fmt, prompt=prompt_text, tier=tier)
     mutating_agent_run(agent, prompt)
