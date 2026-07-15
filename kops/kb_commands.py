@@ -754,6 +754,32 @@ def run_benchmark(
     print(f"\nReport written to: {out_path}")
 
 
+def run_benchmark_report(
+    out: str | None = None,
+    run: bool = False,
+    eval_runs_dir: str | None = None,
+    corpus: str | None = None,
+    golden_set: str | None = None,
+) -> None:
+    """Render research/benchmarks/REPORT.md from the benchmark metrics (roadmap L4.4).
+
+    Consumes the latest ``data/eval_runs/benchmark-*.json`` (or runs the harness
+    when ``--run`` is passed or no report exists) and writes a deterministic,
+    committed-friendly Markdown report with the honest governance headline and the
+    two M4 differentiation demonstrations.
+    """
+    from kops.benchmark_report import DEFAULT_OUT_PATH, generate
+
+    out_path = generate(
+        out_path=out or DEFAULT_OUT_PATH,
+        run=run,
+        eval_runs_dir=eval_runs_dir,
+        corpus_dir=corpus,
+        golden_set=golden_set,
+    )
+    print(f"Report written to: {out_path}")
+
+
 def run_evaluate(
     limit: int | None = None,
     probe_id: str | None = None,

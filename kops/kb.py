@@ -625,6 +625,28 @@ def main() -> None:
     p_benchmark.add_argument("--corpus", help="Benchmark corpus dir (default: E1.1 held-out).")
     p_benchmark.add_argument("--golden-set", help="Golden set YAML (default: E1.2 golden_set).")
 
+    p_benchmark_report = sub.add_parser(
+        "benchmark-report",
+        help="Render research/benchmarks/REPORT.md from the benchmark metrics (roadmap L4.4).",
+    )
+    p_benchmark_report.add_argument(
+        "--out", help="Output path for REPORT.md (default: research/benchmarks/REPORT.md)."
+    )
+    p_benchmark_report.add_argument(
+        "--run",
+        action="store_true",
+        help="Run the benchmark harness now instead of reusing the latest benchmark JSON.",
+    )
+    p_benchmark_report.add_argument(
+        "--eval-runs-dir", help="Directory of benchmark-*.json (default: data/eval_runs)."
+    )
+    p_benchmark_report.add_argument(
+        "--corpus", help="Benchmark corpus dir (default: E1.1 held-out)."
+    )
+    p_benchmark_report.add_argument(
+        "--golden-set", help="Golden set YAML (default: E1.2 golden_set)."
+    )
+
     p_eval = sub.add_parser(
         "evaluate", help="Evaluate compiled concept pages against raw sources and summaries."
     )
@@ -721,6 +743,7 @@ def main() -> None:
         cmd_claim_map,
         run_generate_probes,
         run_benchmark,
+        run_benchmark_report,
         run_evaluate,
         run_eval_setup,
         run_eval_check,
@@ -902,6 +925,14 @@ def main() -> None:
             entailment=args.entailment,
             top_k=args.top_k,
             out_dir=args.out_dir,
+            corpus=args.corpus,
+            golden_set=args.golden_set,
+        )
+    elif args.command == "benchmark-report":
+        run_benchmark_report(
+            out=args.out,
+            run=args.run,
+            eval_runs_dir=args.eval_runs_dir,
             corpus=args.corpus,
             golden_set=args.golden_set,
         )
