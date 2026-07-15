@@ -27,6 +27,10 @@ build/
 *.swp
 data/graph/
 data/history/
+data/entailment_cache/
+data/eval_runs/
+data/baseline_runs/
+data/evidence/
 
 scripts/__pycache__/
 .pytest_cache/
