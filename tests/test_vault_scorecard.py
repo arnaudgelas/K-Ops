@@ -405,3 +405,42 @@ def test_run_is_idempotent(tmp_path):
     vs.run()
     mtime2 = vs.SCORECARD_PATH.stat().st_mtime
     assert mtime1 == mtime2
+
+
+# ---------------------------------------------------------------------------
+# Regression: data/eval_runs/ may hold foreign artifact schemas (the M1
+# golden-*.jsonl grader and benchmark-*.jsonl metrics outputs) alongside the
+# date-named probe-eval runs. The scorecard must ignore the foreign files
+# rather than KeyError on a missing probe_id.
+# ---------------------------------------------------------------------------
+
+
+def test_score_eval_runs_ignores_foreign_artifacts(tmp_path, monkeypatch):
+    from kops import vault_scorecard
+
+    eval_runs = tmp_path / "eval_runs"
+    eval_runs.mkdir()
+
+    # A real probe-eval run (date-named, carries probe_id).
+    (eval_runs / "20260715.jsonl").write_text(
+        json.dumps({"probe_id": "probe-1", "mode": "claim+anchor", "result": "pass"}) + "\n",
+        encoding="utf-8",
+    )
+    # Foreign M1 artifacts that sort AFTER the date file and have no probe_id.
+    (eval_runs / "benchmark-2026-07-15.jsonl").write_text(
+        json.dumps({"baseline": "current-kops", "question_id": "q1"}) + "\n",
+        encoding="utf-8",
+    )
+    (eval_runs / "golden-2026-07-15.jsonl").write_text(
+        json.dumps({"question_id": "g1", "category": "direct-factual"}) + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(vault_scorecard, "_EVAL_RUNS_DIR", eval_runs)
+
+    result = vault_scorecard._score_eval_runs()
+
+    # It summarised the probe run, not a foreign artifact, and did not crash.
+    assert result["latest_run"] == "20260715"
+    assert result["catastrophic_failure_rate"] == 0.0
+    assert result["pass_rate_by_mode"] == {"claim+anchor": 1.0}

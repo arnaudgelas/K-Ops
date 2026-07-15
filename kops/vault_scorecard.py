@@ -614,7 +614,13 @@ def _score_eval_runs() -> dict:
             "pass_rate_by_mode": {},
         }
 
-    run_files = sorted(_EVAL_RUNS_DIR.glob("*.jsonl"))
+    # data/eval_runs/ now holds several artifact schemas: probe-eval runs
+    # (named YYYYMMDD.jsonl, carrying probe_id) alongside the M1 golden-*.jsonl
+    # grader and benchmark-*.jsonl metrics outputs. The scorecard only
+    # summarises probe-eval runs, so restrict to the date-named files.
+    run_files = sorted(
+        p for p in _EVAL_RUNS_DIR.glob("*.jsonl") if p.stem.isdigit() and len(p.stem) == 8
+    )
     if not run_files:
         return {
             "latest_run": None,
@@ -645,9 +651,11 @@ def _score_eval_runs() -> dict:
         }
 
     # Catastrophic failure rate: share of probes (by probe_id) where ANY mode
-    # produced a catastrophic failure.
-    probe_ids = list({r["probe_id"] for r in records})
-    catastrophic_probes = {r["probe_id"] for r in records if r.get("result") in _CATASTROPHIC}
+    # produced a catastrophic failure. Guard against non-probe records in case
+    # a foreign artifact ever shares the date-named file.
+    probe_records = [r for r in records if "probe_id" in r]
+    probe_ids = list({r["probe_id"] for r in probe_records})
+    catastrophic_probes = {r["probe_id"] for r in probe_records if r.get("result") in _CATASTROPHIC}
     catastrophic_rate = round(len(catastrophic_probes) / len(probe_ids), 3) if probe_ids else None
 
     # Pass rate by mode
