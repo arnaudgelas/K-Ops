@@ -32,18 +32,77 @@ In April 2026, Andrej Karpathy published an LLM wiki gist — a three-folder pat
 
 The point of the comparison is not that one gist is right and the other is wrong. The point is that K-Ops turns the gist shape into an operating system: source summaries, concept pages, machine-readable claims, contradiction tracking, scorecards, and a CLI that runs the whole loop.
 
+The K-Ops column above lists only capabilities that ship today (each maps to a file cited in the [capability matrix](#versioned-capability-matrix)); it does not list planned surface such as MCP serving, an SDK, a viewer, or embedding retrieval. The other columns characterise the gists and community forks **as of 2026-07-15** from their public text, not from a code audit, and are not ranked by stars or lines of code.
+
 ## Compared With Mainstream Variants
 
-The Karpathy-style fork space is useful to look at, but it still splits the problem into partial tools:
+> **On comparisons in this section.** Comparator feature claims are a moving
+> target: the projects below ship new capabilities, and their READMEs sometimes
+> describe intended surface rather than shipped code. All comparator statements
+> here are **as of 2026-07-15** and are taken from each project's public
+> description, *not* independently verified against its source tree. Where we have
+> not read the comparator's code, its status is marked **unverified**. K-Ops-side
+> claims, by contrast, are backed by repository evidence (file paths, see the
+> [capability matrix](#versioned-capability-matrix)). We deliberately do **not**
+> rank these systems by GitHub stars or lines of code; adoption counts are
+> dynamic and are not a measure of governance.
 
+The nearest current comparators split the problem into different bundles of tools:
+
+- **AtomicStrata** is the closest current system in ambition: its public materials describe an atomic-claim knowledge base with lifecycle *profiles* for concepts, runtime *trust gates*, *hybrid* (lexical + embedding) retrieval, a *viewer* UI, an *MCP* server, an *SDK*, an *evaluation* suite, and *staged imports*. That is a broad, governance-flavoured surface and is the comparator referenced throughout [ROADMAP.md](ROADMAP.md). Two honesty caveats apply. First, that list is AtomicStrata's *claimed/reported* feature surface as of 2026-07-15; we have not verified it against its repository, so each item is treated as **unverified** in the matrix below. Second, several of those capabilities (a viewer, MCP serving, an SDK, embedding retrieval) are exactly the ones K-Ops has **not** shipped yet — see "Implemented vs planned" and the matrix; K-Ops's current edge is in the deterministic governance primitives (consequence gating, quote-span existence checks, source retraction with blast radius), not in surface breadth.
 - Direct wiki forks such as [cablate/llm-atomic-wiki](https://github.com/cablate/llm-atomic-wiki) make the atom layer explicit. That is a sensible move for claim granularity, and it is closer to K-Ops than a plain note app. K-Ops uses source summaries and claim extraction for the same reason, but keeps the operational focus on provenance, contradiction handling, and repair rather than on atomic page design alone.
 - Session-history tools such as [Pratiyush/llm-wiki](https://github.com/Pratiyush/llm-wiki) narrow the scope to coding-assistant transcripts and expose a production-minded MCP surface. Useful, but narrower than a research vault that must absorb arbitrary sources and keep them auditable over time.
 - Memory layers such as [Mem0](https://mem0.ai/) optimize for persistent context across sessions. That is useful infrastructure, but it is not the same thing as a curated knowledge base with source summaries, claims, and contradiction tracking.
 - Notebook tools such as [NotebookLM](https://notebooklm.google/) ground answers in provided sources. They are good at source-grounded answering, but they are not designed as a file-native, repairable knowledge system.
 
-One empirical result matters for positioning: arXiv [2605.15184](https://arxiv.org/abs/2605.15184), *Is Grep All You Need? How Agent Harnesses Reshape Agentic Search*, found that the harness mattered more than the retrieval strategy and that grep often beat vector retrieval in the tested setups. That supports K-Ops's design bias: text-first, file-native, and grep-aligned.
+One empirical result matters for positioning: arXiv [2605.15184](https://arxiv.org/abs/2605.15184), *Is Grep All You Need? How Agent Harnesses Reshape Agentic Search*, found that the harness mattered more than the retrieval strategy and that grep often beat vector retrieval in the tested setups. That supports K-Ops's design bias: text-first, file-native, and grep-aligned. It is also why K-Ops's not-yet-shipped embedding retrieval is a considered trade-off rather than a gap it is rushing to close.
 
 `K-Ops` is therefore not trying to be the fastest scratchpad, the most polished MCP server, or the most abstract memory API. It is trying to be the governed layer that makes knowledge durable enough to audit, repair, and reuse.
+
+### Versioned capability matrix
+
+This matrix is the load-bearing comparison. Each K-Ops status is backed by
+repository evidence (a file, usually `file:line`); comparator statuses are dated
+and marked **unverified** where we have not read the comparator's source. Status
+vocabulary: **implemented** (observable by running cited code) · **partially
+implemented** (some of the capability ships, the rest is designed/planned) ·
+**designed** (specified in a design doc, no enforcing code) · **planned** (on the
+roadmap, not built) · **experimentally validated** (a measured result exists).
+The comparator column reads AtomicStrata's claimed surface unless noted.
+
+Evidence dates and comparator claims are **as of 2026-07-15**. A live link to a
+comparator is not a guarantee its features still match this table.
+
+| Capability | K-Ops status | Comparator status | Evidence date | Repository evidence |
+|---|---|---|---|---|
+| Deterministic consequence / trust gate at the output boundary | implemented | claimed (AtomicStrata "runtime trust gates"), unverified | 2026-07-15 | `kops/consequence_gate.py:28-91,119-122` |
+| Quote-span **existence** verification (quote is verbatim in source) | implemented | not claimed / unknown, unverified | 2026-07-15 | `kops/span_verify.py:101-135,299-306` |
+| Citation **entailment** (LLM judge: quote *supports* claim) | planned (not implemented) | claimed as part of "trust gates", unverified | 2026-07-15 | `kops/span_verify.py:16-24`; `docs/TRUST_CONTRACT.md` §2 |
+| Source retraction with blast-radius cascade | implemented | not claimed / unknown, unverified | 2026-07-15 | `kops/retract_source.py:46,112-118,201-215` |
+| Per-claim provenance + admission registry | implemented | claimed (atomic-claim model), unverified | 2026-07-15 | `kops/claim_registry.py:136-161,319-324` |
+| Contradiction registry | implemented | not claimed / unknown, unverified | 2026-07-15 | `kops/contradiction_registry.py`; `data/contradictions.json` |
+| Concept lifecycle stages (`seed/synthesized/verified/contested`) | partially implemented (schema-enforced stages; not full "profiles") | claimed ("lifecycle profiles"), unverified | 2026-07-15 | `kops/schema.yaml:70`; `kops/kb_schema.py:208-220` |
+| Content-drift staleness flagging (`revalidation_required`) | implemented | claimed (freshness), unverified | 2026-07-15 | `kops/content_drift.py:1-25` |
+| Automatic content-hash invalidation **cascade** (beyond flagging) | planned (not implemented) | unknown, unverified | 2026-07-15 | `docs/DESIGN.md` (Trust Model limits); `docs/TRUST_CONTRACT.md` §7 |
+| Retrieval | partially implemented — lexical only (exact lookup + BM25); no embeddings/rerank in the answer path | claimed ("hybrid" lexical + embedding), unverified | 2026-07-15 | `kops/retrieval.py:1-10,376-404` |
+| Evaluation harness | partially implemented (compile-evaluation + benchmark runners; not a continuous validated suite) | claimed ("evaluation"), unverified | 2026-07-15 | `kops/evaluate_compilation.py`; `kops/kb_eval.py`; `kops/run_full_benchmark.py` |
+| Staged / resumable imports | implemented (resumable research runs; source ingest pipeline) | claimed ("staged imports"), unverified | 2026-07-15 | `kops/research_workflow.py`; `kops/ingest_sources.py` |
+| Viewer / UI | planned (not implemented; CLI + Obsidian only) | claimed ("viewer"), unverified | 2026-07-15 | no code; `docs/DESIGN.md` "Implemented vs planned" |
+| MCP serving | planned (not implemented) | claimed ("MCP"), unverified | 2026-07-15 | no MCP module in `kops/`; `docs/DESIGN.md` "Planned" list |
+| SDK / library API | planned (not implemented; CLI-first) | claimed ("SDK"), unverified | 2026-07-15 | no SDK package in repo; CLI entry `kops/kb.py` |
+
+Two rules govern this table. **(1)** No K-Ops cell may say "implemented" without a
+file it can be observed in — if you add a row, cite the code. **(2)** Every
+comparator cell is dated and, unless someone has actually read the comparator's
+source, marked `unverified`; do not upgrade a comparator claim to a fact from its
+marketing copy.
+
+**Link checking.** Run `python3 scripts/check_doc_links.py` to confirm the
+Markdown links in `docs/*.md` resolve (internal paths + in-page anchors) and to
+list the external links for manual review. The checker deliberately does **not**
+fetch external URLs, because a resolving link is not a correct characterization —
+a comparator can keep its URL while changing every feature in this table. Green
+output means "no broken paths", never "these comparisons are still accurate."
 
 ---
 
