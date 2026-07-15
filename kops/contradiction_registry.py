@@ -17,7 +17,9 @@ import datetime as dt
 import hashlib
 import json
 import re
+from pathlib import Path
 
+from kops.typed_contradictions import classify_contradiction
 from kops.utils import CONFIG, ROOT, ensure_dir, parse_frontmatter
 
 CONTRADICTIONS_PATH = ROOT / "data" / "contradictions.json"
@@ -85,6 +87,47 @@ def _load_claims_by_concept() -> dict[str, list[str]]:
         cid = str(claim.get("id") or "")
         if stem and cid:
             result.setdefault(stem, []).append(cid)
+    return result
+
+
+def _load_claims_by_id() -> dict[str, dict]:
+    """Full claim records keyed by claim id (for synthetic-origin detection)."""
+    if not _CLAIMS_PATH.exists():
+        return {}
+    try:
+        payload = json.loads(_CLAIMS_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    result: dict[str, dict] = {}
+    for claim in payload.get("claims", []):
+        cid = str(claim.get("claim_id") or claim.get("id") or "")
+        if cid:
+            result[cid] = claim
+    return result
+
+
+def _load_sources_by_id() -> dict[str, dict]:
+    """Best-effort source frontmatter keyed by source id.
+
+    Used only to flag synthetic/derivative sources during classification.
+    Defensive: returns ``{}`` when the sources dir is unavailable (e.g. a patched
+    ``CONFIG`` in unit tests), so classification degrades to text-only cues.
+    """
+    sources_dir = getattr(CONFIG, "summaries_dir", None)
+    if not sources_dir:
+        return {}
+    sources_dir = Path(sources_dir)
+    if not sources_dir.exists():
+        return {}
+    result: dict[str, dict] = {}
+    for path in sorted(sources_dir.glob("*.md")):
+        try:
+            frontmatter, _ = parse_frontmatter(path.read_text(encoding="utf-8"))
+        except OSError:
+            continue
+        sid = str(frontmatter.get("source_id") or "")
+        if sid:
+            result[sid] = frontmatter
     return result
 
 
@@ -176,11 +219,22 @@ def _extract_maintenance_contradictions() -> list[dict]:
 
 def extract_all_contradictions() -> list[dict]:
     claims_by_concept = _load_claims_by_concept()
-    all_contradictions: list[dict] = []
+    raw: list[dict] = []
     for path in sorted(CONFIG.concepts_dir.glob("*.md")):
-        all_contradictions.extend(extract_contradictions_from_concept(path, claims_by_concept))
-    all_contradictions.extend(_extract_maintenance_contradictions())
-    return all_contradictions
+        raw.extend(extract_contradictions_from_concept(path, claims_by_concept))
+    raw.extend(_extract_maintenance_contradictions())
+
+    # Enrich each base record with typed fields (additive; every original key is
+    # preserved by Contradiction.to_dict). Deterministic, so run(check=True) is
+    # stable across runs.
+    claims_by_id = _load_claims_by_id()
+    sources_by_id = _load_sources_by_id()
+    return [
+        classify_contradiction(
+            record, claims_by_id=claims_by_id, sources_by_id=sources_by_id
+        ).to_dict()
+        for record in raw
+    ]
 
 
 def load_contradictions() -> list[dict]:
