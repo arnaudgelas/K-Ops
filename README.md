@@ -9,8 +9,9 @@
 `K-Ops` is a local, agent-operated research pipeline for turning links,
 PDFs, repositories, notes, and files into a durable Markdown knowledge vault.
 Raw evidence is preserved, sources are normalized, claims are extracted into
-machine-readable registries, contradictions are surfaced, answers are filed back
-into the vault, and health checks make epistemic debt visible.
+machine-readable registries, contradictions are surfaced, answers are governed by
+a consequence-tier gate and filed back into the vault, and health checks make
+epistemic debt visible.
 
 The project is intentionally file-native. You should be able to inspect every
 artifact with a text editor, review changes with Git, and open the curated
@@ -46,6 +47,33 @@ Capture -> Normalize -> Compile -> Ask -> Render
 - machine-readable claim and contradiction registries plus a vault scorecard
 - a Python CLI in `kops/kb.py` that orchestrates the workflow with Codex CLI, Claude Code, or Gemini CLI
 - repo-root `.obsidian/` settings so the repository can be opened directly in Obsidian
+
+### Governance and evidence layer
+
+Answers and renders are governed, not free-form:
+
+- **consequence-tier gating** of `ask` and `render`: the output gate freezes a
+  **context package**, enforces an **answer-to-claim map**, and refuses,
+  qualifies, or abstains when the evidence does not clear the requested stakes
+  level (`output_gate.py`, `context_package.py`, `answer_claim_map.py`,
+  `tier_policy.py`)
+- **canonical evidence objects** plus an append-only, git-reviewable
+  **validation-event audit ledger** (`evidence_model.py`, `evidence_store.py`,
+  `validation_log.py`)
+- **automatic source-change invalidation** that cascades to dependent notes and
+  claims (`invalidation.py`)
+- **source-independence lineage** for corroboration (`source_lineage.py`),
+  **typed contradictions** (`typed_contradictions.py`), and **supervised
+  distillation proposals** (`distillation.py`, proposal-only)
+- a versioned **evaluation harness** and a published **benchmark report** at
+  `research/benchmarks/REPORT.md` (`eval_metrics.py`, `benchmark_report.py`)
+- a **pure entailment judge** (`entailment_judge.py`) that runs as an *advisory*
+  audit only — it is **uncalibrated and non-gating**, is not wired into any
+  compile/heal/answer gate, and must not be treated as a trust guarantee
+  (calibration pending, see `research/benchmarks/CALIBRATION.md`)
+
+Still **not** shipped: MCP serving, an SDK, a viewer/UI, and
+embedding/hybrid retrieval.
 
 ---
 
@@ -172,11 +200,17 @@ updates `notes/Sources/`, `notes/Concepts/`, `notes/Home.md`, and `notes/TODO.md
 
 ```bash
 uv run kops ask --agent codex --question "What are the main claims and open questions?"
+uv run kops ask --agent codex --question "..." --tier decision
 ```
 
 This seeds the Q&A prompt with local retrieval results and writes a timestamped
 answer memo to `notes/Answers/`. The runtime rejects answer memos that leave
 required provenance fields such as `retrieval_path` empty.
+
+`ask` (and `render`) accept `--tier {exploratory|recommendation|decision|autonomous}`,
+the consequence tier that governs the evidence bar. The default is `exploratory`
+(lowest stakes); higher tiers make the output gate refuse, qualify, or abstain
+when the supporting evidence is too weak to act at that stakes level.
 
 ### 5. Heal and lint
 
@@ -256,9 +290,9 @@ and want that runtime to perform the synthesis-heavy pass.
 
 - `compile --agent <...>`: compile source summaries into durable notes (runs an inner-loop verify after the agent write — rebuilds registries and flags a regressing write; `--no-verify` to skip)
 - `compile-large --source-id <id>`: run the bottom-up summarization orchestrator for large sources (>50 nodes)
-- `ask --agent <...> --question <text>`: generate an answer memo from the vault
+- `ask --agent <...> --question <text>`: generate an answer memo from the vault; `--tier <exploratory|recommendation|decision|autonomous>` sets the consequence tier (default `exploratory`)
 - `heal --agent <...>`: run the healing prompt (also runs the inner-loop verify; `--no-verify` to skip)
-- `render --agent <...> --format <memo|slides|outline|report> --prompt <text>`: generate an output artifact
+- `render --agent <...> --format <memo|slides|outline|report> --prompt <text>`: generate an output artifact; `--tier <...>` sets the consequence tier (default `exploratory`)
 - `uv run python -m kops.generate_indexes`: regenerate Source Atlas, Topic Atlas, and OKF directory indexes
 
 ### Maintenance
@@ -290,6 +324,20 @@ and want that runtime to perform the synthesis-heavy pass.
 - `validate`: confirm the vault config and required paths load
 - `maintenance`: run the full mechanical maintenance pass (`--agent <...>` optionally refreshes and recompiles first)
 - `bootstrap --target <dir>`: create a new blank starter knowledge base with the same scripts, templates, and note structure (`--force` to overwrite, `--with-examples` to add a tiny example input folder)
+
+### Governance and Evaluation
+
+Answers and renders pass through a consequence-tier output gate; these commands
+inspect the evidence bar and measure the pipeline end to end. See also the
+related governance commands listed under Maintenance and Graph and Export:
+`consequence-gate`, `retract`, `review-queue`, `stale-impact`,
+`clear-stale-flags`, and `check-content-drift`.
+
+- `consequence-gate --tier <exploratory|recommendation|decision|autonomous>`: check whether the evidence clears the bar to act at a given stakes level; `--concept`, `--format <text|json>`, `--check`
+- `benchmark`: run the end-to-end evaluation metrics harness over the held-out corpus; `--snapshot`/`--no-snapshot`, `--provider <deterministic|agent-cli:<agent>>`, `--entailment` (advisory judge), `--top-k`, `--corpus`, `--golden-set`, `--out-dir`
+- `benchmark-report`: render `research/benchmarks/REPORT.md` from the benchmark metrics; `--run` to re-run the harness first, `--out`, `--eval-runs-dir`, `--corpus`, `--golden-set`
+- `eval-setup`: create the golden Q&A evaluation scaffold if it does not exist
+- `eval-check`: validate the golden Q&A scaffold and golden-set schema
 
 ### Graph and Export
 
