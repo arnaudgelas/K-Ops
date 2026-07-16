@@ -13,9 +13,22 @@ satisfies).
 
 - **IMPLEMENTED TODAY** — behaviour you can observe by running the cited code.
   Every such claim names a source file and line range as evidence.
+- **IMPLEMENTED BUT NOT A GUARANTEE (advisory)** — code exists and runs, but it
+  is uncalibrated, non-gating, or otherwise not yet trustworthy enough to stop a
+  compile, a promotion, or a served answer. The citation entailment judge
+  (Section 2) is the current example: it produces verdicts but must not be read
+  as certifying that a quote supports a claim. Advisory code is named as such and
+  must never be quoted as a live guarantee.
 - **PLANNED — NOT IMPLEMENTED** — described in the roadmap or design notes but
   with no enforcing code. These are marked explicitly and must never be
   presented as a live guarantee.
+
+> **Status refresh 2026-07-16.** Milestones M0–M4 shipped since this contract was
+> first written. Several items previously marked *planned* now have enforcing
+> code — automatic invalidation cascade, immutable validation events,
+> serving-time consequence gating, declared-provenance corroboration, and typed
+> contradictions — and one, citation entailment, is now *implemented but
+> advisory*. Section 7 lists each with exactly what it does and does not certify.
 
 There is no unqualified word "trusted" in this contract. Wherever trust is
 asserted, the specific guarantee is named (e.g. "the cited quote exists in the
@@ -51,11 +64,17 @@ identity handle (`source_id` / `claim_id`) **and** its version handle
 (`content_hash` or `git_commit`). A review with no version handle is a review of
 nothing checkable, because drift cannot be detected against it.
 
-> Object-versioned review *records* (a first-class validation-event log binding
-> reviewer, timestamp, `claim_id`, and `content_hash`) are **PLANNED — NOT
-> IMPLEMENTED**. Today the version handles exist and drift is detectable, but the
-> review event itself lives in Git history and note frontmatter, not in a
-> dedicated audit log.
+> Object-versioned review *records* are now backed by a first-class,
+> **IMPLEMENTED** validation-event ledger: `validation_log.py` +
+> `evidence_store.py` append immutable events — binding `validator`, `result`,
+> `occurred_at`, `target_id`, and `target_version` (a `content_hash` or source
+> version id) — to a git-tracked append-only JSONL at
+> `data/history/validation_events.jsonl` (`validation_log.py:97-141`). Machine
+> validations (entailment, consequence-gate ruling, source invalidation) are
+> recorded automatically; an explicit human approval/rejection can be recorded as
+> a `human_review` event, but reviews made only in Git history or note
+> frontmatter are still not auto-captured. The identity+version rule above still
+> holds: an event without a `target_version` is a review of nothing checkable.
 
 ---
 
@@ -68,7 +87,7 @@ exists to prevent.
 | Question | Term | Status | Mechanism |
 |---|---|---|---|
 | Does the cited quote literally appear in the source? | **quote existence** | IMPLEMENTED, deterministic | `span_verify.py` / `verify-spans` |
-| Does that quote actually *support* the claim it is cited for? | **entailment** | **PLANNED — NOT IMPLEMENTED** | needs an LLM judge; a separate, lower-trust layer |
+| Does that quote actually *support* the claim it is cited for? | **entailment** | **IMPLEMENTED BUT UNCALIBRATED — advisory, non-gating** | `entailment_judge.py` (LLM judge); NOT a guarantee — see below |
 
 - **Quote existence (IMPLEMENTED).** For every claim anchor carrying a
   `quote=…`, `span_verify.py` resolves the source text and checks the quote is
@@ -76,13 +95,35 @@ exists to prevent.
   ellipsis bridge (`span_verify.py:101-135`). Per-claim verdicts are `verified`,
   `failed`, `unverifiable`, or `absent` (`span_verify.py:25-34, 143-188`). This
   is purely deterministic string matching; no model is involved.
-- **Entailment (NOT IMPLEMENTED).** The module's own scope boundary states it
-  plainly: it verifies "**existence** (the quote is in the source), not
-  **entailment** (the quote supports the claim). Entailment needs an LLM judge
-  and is a separate, lower-trust layer" (`span_verify.py:16-24`). A `verified`
-  span "does not certify that the source *substantiates* the claim." Nothing in
-  K-Ops today judges whether a quote entails its claim. Do not describe K-Ops as
-  checking citation support.
+- **Entailment (IMPLEMENTED BUT UNCALIBRATED — advisory; does NOT certify
+  support).** An entailment judge now exists. `entailment_judge.py` classifies an
+  `(atomic claim, exact span)` pair as `supported` / `partial` / `unsupported` /
+  `contradicted` / `not_evaluable` (`entailment_judge.py:360-453`). It is a pure
+  classifier: it holds no repo write access and invokes the provider only through
+  the sandboxed `runners.judge_run` primitive; a claim with no exact span, or a
+  non-atomic (compound) claim, is returned `not_evaluable` without ever calling
+  the model. **This is not yet a trust guarantee and must not be relied on as
+  one.** Two hard limits:
+  1. **Uncalibrated.** It has never been shown trustworthy enough to certify
+     support. The calibration harness requires ≥150 stratified pairs, ≥2 human
+     annotators with Cohen's κ ≥ 0.7, and a false-support rate ≤ 0.02 on a
+     *real-provider* run before entailment may gate decision-tier output
+     (`judge_calibration.py:90-93`; `research/benchmarks/CALIBRATION.md`). Today
+     only **66** labelled pairs exist, human inter-annotator agreement is
+     **PENDING**, and no real-provider false-support number exists — every
+     in-session run uses a stub predictor.
+  2. **Non-gating, and unset on the live path.** The judge is deliberately not
+     wired into any compile/heal gate (`entailment_judge.py:46-50`). The tier
+     policy *can* consume entailment verdicts (advisory at exploratory, warn at
+     recommendation, gate at decision/autonomous — `tier_policy.py:42-47`), but
+     the live `ask` command passes **no** entailment map to the serving gate
+     (`kb_runtime.py:404`), so entailment does not currently stop, qualify, or
+     shape any served answer.
+  Quote **existence** stays deterministic and trustworthy (`span_verify`); quote
+  **support** is now computable but uncalibrated. A `verified` span still "does
+  not certify that the source *substantiates* the claim" (`span_verify.py:16-24`).
+  Do not describe K-Ops as verifying that citations are true or that quotes
+  support their claims.
 
 ---
 
@@ -301,24 +342,38 @@ The `T0.1` terms, mapped to the fields above.
    `stale-impact`/`review-queue` but does **not** by itself hard-block serving.
 6. Human review clears `revalidation_required` after re-curation; `claim_quality`
    is author-set.
-7. Drift flags carry `revalidation_reason`; the automatic full invalidation
-   cascade beyond flagging is **PLANNED — NOT IMPLEMENTED** (`DESIGN.md:203`).
+7. Drift flags carry `revalidation_reason`. The automatic invalidation cascade
+   beyond flagging is now **IMPLEMENTED**: on a detected content-hash change
+   `invalidation.py` appends a new immutable `SourceVersion`, re-derives
+   claims → contradictions → claims, emits a stale `ValidationEvent` per affected
+   claim/answer/context package, flags dependents `revalidation_required`, and
+   writes a stale-set a serving gate reads (`invalidation.py:265-436`). It flags,
+   re-derives, and audits only — it never rewrites curated prose (Section 7.1).
 
 ### 4.5 independent
 
 1. Two or more sources being genuinely independent lines of evidence (not
    copies, re-hosts, or a model summarising the same origin).
-2. **PLANNED — NOT IMPLEMENTED.** No code computes or enforces source
-   independence today. Source-independence typing is scheduled for milestone M4
-   (`ROADMAP.md:49`). The only related code is link-suggestion heuristics
-   (`graph_link_candidates.py`, `kb_suggest_links.py`), which do not establish
-   evidential independence.
-3. n/a (not implemented).
-4. Because it is unenforced, no K-Ops output today may claim that two sources are
-   "independent corroboration."
-5. Cannot block anything today.
-6. n/a.
-7. n/a until implemented.
+2. **IMPLEMENTED over DECLARED provenance** (`source_lineage.py`).
+   `is_corroborated` collapses sources that share a canonical `derived_from` root,
+   or where one is `derived_from` another, or that are declared synthetic
+   (`model-generated` / `imported-model-report` / `synthetic_origin: true`), then
+   counts the remaining independent, non-synthetic origins; corroboration requires
+   ≥2 (`source_lineage.py:222-244`).
+3. Deterministic over the declared frontmatter.
+4. **Independence is over DECLARED provenance only.** It relies entirely on
+   `derived_from` / `tier` / `publisher` / synthetic markers in source
+   frontmatter; it does **not** detect undeclared AI-generated text and does
+   **not** infer hidden shared upstreams (`source_lineage.py:10-33`). "Independent"
+   here means "no *declared* shared upstream and no *declared* synthetic origin",
+   not "provably distinct in reality." A missing or wrong `derived_from` will
+   over-count independence.
+5. **Blocks the autonomous tier via the tier policy:** an autonomous-tier claim
+   whose sources are not corroborated is barred `needs-corroboration`
+   (`tier_policy.py:153-160`). Lower tiers do not require corroboration.
+6. Machine-derived from declared frontmatter; corrected by fixing `derived_from`
+   / `tier` / synthetic markers on the source notes.
+7. Inspectable via `python -m kops.source_lineage --source <id>`.
 
 ### 4.6 decision-grade
 
@@ -329,8 +384,10 @@ The `T0.1` terms, mapped to the fields above.
 2. Computed deterministically by the consequence gate over the claim registry.
 3. Deterministic.
 4. It certifies the evidence bar (admitted, supported/not-weak, non-stale,
-   non-synthetic, sourced) — it does **not** certify entailment or truth. A
-   decision-grade claim can still cite a quote that does not entail it.
+   non-synthetic, sourced) — it does **not** certify entailment or truth. Even
+   though an entailment judge now exists, it is uncalibrated and unwired from the
+   live path (Section 2), so a decision-grade claim can still cite a quote that
+   does not entail it.
 5. **Blocks promotion/serving:** `consequence-gate --tier decision --check`
    exits non-zero when the bar is not cleared (`consequence_gate.py:119-122`).
 6. Machine-derived; the bar itself is fixed policy in `consequence_gate.py`.
@@ -345,6 +402,21 @@ only, applies no LLM judgement, and **reports and gates but never rewrites
 claims** (`consequence_gate.py:17-18`). `--check` exits non-zero when the tier's
 bar is not cleared (`consequence_gate.py:119-122`). Tiers are strictly nested:
 each higher tier adds bars, never removes them.
+
+**Wired into serving (M2).** The tiers are no longer only a standalone CLI over
+the registry. `output_gate.serve_ask` / `gate_render` build an immutable
+`ContextPackage` (`context_package.py`), evaluate the admitted claims through the
+tier policy (`tier_policy.py:67-188`), validate the answer-to-claim map
+(`answer_claim_map.py`), subtract any source-invalidation stale-set hits, and
+record an immutable consequence-gate `ValidationEvent` against the answer
+(`output_gate.py:203-331, 334-395`). The live `ask` and `render` commands take
+`--tier` and route through this gate (`kb.py:184-202`; `kb_runtime.py:377-446`),
+so a served answer or render can be refused, abstained, or qualified **at the
+serving boundary** — not merely flagged after the fact. On top of the
+deterministic admission gate the tier policy adds entailment, freshness,
+corroboration, and material-contradiction dimensions; note that the live `ask`
+path supplies no entailment verdicts (Section 2), so entailment does not gate
+live answers today.
 
 ### Tier: exploratory
 
@@ -393,13 +465,18 @@ each higher tier adds bars, never removes them.
 - **Intent:** an agent may act without human review — the strongest bar.
 - **Policy:** every claim must be **exactly** `admission_status == admitted`,
   `evidence_status == direct` (inline-cited, no inherited support), and
-  `claim_quality == supported` (`consequence_gate.py:60-67`).
+  `claim_quality == supported` (`consequence_gate.py:60-67`). At the serving
+  boundary the tier policy adds two autonomous-only bars: independent
+  corroboration (`needs-corroboration`, over declared provenance — Section 4.5)
+  and fail-closed refusal on any unresolved *material* contradiction
+  (`tier_policy.py:153-219`).
 - **Deterministic:** yes.
 - **Failure mode:** even a fully-passing set is only "cleared the strongest
-  *deterministic* bar." It still does **not** prove entailment or truth, and
-  entailment checking does not exist (Section 2). Autonomous action on K-Ops
-  evidence is therefore not endorsed by this contract today; `DESIGN.md:210`
-  states agent runs still require human review before consequential use.
+  *deterministic* bar." It still does **not** prove entailment or truth. An
+  entailment judge now exists but is uncalibrated and is not supplied on the live
+  `ask` path (Section 2), so it adds no assurance here today. Autonomous action on
+  K-Ops evidence is therefore not endorsed by this contract; agent runs still
+  require human review before consequential use.
 - **Blocks?** Blocks serving/promotion under `--check`.
 - **Override authority:** none intended — this tier is meant to be un-overridable
   short of fixing every claim.
@@ -423,6 +500,11 @@ them.
   distinct bars. A claim can be `admitted` (source not disqualified) yet not
   `supported` (weak), or `supported` yet not quote-`verified`, or
   quote-`verified` yet not entailing.
+- **"entailment"** — an entailment *verdict* now exists (Section 2), but it is
+  uncalibrated and non-gating; a `supported` verdict is **advisory**, not a
+  certification that the quote supports the claim. Never present an entailment
+  verdict as a guarantee, and never let "the judge exists" be read as "K-Ops now
+  verifies that citations support their claims."
 
 **"trusted" audit of this document:** the word "trusted" is not used as a
 standalone guarantee anywhere above. Each guarantee names its mechanism (quote
@@ -432,18 +514,63 @@ write the specific guarantee.
 
 ---
 
-## 7. Planned — not implemented (do not present as live guarantees)
+## 7. Implementation status refresh (M0–M4, 2026-07-16)
 
-- **Citation entailment (LLM judge)** — whether a verified quote actually
-  supports its claim (`span_verify.py:16-24`, `DESIGN.md:169-170`).
-- **Automatic content-hash invalidation cascade** — beyond flagging
-  `revalidation_required`, a full automatic cascade is not implemented
-  (`DESIGN.md:203`).
-- **Source independence typing** — Section 4.5; milestone M4 (`ROADMAP.md:49`).
-- **Object-versioned validation-event log** — a first-class record binding
-  reviewer + timestamp + `claim_id` + `content_hash` (Section 1); today reviews
-  live in Git history and frontmatter.
-- **Context packages / stable context API** — milestone M3 (`ROADMAP.md:48`).
+### 7.1 Newly implemented since this contract was first written
+
+Each is a real capability with a **named honest limit** — state the limit
+whenever you cite the capability. None of them certifies that a claim is *true*.
+
+- **Automatic content-hash invalidation cascade** — IMPLEMENTED
+  (`invalidation.py:265-436`). On a detected source content-hash change it appends
+  a new immutable `SourceVersion`, re-derives claims → contradictions → claims,
+  emits a stale `ValidationEvent` per affected claim/answer/context package, flags
+  dependents `revalidation_required`, and writes a stale-set that a serving gate
+  reads. **Limit:** it flags, re-derives, and audits only — it never rewrites
+  curated claim/concept prose and never deletes anything; a human plus Git decides
+  what prose changes.
+- **Immutable validation-event ledger** — IMPLEMENTED (`validation_log.py`,
+  `evidence_store.py`). Append-only, git-tracked JSONL at
+  `data/history/validation_events.jsonl`; `record_event` rejects any
+  validator/result outside a documented vocabulary (`validation_log.py:59-141`),
+  and `serving_audit` reconstructs the full decision record behind one served
+  answer (`validation_log.py:172-195`). **Limit:** it records events code appends
+  (entailment, consequence-gate, invalidation) plus any `human_review` event
+  explicitly appended; reviews made only in Git history or frontmatter are not
+  auto-captured, and Git history — not this module — is the tamper backstop.
+- **Consequence gating at the serving boundary** — IMPLEMENTED (`output_gate.py`,
+  `tier_policy.py`, `context_package.py`, `answer_claim_map.py`; see Section 5).
+  `ask` / `render` take `--tier` and route through it. **Limit:** it enforces the
+  deterministic evidence bar plus freshness / corroboration / material-contradiction
+  dimensions; it does not verify truth, and the live `ask` path supplies no
+  entailment verdicts.
+- **Declared-provenance corroboration ("independent")** — IMPLEMENTED
+  (`source_lineage.py`; Section 4.5). **Limit:** independence is over DECLARED
+  provenance only — no undeclared-synthetic-text detection and no hidden-shared-
+  upstream inference.
+- **Typed contradictions with materiality** — IMPLEMENTED
+  (`typed_contradictions.py`). Contradictions are classified by type and
+  materiality; only *unresolved material* contradictions force qualify/abstain (or,
+  at autonomous, refuse), while immaterial ones are downgraded to warnings
+  (`typed_contradictions.py:515-547`, consumed at `tier_policy.py:159-171`).
+  **Limit:** materiality is rule-derived from contradiction type + decision
+  relevance, not a human ruling.
+- **Citation entailment (LLM judge)** — IMPLEMENTED BUT ADVISORY, NOT A GUARANTEE
+  (`entailment_judge.py`; Section 2). **Limit:** uncalibrated (66 labelled pairs
+  vs ≥150 needed; human agreement + real-provider run PENDING) and non-gating; the
+  live `ask` path leaves its input unset. It does **not** certify that a quote
+  supports a claim and must not be relied on as a trust guarantee until calibrated.
+
+### 7.2 Still planned — not implemented (do not present as live guarantees)
+
+- **MCP serving** — no MCP module in `kops/` (milestone M3).
+- **SDK / library API** — CLI-first; no SDK package (milestone M5).
+- **Viewer / UI** — CLI + Obsidian only; no viewer (milestone M5).
+- **Embedding / hybrid retrieval** — the answer path is lexical (exact lookup +
+  BM25) only; no embeddings or rerank in serving (`retrieval.py`).
+- **Entailment as a decision-tier *gate*** — the judge exists but may not gate
+  decision-tier output until calibration passes (Section 2;
+  `research/benchmarks/CALIBRATION.md`).
 - **`source_status` enum validation** — the extended blocked values are honoured
   by the registry but not schema-enforced (Section 3.3).
 
@@ -454,6 +581,12 @@ write the specific guarantee.
 - [DESIGN.md](DESIGN.md) — Trust Model and Limits; Admission Rule; Implemented
   vs planned.
 - [ROADMAP.md](ROADMAP.md) — `T0.1` acceptance criteria and milestone map.
-- Enforcing code: `kops/consequence_gate.py`, `kops/claim_registry.py`,
-  `kops/span_verify.py`, `kops/retract_source.py`, `kops/content_drift.py`,
-  `kops/kb_schema.py`, `kops/schema.yaml`.
+- Enforcing code (deterministic core): `kops/consequence_gate.py`,
+  `kops/claim_registry.py`, `kops/span_verify.py`, `kops/retract_source.py`,
+  `kops/content_drift.py`, `kops/kb_schema.py`, `kops/schema.yaml`.
+- Governance surface (M0–M4): `kops/output_gate.py`, `kops/tier_policy.py`,
+  `kops/context_package.py`, `kops/answer_claim_map.py`, `kops/invalidation.py`,
+  `kops/validation_log.py`, `kops/evidence_store.py`, `kops/source_lineage.py`,
+  `kops/typed_contradictions.py`.
+- Advisory (uncalibrated, non-gating): `kops/entailment_judge.py`,
+  `kops/judge_calibration.py`, `research/benchmarks/CALIBRATION.md`.
