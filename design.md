@@ -200,12 +200,121 @@ Four deterministic commands turn scattered signals into acted-upon governance:
 - `retract` (`kops/retract_source.py`) — revokes a source and unwinds its blast
   radius. See Staleness and Contradictions below.
 
+### Canonical Evidence Objects
+
+The governed claim model (see Target Canonical Model) now has a concrete,
+typed representation. `kops/evidence_model.py` defines the canonical, versioned
+evidence objects (Source, SourceVersion, SourceSpan, AtomicClaim,
+ClaimEvidenceLink, ValidationEvent, ContextPackage, AnswerMemo) as typed views
+over the existing registries plus a few greenfield objects, each stamped with a
+schema version and content-addressable hashes. `kops/evidence_store.py`
+persists them: SourceVersion and ValidationEvent as append-only JSONL, and
+ContextPackage as content-addressed JSON. `kops/atomic_claims.py` enforces the
+one-proposition-per-claim rule with deterministic heuristics — a prerequisite
+for entailment judging — and conservatively flags compound claims for review
+rather than silently splitting them.
+
+### Consequence-Gated Answer Serving
+
+The output boundary is now governed, not only advisory. `kops/output_gate.py`
+composes the serving path the roadmap prescribes: it builds and freezes an
+immutable, content-addressed context package (`kops/context_package.py`) of the
+exact evidence an answer may rely on; pre-gates the admitted claims with the
+consequence-tier policy (`kops/tier_policy.py`), which layers freshness,
+material contradictions, and (for autonomous) independent corroboration on top
+of the deterministic admission gate in `kops/consequence_gate.py`; generates the
+answer through an injected generator; validates the answer-claim map
+(`kops/answer_claim_map.py`) so every factual sentence rests on an admitted
+claim id and nothing excluded or uncited is smuggled in; finalizes a
+`permit | qualify | abstain | refuse` decision; and records an immutable
+validation event. `ask` and `render` take `--tier`, so an answer or render is
+governed by its declared consequence tier at the output boundary rather than
+only by the standalone `consequence-gate` command.
+
+### Automatic Source-Change Invalidation
+
+Source-change staleness now propagates as a deterministic cascade, not just a
+manual flag. `kops/invalidation.py` composes content-drift detection, the
+dependency-graph walk, the immutable evidence store, and the claim/contradiction
+registries: on a detected content-hash change it appends a new immutable
+`SourceVersion`, marks the affected validations stale by appending a
+`ValidationEvent` per dependent claim/answer/context package, re-derives the
+claim registry then the contradiction registry then the claim registry again
+(fixed point — closing the gap `retract` leaves), flags dependent
+concepts/answers/the source note `revalidation_required`, and writes a
+deterministic stale-set to `data/invalidation_queue.json` that a serving gate
+reads to refuse stale evidence as current at the decision or autonomous tier.
+Like `retract`, it flags, re-derives, and audits only — it never rewrites
+curated prose and never deletes.
+
+### Immutable Validation-Event Ledger
+
+Every governance decision — an entailment verdict, a consequence-gate ruling, a
+source invalidation, a human review — leaves a durable, tamper-evident record.
+`kops/validation_log.py` is the canonical record/read layer over the M1
+primitives: `ValidationEvent` records are appended to
+`data/history/validation_events.jsonl` via `kops/evidence_store.py` (append-only,
+and deliberately git-tracked so every appended decision shows up in a reviewable
+diff). It adds a small validated vocabulary of validator names and their allowed
+results, and a `serving_audit` API that reconstructs the full decision record
+behind one served answer. Git commit history remains the tamper backstop.
+
+### Source-Independence Corroboration
+
+Corroboration now counts genuinely independent origins, not derivative copies.
+`kops/source_lineage.py` resolves declared source lineage — `derived_from`
+chains, declared `tier`/`publisher`, and synthetic markers — and collapses
+derivative copies so two blogs quoting one vendor benchmark, or an AI summary
+paired with its source, count as a single witness. It relies only on declared
+provenance; it deliberately does not attempt to detect undeclared AI text or
+infer hidden shared sources. The autonomous tier consults this so manufactured
+corroboration cannot clear the bar.
+
+### Typed Contradictions
+
+Contradictions are now typed and carry materiality, not a single generic
+conflict bucket. `kops/typed_contradictions.py` classifies each contradiction
+record deterministically from its `open_question` text plus its participating
+claims and sources into one of the taxonomy types (see Staleness and
+Contradictions), stamps it with governance fields, and exposes
+`material_contradiction_ids` — the claim ids in an unresolved *material*
+contradiction — which the tier policy consults so an immaterial terminology
+mismatch does not gate a decision while a material direct conflict does.
+
+### Supervised Distillation (Proposal-Only)
+
+`kops/distillation.py` looks at the claim graph as a whole and proposes where it
+could be distilled: merging near-duplicate claims whose scope/time/evidence
+match, superseding when they diverge in time only, splitting compound claims,
+and flagging divergent near-duplicates for review. Following the `review_queue`
+/ `retract_source` idiom it is a pure, read-only detector: it writes
+`data/distillation_proposals.json` and surfaces worklist items but never merges,
+splits, renames, or deletes any claim or concept prose. A human plus Git decides
+what actually changes.
+
+### Entailment Judge (Advisory, Uncalibrated)
+
+`kops/entailment_judge.py` is a pure classifier that judges whether an exact
+evidence span *supports* an atomic claim, returning a structured verdict
+(`supported | partial | unsupported | contradicted | not_evaluable`) with
+rationale, content-addressed and cached. It is deliberately **non-gating**: it
+produces verdicts for evaluation and calibration only and is not wired into any
+compile/heal gate. `kops/judge_calibration.py` answers the separate question of
+whether the judge is trustworthy enough to gate decision-tier outputs; its
+false-support rate and human inter-annotator agreement are **PENDING** real
+annotators and a real provider run, so the judge stays advisory until calibrated
+(see Trust Model).
+
 ### Evaluation Surface
 
 Unit tests protect code behavior. They do not measure whether the knowledge
 base is epistemically healthy.
 
-The evaluation layer should become a product surface with stable metrics for:
+The evaluation layer is now a product surface. `kops/eval_metrics.py`
+(`kops benchmark`) runs the baselines over the benchmark corpus, grades answers
+against the golden set, links each answer to a versioned context package, and
+reports four metric families — retrieval, answer quality, governance, and
+operations — covering:
 
 - retrieval recall
 - context precision
@@ -217,9 +326,15 @@ The evaluation layer should become a product surface with stable metrics for:
 - single-source dependency risk
 - unsupported answer rate
 
-Deterministic retrieval benchmarks should run in CI. LLM-judged faithfulness
-and citation-entailment checks can run as slower audits, but their outputs
-should still be stored as versioned evaluation records.
+`kops/benchmark_report.py` (`benchmark-report`) publishes a stable, committed
+`research/benchmarks/REPORT.md`. The honesty contract is explicit in both: the
+retrieval and governance numbers are REAL and deterministic (a property of which
+sources reach each baseline's context, computed with no LLM); the answer-quality
+numbers are labelled PENDING a real-provider run; and citation-entailment runs
+the (uncalibrated) J1.1 judge only when a judge is configured, otherwise
+reported PENDING and never fabricated. Deterministic retrieval/governance
+benchmarks run in CI; LLM-judged faithfulness and citation-entailment stay
+slower, advisory audits stored as versioned evaluation records.
 
 ### Atomic State Writes
 
@@ -250,7 +365,8 @@ Current checks are weaker for truth:
 
 - citation presence is not the same as citation support
 - quote-span verification checks a quote *exists* in the source, not that it
-  *entails* the claim; entailment still needs an LLM judge
+  *entails* the claim; an entailment judge is now implemented but remains
+  uncalibrated and non-gating, so quote *support* is still not guaranteed
 - claims without a `quote=` anchor are still only presence-checked
 - LLM-written summaries and concept claims still need human review
 - answer memos are validated for provenance shape, not full sentence-level
@@ -261,9 +377,19 @@ Quote-existence verification is implemented (`kops/span_verify.py`,
 resolved source text (verbatim, whitespace/punctuation-folded, or across an
 ellipsis bridge). A quote absent from its source makes the claim `failed` and
 raises an error-severity scorecard signal; `verify-spans --check` exits non-zero.
-This is deterministic and fails closed. The next correctness step is
-citation *entailment*: an LLM judge that decides whether a verified quote
-actually supports the claim, stored as a versioned, lower-trust evaluation record.
+This is deterministic and fails closed.
+
+Citation *entailment* — whether a verified quote actually *supports* the claim —
+is the next correctness layer and is now **implemented but uncalibrated and
+non-gating**. `kops/entailment_judge.py` produces a structured
+`supported | partial | unsupported | contradicted | not_evaluable` verdict per
+(atomic claim, span) pair, content-addressed and cached, stored as a versioned,
+lower-trust evaluation record. It is deliberately not wired into any compile,
+heal, or serving gate: `kops/judge_calibration.py` still reports its
+false-support rate and human inter-annotator agreement as PENDING, so the judge
+is an advisory audit layer, not a deterministic gate and not a guarantee of
+support or truth. Quote *existence* stays deterministic; quote *support* stays
+advisory until the judge is calibrated.
 
 ## Staleness and Contradictions
 
@@ -290,8 +416,21 @@ wikilinks (`[[Sources/src-x|alias]]`) as well as bare and sub-foldered forms, so
 citations written in the vault's aliased convention are captured — improving retract's
 blast radius, community-audit gaps, and scorecard orphan metrics alike.
 
-Contradictions also need typed handling. A generic conflict bucket is too weak.
-The taxonomy should distinguish:
+The content-change case is now implemented as an automatic cascade rather than a
+manual flag. `kops/invalidation.py` (run `python -m kops.invalidation`) composes
+content-drift detection, the retract blast-radius walk, the immutable evidence
+store, and the registries: on a detected content-hash change it appends a new
+immutable `SourceVersion`, appends a `ValidationEvent` per dependent
+claim/answer/context package, re-derives the claim registry then the
+contradiction registry then the claim registry again (fixed point), flags
+dependents `revalidation_required`, and writes `data/invalidation_queue.json` so
+a serving gate refuses stale evidence as current at the decision or autonomous
+tier. Like `retract` it flags, re-derives, and audits only; it never rewrites
+prose. See Implemented Control Points.
+
+Contradictions now get typed handling; a generic conflict bucket is too weak.
+`kops/typed_contradictions.py` classifies each contradiction record
+deterministically into the taxonomy:
 
 - direct contradiction
 - temporal supersession
@@ -301,9 +440,16 @@ The taxonomy should distinguish:
 - evidence-quality conflict
 - synthetic contamination
 
+Each record also carries a materiality assessment, and
+`material_contradiction_ids` exposes the claim ids in an unresolved *material*
+contradiction so the tier policy can force *qualify*/*abstain* on those while an
+immaterial terminology mismatch does not gate a decision.
+
 This is especially important when model-generated reports are imported as
 leads. Synthetic origin must survive extraction so repeated model output does
-not become mistaken for independent corroboration.
+not become mistaken for independent corroboration — which `kops/source_lineage.py`
+now enforces by counting only declared-independent origins (see Implemented
+Control Points).
 
 ## Security Model
 
@@ -508,12 +654,18 @@ auto-repair is left, and it is intentionally not automated.
   claims against an escalating evidence bar (`kops/consequence_gate.py`): recommendation
   bars blocked sources; decision additionally bars quarantined/unknown/unsupported/weak/
   conflicting/stale/synthetic; autonomous requires admitted + direct + supported.
-  `--check` fails closed. Remaining: wire the gate into `ask`/`render` at the output
-  boundary (which claims an answer actually relies on is agent-mediated), and add
-  per-answer/render tier declarations.
-- Require context-package manifests for important answers, including included
+  `--check` fails closed. The gate is now wired into the output boundary:
+  `kops/output_gate.py` pre-gates a frozen context package's admitted claims,
+  validates the answer-claim map, and finalizes `permit | qualify | abstain |
+  refuse`; `ask`/`render` take `--tier` so answers/renders carry a per-output
+  tier declaration. Remaining: entailment-aware gating at decision tier depends
+  on judge calibration (still PENDING).
+- ~~Require context-package manifests for important answers, including included
   claims, excluded claims, gaps, stale flags, contradictions, and source
-  manifests.
+  manifests.~~ **Done** — `kops/context_package.py` freezes an immutable,
+  content-addressed context package recording admitted claim ids, excluded
+  claims with reasons, per-source freshness/stale flags, source version ids, and
+  the retrieval trace; persisted via `kops/evidence_store.py`.
 
 ## RVF and MCP Status
 
